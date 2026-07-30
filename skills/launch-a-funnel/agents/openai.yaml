@@ -1,0 +1,4 @@
+interface:
+  display_name: "Launch a Funnel"
+  short_description: "Launch a complete owned funnel in plain English"
+  default_prompt: "Use $launch-a-funnel to turn my offer into a complete published funnel."

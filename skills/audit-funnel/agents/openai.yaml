@@ -1,0 +1,4 @@
+interface:
+  display_name: "Audit a Funnel"
+  short_description: "Prove a funnel is ready for paid traffic"
+  default_prompt: "Use $audit-funnel to audit this funnel and fix release-blocking problems."

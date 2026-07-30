@@ -1,0 +1,4 @@
+interface:
+  display_name: "Edit a Funnel"
+  short_description: "Edit funnel copy and media through Keystatic"
+  default_prompt: "Use $edit-funnel to make this change and show me the preview."

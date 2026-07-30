@@ -1,0 +1,4 @@
+interface:
+  display_name: "Configure Dodo"
+  short_description: "Configure checkout, bump, and one-click upsells"
+  default_prompt: "Use $configure-dodo to safely configure payments for this funnel."

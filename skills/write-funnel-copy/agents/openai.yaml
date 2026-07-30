@@ -1,0 +1,4 @@
+interface:
+  display_name: "Write Funnel Copy"
+  short_description: "Write truthful, high-converting funnel copy"
+  default_prompt: "Use $write-funnel-copy to write clear copy for my offer, bump, and upsells."
