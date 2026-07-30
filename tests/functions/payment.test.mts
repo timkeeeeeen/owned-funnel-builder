@@ -109,6 +109,7 @@ test('checkout creates the configured cart, bump, steps, and first upsell return
       consentVersion: 'v1',
       bumpAccepted: true,
       attribution: { utm_source: 'newsletter', ignored: 'nope' },
+      admaxxerVisitorId: 'admx_visitor_123',
     }),
     env: {
       LEADS: database,
@@ -128,6 +129,11 @@ test('checkout creates the configured cart, bump, steps, and first upsell return
   assert.match(returnUrl.searchParams.get('flow') ?? '', /^[A-Za-z0-9_-]{43}$/);
   const metadata = providerBody?.metadata as Record<string, string>;
   assert.equal(metadata.bump_product_key, 'owned-funnel-conversion-copy-swipe-file');
+  assert.equal(metadata.admx_visitor_id, 'admx_visitor_123');
+  const leadInsert = database.calls.find((call) =>
+    call.query.includes('INSERT INTO checkout_leads')
+  );
+  assert.equal(leadInsert?.values.includes('admx_visitor_123'), true);
   assert.equal(
     database.calls.filter((call) => call.query.includes('INSERT INTO funnel_step_runs')).length,
     2
@@ -158,6 +164,36 @@ test('checkout fails closed when a configured product has no Dodo mapping', asyn
   assert.equal((await response.json()).code, 'configuration_product');
 });
 
+test('checkout ignores an invalid Admaxxer visitor id instead of forwarding it', async () => {
+  const database = checkoutDatabase({ 'owned-funnel-builder': 'prod_main' });
+  let providerBody: Record<string, unknown> | undefined;
+  globalThis.fetch = async (_input, init) => {
+    providerBody = JSON.parse(String(init?.body)) as Record<string, unknown>;
+    return Response.json({
+      checkout_url: 'https://checkout.dodopayments.com/session/test',
+      session_id: 'session_123',
+    });
+  };
+
+  const response = await createCheckout({
+    request: checkoutRequest({
+      email: 'owner@example.com',
+      offerSlug: 'owned-funnel-builder',
+      consentVersion: 'v1',
+      admaxxerVisitorId: '<script>alert(1)</script>',
+    }),
+    env: {
+      LEADS: database,
+      DODO_PAYMENTS_API_KEY: 'test_key',
+      DODO_PAYMENTS_ENVIRONMENT: 'test_mode',
+    },
+  });
+
+  assert.equal(response.status, 200);
+  const metadata = providerBody?.metadata as Record<string, string>;
+  assert.equal(metadata.admx_visitor_id, undefined);
+});
+
 function funnelState(stepStatuses: Array<FunnelState['steps'][number]['status']>): FunnelState {
   return {
     run: {
@@ -171,6 +207,7 @@ function funnelState(stepStatuses: Array<FunnelState['steps'][number]['status']>
       dodo_payment_method_id: 'method_from_payment',
       dodo_session_id: 'session_base',
       bump_selected: 1,
+      admaxxer_visitor_id: 'admx_visitor_123',
     },
     steps: stepStatuses.map((status, ordinal) => ({
       id: `step_${ordinal}`,
@@ -266,6 +303,10 @@ test('upsell prefers the original payment method for a true one-click charge', a
   assert.equal(paymentMethodQueries, 0);
   assert.equal(providerBodies[0]?.payment_method_id, 'method_from_payment');
   assert.equal(providerBodies[0]?.confirm, true);
+  assert.equal(
+    (providerBodies[0]?.metadata as Record<string, string>).admx_visitor_id,
+    'admx_visitor_123'
+  );
 });
 
 test('upsell retains secure checkout fallback when no reusable method exists', async () => {

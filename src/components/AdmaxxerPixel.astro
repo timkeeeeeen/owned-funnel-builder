@@ -1,0 +1,12 @@
+---
+const websiteId = import.meta.env.PUBLIC_ADMAXXER_WEBSITE_ID?.trim();
+const domain = import.meta.env.PUBLIC_ADMAXXER_DOMAIN?.trim();
+const scriptUrl =
+  import.meta.env.PUBLIC_ADMAXXER_SCRIPT_URL?.trim() || 'https://admaxxer.com/js/script.js';
+---
+
+{
+  websiteId && domain && (
+    <script is:inline defer data-website-id={websiteId} data-domain={domain} src={scriptUrl} />
+  )
+}

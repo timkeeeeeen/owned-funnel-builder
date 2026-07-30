@@ -5,6 +5,7 @@ import SEO from '@/components/SEO.astro';
 import FontPreload from '@/components/FontPreload.astro';
 import ThemeScript from '@/components/ThemeScript.astro';
 import AnimationObserver from '@/components/AnimationObserver.astro';
+import AdmaxxerPixel from '@/components/AdmaxxerPixel.astro';
 
 interface Props {
   title: string;
@@ -28,6 +29,7 @@ const { title, description, image, noindex = false } = Astro.props;
     <SEO title={title} description={description} image={image} noindex={noindex} />
     <ClientRouter />
     <ThemeScript />
+    <AdmaxxerPixel />
   </head>
   <body class="min-h-screen antialiased">
     <a

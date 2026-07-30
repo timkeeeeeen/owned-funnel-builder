@@ -1,0 +1,4 @@
+interface:
+  display_name: 'Configure Admaxxer'
+  short_description: 'Connect pixel, leads, and revenue attribution'
+  default_prompt: 'Use $configure-admaxxer to connect and verify Admaxxer for this owned funnel without disrupting checkout.'

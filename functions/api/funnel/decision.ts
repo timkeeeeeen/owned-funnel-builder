@@ -164,6 +164,9 @@ export async function onRequestPost({ request, env }: PagesContext): Promise<Res
         step_key: stepKey,
         product_key: offerConfig.productKey,
         source: 'owned-funnel-builder',
+        ...(state.run.admaxxer_visitor_id
+          ? { admx_visitor_id: state.run.admaxxer_visitor_id }
+          : {}),
       },
     };
     if (paymentMethodId) {

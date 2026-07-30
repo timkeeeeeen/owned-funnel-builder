@@ -31,6 +31,7 @@ export interface FunnelRun {
   dodo_payment_method_id: string | null;
   dodo_session_id: string | null;
   bump_selected: 0 | 1;
+  admaxxer_visitor_id: string | null;
 }
 
 export interface FunnelStepRun {
@@ -53,7 +54,7 @@ export async function getFunnelByToken(database: D1Database, token: string): Pro
   const tokenHash = await hashFlowToken(token);
   const run = await database
     .prepare(
-      `SELECT f.*, l.dodo_session_id, l.bump_selected
+      `SELECT f.*, l.dodo_session_id, l.bump_selected, l.admaxxer_visitor_id
        FROM funnel_runs f
        JOIN checkout_leads l ON l.id = f.lead_id
        WHERE f.token_hash = ?`

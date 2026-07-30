@@ -16,7 +16,7 @@ Own the technical work. Ask the user only for business decisions, account approv
 5. Record the offer, audience, promise, price, proof, delivery, bump, upsells, guarantee, brand inputs, domain, and prohibited claims.
 6. Use `$write-funnel-copy` and `$design-funnel` to create the page. Preserve the proven checkout and upsell implementation.
 7. Use `$edit-funnel` to expose customer-visible content in Keystatic.
-8. Use `$configure-dodo`, `$configure-resend`, and `$publish-cloudflare` for operations. Run commands yourself; never turn a command into a user task.
+8. Use `$configure-dodo`, `$configure-resend`, `$configure-admaxxer`, and `$publish-cloudflare` for operations. Run commands yourself; never turn a command into a user task.
 9. Use `$audit-funnel` before publishing and again against the live URL.
 10. Return the public URL, what is live, and any human action still required.
 
@@ -31,4 +31,4 @@ Own the technical work. Ask the user only for business decisions, account approv
 
 ## Completion
 
-Do not call the funnel launched until its copy, responsive layout, email capture, checkout, optional bump, upsell accept/decline paths, fulfillment, and exact production URL have been verified at the appropriate no-charge or sandbox level.
+Do not call the funnel launched until its copy, responsive layout, email capture, checkout, optional bump, upsell accept/decline paths, fulfillment, analytics events, revenue attribution, and exact production URL have been verified at the appropriate no-charge or sandbox level.

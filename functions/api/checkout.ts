@@ -20,6 +20,7 @@ interface CheckoutRequest {
   attribution?: unknown;
   referrer?: unknown;
   bumpAccepted?: unknown;
+  admaxxerVisitorId?: unknown;
 }
 
 interface DodoCheckoutResponse {
@@ -31,6 +32,7 @@ const MAX_BODY_BYTES = 16 * 1024;
 const DODO_TIMEOUT_MS = 15_000;
 const OFFER_SLUG_PATTERN = /^[a-z][a-z0-9]*(?:-[a-z0-9]+)*$/;
 const EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+const ADMAXXER_VISITOR_ID_PATTERN = /^[A-Za-z0-9._:-]{1,180}$/;
 const ATTRIBUTION_KEYS = new Set([
   'utm_source',
   'utm_medium',
@@ -53,6 +55,11 @@ function sanitizeAttribution(value: unknown): Record<string, string> {
     if (cleanedValue) attribution[key] = cleanedValue;
   }
   return attribution;
+}
+
+function sanitizeAdmaxxerVisitorId(value: unknown): string {
+  const visitorId = cleanString(value, 181);
+  return ADMAXXER_VISITOR_ID_PATTERN.test(visitorId) ? visitorId : '';
 }
 
 async function parseRequest(request: Request): Promise<CheckoutRequest> {
@@ -109,6 +116,7 @@ export async function onRequestPost(context: PagesContext): Promise<Response> {
     const referrer = cleanString(input.referrer, 1024);
     const attribution = sanitizeAttribution(input.attribution);
     const requestedBump = input.bumpAccepted === true;
+    const admaxxerVisitorId = sanitizeAdmaxxerVisitorId(input.admaxxerVisitorId);
 
     if (honeypot) return json({ error: 'Checkout request is invalid.' }, 400);
     if (!EMAIL_PATTERN.test(email) || email.length > 254) {
@@ -140,8 +148,9 @@ export async function onRequestPost(context: PagesContext): Promise<Response> {
     const insertResult = await env.LEADS.prepare(
       `INSERT INTO checkout_leads (
         id, email, offer_slug, placement, marketing_consent, consent_version,
-        attribution_json, referrer, country, status, bump_selected, created_at, updated_at
-      ) VALUES (?, ?, ?, ?, 1, ?, ?, ?, ?, 'captured', ?, ?, ?)`
+        attribution_json, referrer, country, status, bump_selected, admaxxer_visitor_id,
+        created_at, updated_at
+      ) VALUES (?, ?, ?, ?, 1, ?, ?, ?, ?, 'captured', ?, ?, ?, ?)`
     )
       .bind(
         leadId,
@@ -153,6 +162,7 @@ export async function onRequestPost(context: PagesContext): Promise<Response> {
         referrer || null,
         country || null,
         bumpAccepted ? 1 : 0,
+        admaxxerVisitorId || null,
         now,
         now
       )
@@ -254,6 +264,7 @@ export async function onRequestPost(context: PagesContext): Promise<Response> {
           bump_selected: bumpAccepted ? 'true' : 'false',
           bump_product_key: bumpAccepted && definition.bump ? definition.bump.productKey : '',
           source: 'owned-funnel-builder',
+          ...(admaxxerVisitorId ? { admx_visitor_id: admaxxerVisitorId } : {}),
         },
       }),
       signal: AbortSignal.timeout(DODO_TIMEOUT_MS),

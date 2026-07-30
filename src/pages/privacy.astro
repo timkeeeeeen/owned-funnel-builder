@@ -16,11 +16,12 @@ const description =
     <div class="prose prose-lg mt-12 max-w-none dark:prose-invert">
       <h2>What this site collects</h2>
       <p>
-        These pages do not currently set advertising or analytics cookies. When you begin checkout,
-        we collect the email address you submit, the offer and button placement, referring page,
-        general country code supplied by Cloudflare, and standard campaign parameters such as UTM,
-        Google, Meta, TikTok, or Microsoft click identifiers. We do not store your IP address in the
-        checkout lead record.
+        These pages use Admaxxer to measure visits, campaign attribution, and checkout activity. It
+        may store a first-party visitor identifier and standard campaign parameters such as UTM,
+        Google, Meta, TikTok, or Microsoft click identifiers. When you begin checkout, we also
+        collect the email address you submit, offer and button placement, referring page, general
+        country code supplied by Cloudflare, and the Admaxxer visitor identifier. We do not store
+        your IP address in the checkout lead record.
       </p>
 
       <h2>Email and checkout follow-up</h2>
@@ -30,6 +31,12 @@ const description =
         that offer—including a reminder when a checkout is left unfinished. You can unsubscribe from
         marketing messages at any time. If you contact us, we also receive the information you
         include in your message.
+      </p>
+      <p>
+        When a valid checkout session is created, we identify the visitor to Admaxxer using the
+        submitted email and record a Lead event. Successful payments are sent from Dodo Payments to
+        Admaxxer through a signed server-to-server webhook for revenue attribution and advertising
+        conversion reporting. We do not send card details to Admaxxer.
       </p>
 
       <h2>Checkout providers</h2>

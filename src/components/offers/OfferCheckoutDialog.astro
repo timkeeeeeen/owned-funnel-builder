@@ -265,6 +265,53 @@ const frameId = `dodo-inline-checkout-${offer.slug}`;
     'msclkid',
   ];
 
+  interface AdmaxxerClient {
+    (eventName: string, metadata?: Record<string, unknown>): void;
+    identify?: (email: string) => void;
+    getVisitorId?: () => string | null;
+  }
+
+  const trackedLeads = new Set<string>();
+
+  const getAdmaxxer = () => (window as Window & { admaxxer?: AdmaxxerClient }).admaxxer;
+
+  const getAdmaxxerVisitorId = () => {
+    const visitorId = getAdmaxxer()?.getVisitorId?.();
+    if (visitorId) return visitorId;
+    return document.cookie
+      .split('; ')
+      .find((cookie) => cookie.startsWith('admx_vid='))
+      ?.slice('admx_vid='.length);
+  };
+
+  const trackLead = (email: string, offer: string, placement: string, bumpSelected: boolean) => {
+    const admaxxer = getAdmaxxer();
+    if (!admaxxer) return;
+
+    admaxxer.identify?.(email);
+    const leadKey = `${offer}:${email.toLowerCase()}`;
+    let alreadyTracked = trackedLeads.has(leadKey);
+    try {
+      alreadyTracked ||= sessionStorage.getItem(`admaxxer:lead:${leadKey}`) === '1';
+    } catch {
+      // Tracking still works when storage is unavailable.
+    }
+    if (alreadyTracked) return;
+
+    admaxxer('Lead', {
+      offer_slug: offer,
+      placement,
+      bump_selected: bumpSelected,
+      source: 'checkout_email',
+    });
+    trackedLeads.add(leadKey);
+    try {
+      sessionStorage.setItem(`admaxxer:lead:${leadKey}`, '1');
+    } catch {
+      // The in-memory guard still prevents duplicate events in this page view.
+    }
+  };
+
   const checkoutDialog = document.querySelector<HTMLDialogElement>('[data-offer-checkout-dialog]');
 
   if (checkoutDialog) {
@@ -428,6 +475,7 @@ const frameId = `dodo-inline-checkout-${offer.slug}`;
             attribution,
             referrer: document.referrer,
             bumpAccepted: bumpInput?.checked === true,
+            admaxxerVisitorId: getAdmaxxerVisitorId(),
           }),
         });
         const result = (await response.json()) as {
@@ -439,6 +487,8 @@ const frameId = `dodo-inline-checkout-${offer.slug}`;
         if (!response.ok || !result.checkoutUrl || !result.mode) {
           throw new Error(result.error ?? 'Checkout is temporarily unavailable. Please try again.');
         }
+
+        trackLead(emailInput.value, offerSlug, placement, bumpInput?.checked === true);
 
         showPaymentStep();
         if (fallbackLink) fallbackLink.href = result.checkoutUrl;
