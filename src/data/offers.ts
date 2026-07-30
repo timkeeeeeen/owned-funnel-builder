@@ -151,7 +151,7 @@ const vibeCodeCheckoutUrl =
   import.meta.env.PUBLIC_VIBE_CODE_CHECKOUT_URL ??
   'mailto:tim@keen.digital?subject=Vibe%20Code%20Anything%20%E2%80%94%20template%20access';
 const vibeCodeDodoCheckoutEnabled =
-  import.meta.env.PUBLIC_VIBE_CODE_DODO_CHECKOUT_ENABLED === 'true';
+  import.meta.env.PUBLIC_VIBE_CODE_DODO_CHECKOUT_ENABLED !== 'false';
 
 const featuredOffers: Offer[] = [
   {

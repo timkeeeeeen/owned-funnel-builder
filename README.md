@@ -58,13 +58,13 @@ npx wrangler pages secret put DODO_PRODUCT_VIBE_CODE_ANYTHING --project-name mae
 
 Use `live_mode` or `test_mode` for `DODO_PAYMENTS_ENVIRONMENT`. Each new offer maps its slug to a predictable secret named `DODO_PRODUCT_<UPPERCASE_SLUG>`, with hyphens converted to underscores.
 
-Keep inline checkout disabled while reviewing copy. Enable it only for a build whose Dodo configuration has been tested:
+Inline checkout is enabled by default, so a normal production build cannot silently fall back to email:
 
 ```bash
-PUBLIC_VIBE_CODE_DODO_CHECKOUT_ENABLED=true npm run build
+npm run build
 ```
 
-Until then, `PUBLIC_VIBE_CODE_CHECKOUT_URL` remains the safe CTA fallback. Dodo's dashboard can also enable its native abandoned-cart recovery sequence after the live product exists.
+For an intentional maintenance window, set `PUBLIC_VIBE_CODE_DODO_CHECKOUT_ENABLED=false` and configure `PUBLIC_VIBE_CODE_CHECKOUT_URL` as the temporary CTA fallback. Dodo's dashboard can also enable its native abandoned-cart recovery sequence after the live product exists.
 
 The lead record captures these campaign parameters:
 
