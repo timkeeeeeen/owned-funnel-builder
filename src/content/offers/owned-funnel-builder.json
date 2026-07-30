@@ -7,7 +7,7 @@
   "headlineAccent": "again.",
   "subheadline": "Tell your coding agent what you sell. It builds the page, connects the checkout, checks every screen size, and publishes it to your Cloudflare account. When you want to change a sentence yourself, open the simple visual editor.",
   "metaTitle": "Owned Funnel Builder — Build and Own Every Funnel",
-  "metaDescription": "Own a polished Astro funnel builder with visual copy editing, Dodo checkout, a $19 order bump, two one-click upsells, Resend delivery, Cloudflare publishing, and agent skills that handle the technical work.",
+  "metaDescription": "Own a polished Astro funnel builder with visual copy editing, Dodo checkout and delivery, a $19 order bump, two one-click upsells, Cloudflare publishing, and agent skills that handle the technical work.",
   "ogImage": "/og-owned-funnel-builder.png",
   "audience": "For creators, consultants, agencies, and small businesses who want high-converting offer pages without another monthly funnel-software bill or a pile of technical setup.",
   "checkoutUrl": "/owned-funnel-builder/#checkout",
@@ -91,7 +91,7 @@
       "Visual Keystatic copy editor",
       "Dodo checkout, bump, and two upsells",
       "Agent skills and local launch assistant",
-      "Cloudflare and Resend setup workflow",
+      "Cloudflare and Dodo delivery setup workflow",
       "30-day money-back guarantee"
     ],
     "faqEyebrow": "Questions, answered",
@@ -198,7 +198,7 @@
       },
       {
         "title": "Configure delivery",
-        "description": "Connects Resend, tests access email delivery, and keeps failed email separate from successful payment."
+        "description": "Attaches files and access instructions in Dodo, with an optional branded Resend email that stays separate from payment."
       },
       {
         "title": "Publish and audit",
@@ -238,8 +238,8 @@
       "description": "Email capture before inline checkout, a clear order summary, a $19 bump, up to two one-click upsells, fallback payments, and an order-complete page."
     },
     {
-      "title": "Resend access delivery",
-      "description": "Signed payment webhooks trigger idempotent access emails for each product the buyer purchased, with safe retry behavior."
+      "title": "Dodo-native access delivery",
+      "description": "Every product carries its own Dodo entitlement, customer email, and portal download. Add Resend only when you want a second branded message."
     },
     {
       "title": "Cloudflare Pages and D1 setup",
@@ -384,7 +384,7 @@
     },
     {
       "question": "What accounts do I need?",
-      "answer": "You need GitHub for safe source backup, Cloudflare for hosting and the small D1 database, Dodo Payments for checkout, Resend for access email, and a coding agent that can work with a repository. Your agent walks you through each connection."
+      "answer": "You need GitHub for safe source backup, Cloudflare for hosting and the small D1 database, Dodo Payments for checkout and file delivery, and a coding agent that can work with a repository. Resend is optional for an extra branded email. Your agent walks you through each connection."
     },
     {
       "question": "Does it include order bumps and upsells?",

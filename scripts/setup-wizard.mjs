@@ -30,9 +30,9 @@ const page = `<!doctype html>
 <label class="full">Dodo API key<input type="password" name="DODO_PAYMENTS_API_KEY" autocomplete="off" placeholder="${saved('DODO_PAYMENTS_API_KEY')}"><small>Find this in Dodo Payments → Developer → API keys.</small></label>
 <label>Mode<select name="DODO_PAYMENTS_ENVIRONMENT"><option value="test_mode" ${existing.DODO_PAYMENTS_ENVIRONMENT !== 'live_mode' ? 'selected' : ''}>Test mode</option><option value="live_mode" ${existing.DODO_PAYMENTS_ENVIRONMENT === 'live_mode' ? 'selected' : ''}>Live mode</option></select></label>
 </div></div>
-<div class="section"><h2>Access emails</h2><p>Resend sends the customer their access after Dodo confirms payment.</p><div class="grid">
-<label class="full">Resend API key<input type="password" name="RESEND_API_KEY" autocomplete="off" placeholder="${saved('RESEND_API_KEY')}"></label>
-<label>From email<input type="email" name="RESEND_FROM_EMAIL" required value="${value('RESEND_FROM_EMAIL')}" placeholder="access@yourdomain.com"></label>
+<div class="section"><h2>Customer access</h2><p>Dodo delivers every product file by email and in its customer portal. Resend is optional if you want a second, branded access email.</p><div class="grid">
+<label class="full">Optional Resend API key<input type="password" name="RESEND_API_KEY" autocomplete="off" placeholder="${saved('RESEND_API_KEY')}"></label>
+<label>Optional From email<input type="email" name="RESEND_FROM_EMAIL" value="${value('RESEND_FROM_EMAIL')}" placeholder="access@yourdomain.com"></label>
 <label>Support email<input type="email" name="SUPPORT_EMAIL" required value="${value('SUPPORT_EMAIL')}" placeholder="help@yourdomain.com"></label>
 </div></div>
 <div class="section"><h2>Your Cloudflare site</h2><p>Choose simple lowercase names. Your agent will create the site and database.</p><div class="grid">

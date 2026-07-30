@@ -8,7 +8,7 @@ It includes:
 - a visual Keystatic editor for changing copy without touching code;
 - email-first Dodo checkout;
 - one order bump and up to two one-click upsells;
-- Resend access emails after verified payment;
+- Dodo-native file delivery after verified payment, with optional branded Resend email;
 - Cloudflare Pages, Functions, and D1 setup;
 - bundled agent skills and a safe local MCP;
 - desktop, tablet, mobile, accessibility, and checkout release checks.
@@ -25,7 +25,7 @@ You do not need to learn Git, a terminal, YAML, environment variables, or Cloudf
 
 The agent will ask normal business questions: what you sell, who it is for, the price, what buyers receive, and what proof you have. It can open the visual editor when you want to change words yourself.
 
-When the agent asks you to connect services, it opens a private setup screen on your computer. Paste your Dodo and Resend keys there. The file is excluded from GitHub and the setup screen never prints the values.
+When the agent asks you to connect services, it opens a private setup screen on your computer. Paste your Dodo key there and, if you want a second branded access email, your optional Resend key. The file is excluded from GitHub and the setup screen never prints the values.
 
 When you are ready, say:
 
@@ -40,7 +40,7 @@ The agent should return the real public URL only after the build, payment config
 - “Add a $19 order bump that is an obvious yes.”
 - “Write two one-click upsells that naturally follow the purchase.”
 - “Show me the mobile version.”
-- “Connect Dodo and Resend.”
+- “Connect Dodo delivery and, if I need it, Resend.”
 - “Run every release check.”
 - “Publish this and give me the URL.”
 - “Roll back to the last known-good version.”
@@ -101,9 +101,9 @@ Dodo Payments is the supported default. Every configured funnel has:
 - saved-payment-method one-click charging when available;
 - a secure checkout fallback when one-click charging is unavailable;
 - idempotent server-side payment verification;
-- one access email per purchased product.
+- one Dodo entitlement per purchased product, plus at most one optional Resend email;
 
-Dodo webhooks are the fulfillment source of truth. Resend failures never create a second charge, and retry keys prevent duplicate access emails.
+Dodo webhooks are the fulfillment source of truth. Dodo sends fresh download links by email and through its customer portal. If Resend is connected, failures never create a second charge and retry keys prevent duplicate branded access emails.
 
 Stripe is a future adapter seam, not a supported claim. Do not advertise Stripe parity until the same checkout, upsell, webhook, and fulfillment tests exist for it.
 

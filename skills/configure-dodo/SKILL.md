@@ -14,11 +14,12 @@ Treat payment work as a low-freedom operation. Preserve the golden implementatio
 3. Confirm product names, exact prices, currency, tax posture, refund policy, bump default, upsell sequence, and return paths from authoritative offer data.
 4. Use server-side provider calls and secret storage. Never place an API key or authoritative product ID in browser content or committed offer copy.
 5. Create or reuse products idempotently and store their provider IDs in the generic product registry.
-6. Model a one-time bump as a second cart line. Leave it unselected.
-7. Reuse the verified customer and eligible saved payment method for one-click upsells; retain secure hosted-checkout fallback.
-8. Preserve opaque hashed flow tokens, same-origin checks, provider response validation, server-side locks, idempotency keys, and payment-status verification.
-9. Verify created products by reading them back. Test declined and no-charge paths. Do not make a real charge without explicit approval.
-10. Run `$audit-funnel` before publishing.
+6. Attach one native Digital Files entitlement to every sellable product. Upload the real file and include plain-language access instructions and the support email.
+7. Model a one-time bump as a second cart line. Leave it unselected.
+8. Reuse the verified customer and eligible saved payment method for one-click upsells; retain secure hosted-checkout fallback.
+9. Preserve opaque hashed flow tokens, same-origin checks, provider response validation, server-side locks, idempotency keys, and payment-status verification.
+10. Verify created products and their attached files by reading them back. Test declined and no-charge paths. Do not make a real charge without explicit approval.
+11. Run `$audit-funnel` before publishing.
 
 ## Buyer communication
 

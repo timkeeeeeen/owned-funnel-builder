@@ -13,7 +13,7 @@ The owner can:
 1. describe an offer in plain language;
 2. preview a polished landing page;
 3. hand-edit routine copy in Keystatic;
-4. connect Dodo, Resend, and Cloudflare through guided browser authorization;
+4. connect Dodo and Cloudflare, with optional Resend branding, through guided browser authorization;
 5. publish a tested funnel with a main checkout, order bump, and up to two one-click upsells;
 6. own the repository and hosting permanently.
 
@@ -67,7 +67,7 @@ Dodo is the supported default.
 - Reuse a saved method when eligible; otherwise offer secure checkout.
 - Always show a readable decline path.
 - Treat signed Dodo webhooks as fulfillment truth.
-- Send access through Resend with idempotency keys.
+- Deliver access through Dodo-native entitlements; when Resend is configured, send one additional idempotent branded access email.
 - Never let an email retry create or repeat a payment.
 - Keep the original known-good funnel tag recoverable.
 
@@ -85,7 +85,7 @@ Before calling a funnel ready:
 - check serious and critical Axe findings;
 - activate the checkout CTA without submitting a payment;
 - capture fresh screenshots tied to the current build;
-- test Resend to an address the owner controls;
+- verify Dodo entitlement delivery and, when configured, test Resend to an address the owner controls;
 - perform a Dodo test-mode purchase before live traffic;
 - verify the exact public HTTPS URL after deployment.
 
