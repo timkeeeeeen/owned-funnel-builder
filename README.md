@@ -65,11 +65,25 @@ npm run typecheck
 npm run build
 ```
 
+## Deploy to Cloudflare Pages
+
+The production project is `maestro-offers`, with `main` as its production branch. Deploy the current source with:
+
+```bash
+npm run deploy
+```
+
+The live Pages URL is:
+
+```text
+https://maestro-offers.pages.dev/
+```
+
 ## Important launch checks
 
 - Replace the email fallback with a real checkout URL.
 - Confirm price, delivery, refund promise, and license language.
-- Connect the intended public domain and update `PUBLIC_SITE_URL`.
+- Connect the intended custom domain and update `PUBLIC_SITE_URL` when moving beyond the Pages domain.
 - Add only the ad pixels and analytics tools you actually plan to use, then update the privacy page and consent behavior as required.
 
 ## Foundation credit

@@ -6,7 +6,8 @@
   "scripts": {
     "dev": "astro dev",
     "start": "astro dev",
-    "build": "node scripts/clean-dist.mjs && astro build && node scripts/prepare-sites-dist.mjs",
+    "build": "node scripts/clean-dist.mjs && astro build",
+    "deploy": "npm run build && wrangler pages deploy dist/client --project-name maestro-offers --branch main",
     "preview": "astro preview",
     "astro": "astro",
     "lint": "eslint .",
@@ -32,6 +33,7 @@
     "prettier": "^3.7.4",
     "prettier-plugin-astro": "^0.14.1",
     "typescript": "^5.9.3",
-    "typescript-eslint": "^8.65.0"
+    "typescript-eslint": "^8.65.0",
+    "wrangler": "^4.115.0"
   }
 }
