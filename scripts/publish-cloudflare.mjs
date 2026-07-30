@@ -1,4 +1,5 @@
 import { execFile } from 'node:child_process';
+import { copyFile } from 'node:fs/promises';
 import { promisify } from 'node:util';
 import { readLocalSettings, requireSetting } from './lib/local-settings.mjs';
 
@@ -24,6 +25,7 @@ async function run(file, args, options = {}) {
 await run(npm, ['run', 'validate:config', '--', '--publish'], { showOutput: true });
 await run(npm, ['run', 'build'], { showOutput: true });
 await run(npm, ['run', 'check:functions'], { showOutput: true });
+await copyFile('.wrangler/functions-build/index.js', 'dist/client/_worker.js');
 await run(node, ['scripts/run-friendly.mjs', 'upload-cloudflare-settings.mjs'], {
   showOutput: true,
 });
