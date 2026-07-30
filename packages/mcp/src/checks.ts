@@ -2,7 +2,12 @@ import { isIP } from 'node:net';
 import { join } from 'node:path';
 import { integrationStatus } from './services.js';
 import { listOffers } from './offers.js';
-import { pathExists, readPackageScripts, runProjectCommand, type CommandResult } from './project.js';
+import {
+  pathExists,
+  readPackageScripts,
+  runProjectCommand,
+  type CommandResult,
+} from './project.js';
 
 const BASIC_SCRIPTS = ['typecheck', 'check:kpis'];
 const FULL_SCRIPTS = ['format:check', 'lint', 'typecheck', 'check:kpis', 'build'];
@@ -13,7 +18,14 @@ export async function validateProject(root: string, level: 'basic' | 'full') {
   const results: CommandResult[] = [];
   for (const script of requested) {
     if (!scripts[script]) continue;
-    results.push(await runProjectCommand(root, 'npm', ['run', '--if-present', script], script === 'build' ? 240_000 : 120_000));
+    results.push(
+      await runProjectCommand(
+        root,
+        'npm',
+        ['run', '--if-present', script],
+        script === 'build' ? 240_000 : 120_000
+      )
+    );
   }
   const offers = await listOffers(root);
   const invalidOffers = offers.filter((offer) => !offer.editable && offer.format !== 'typescript');
@@ -44,7 +56,9 @@ export async function projectStatus(root: string) {
       preview: Boolean(scripts.dev || scripts.start),
       build: Boolean(scripts.build),
       deploy: Boolean(scripts.deploy),
-      keystatic: (await pathExists(join(root, 'keystatic.config.ts'))) || (await pathExists(join(root, 'keystatic.config.mjs'))),
+      keystatic:
+        (await pathExists(join(root, 'keystatic.config.ts'))) ||
+        (await pathExists(join(root, 'keystatic.config.mjs'))),
       skills: await pathExists(join(root, 'skills')),
     },
   };
@@ -63,18 +77,45 @@ export async function publishPlan(root: string, production: boolean) {
   return {
     dryRun: true,
     production,
-    readyToAttempt: integrations.cloudflare.ready && integrations.dodo.ready && Boolean(scripts.build),
+    readyToAttempt:
+      integrations.cloudflare.ready && integrations.dodo.ready && Boolean(scripts.build),
     blockers: [
-      ...(!integrations.cloudflare.ready ? ['Cloudflare project or D1 settings are incomplete.'] : []),
+      ...(!integrations.cloudflare.ready
+        ? ['Cloudflare project or D1 settings are incomplete.']
+        : []),
       ...(!integrations.dodo.ready ? ['Dodo checkout settings are incomplete.'] : []),
       ...(!scripts.build ? ['The project has no build command.'] : []),
     ],
     steps,
     commands: {
       validate: 'npm run build',
-      publish: scripts.deploy ? 'npm run deploy' : 'Ask the publish-cloudflare skill to create a safe project-specific deploy command.',
+      publish: scripts.deploy
+        ? 'npm run deploy'
+        : 'Ask the publish-cloudflare skill to create a safe project-specific deploy command.',
     },
     note: 'Nothing was published. This tool only prepared the plan.',
+  };
+}
+
+export async function rollbackPlan(root: string) {
+  const [current, recent] = await Promise.all([
+    runProjectCommand(root, 'git', ['rev-parse', '--short', 'HEAD'], 15_000),
+    runProjectCommand(root, 'git', ['log', '--oneline', '-5'], 15_000),
+  ]);
+  return {
+    dryRun: true,
+    changedNothing: true,
+    currentVersion: current.ok ? current.summary : 'Could not read the current local version.',
+    recentLocalVersions: recent.ok ? recent.summary : 'Could not read recent local versions.',
+    safePlan: [
+      'Identify the last known-good public deployment in Cloudflare deployment history.',
+      'Confirm its page, checkout, bump, and upsells belong to the same version.',
+      'Use Cloudflare’s rollback control to restore that known deployment.',
+      'Verify the stable public URL after rollback.',
+      'Only then ask an agent to create a normal Git revert for the faulty change, preserving history.',
+    ],
+    localBackup: null,
+    note: 'No MCP-created local backup was found, so this tool did not restore files or change Git history.',
   };
 }
 
@@ -104,7 +145,9 @@ export async function verifyRelease(root: string, url?: string) {
         url: parsed.toString(),
         ok: response.ok && /<html[\s>]/i.test(body),
         status: response.status,
-        note: response.ok ? 'The public URL returned an HTML page.' : 'The public URL did not return a successful response.',
+        note: response.ok
+          ? 'The public URL returned an HTML page.'
+          : 'The public URL did not return a successful response.',
       };
     } catch {
       live = { url: parsed.toString(), ok: false, note: 'The public URL could not be reached.' };
@@ -126,7 +169,9 @@ export async function verifyRelease(root: string, url?: string) {
 
 function assertPublicReleaseUrl(url: URL): void {
   if (url.protocol !== 'https:' || url.username || url.password) {
-    throw new Error('Release verification requires a public https:// URL without embedded credentials.');
+    throw new Error(
+      'Release verification requires a public https:// URL without embedded credentials.'
+    );
   }
   const hostname = url.hostname.toLowerCase().replace(/^\[|\]$/g, '');
   if (

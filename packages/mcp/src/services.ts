@@ -22,7 +22,9 @@ function variableStatus(names: Set<string>, required: string[]) {
   return Object.fromEntries(required.map((name) => [name, names.has(name)]));
 }
 
-async function cloudflareFileStatus(root: string): Promise<{ configFile: string | null; d1Binding: boolean; projectName: boolean }> {
+async function cloudflareFileStatus(
+  root: string
+): Promise<{ configFile: string | null; d1Binding: boolean; projectName: boolean }> {
   for (const name of ['wrangler.jsonc', 'wrangler.json', 'wrangler.toml']) {
     const path = join(root, name);
     if (!(await pathExists(path))) continue;
@@ -39,7 +41,10 @@ async function cloudflareFileStatus(root: string): Promise<{ configFile: string 
 export async function integrationStatus(root: string) {
   const names = await configuredNames(root);
   const cloudflare = await cloudflareFileStatus(root);
-  const dodoVariables = variableStatus(names, ['DODO_PAYMENTS_API_KEY', 'DODO_PAYMENTS_ENVIRONMENT']);
+  const dodoVariables = variableStatus(names, [
+    'DODO_PAYMENTS_API_KEY',
+    'DODO_PAYMENTS_ENVIRONMENT',
+  ]);
   const resendVariables = variableStatus(names, ['RESEND_API_KEY', 'RESEND_FROM_EMAIL']);
   const cloudflareAuth = names.has('CLOUDFLARE_API_TOKEN') || names.has('CLOUDFLARE_ACCOUNT_ID');
 
@@ -66,6 +71,7 @@ export async function integrationStatus(root: string) {
         ? 'Cloudflare project settings were found. Authenticate when you are ready to publish.'
         : 'Run the Cloudflare setup skill before publishing.',
     },
-    privacy: 'Only setting names and yes/no status are reported. Secret values were not read or returned.',
+    privacy:
+      'Only setting names and yes/no status are reported. Secret values were not read or returned.',
   };
 }

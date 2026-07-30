@@ -38,7 +38,10 @@ export async function findProjectRoot(start = process.cwd()): Promise<string> {
 
 export function isInside(root: string, candidate: string): boolean {
   const pathFromRoot = relative(resolve(root), resolve(candidate));
-  return pathFromRoot === '' || (!pathFromRoot.startsWith(`..${sep}`) && pathFromRoot !== '..' && !isAbsolute(pathFromRoot));
+  return (
+    pathFromRoot === '' ||
+    (!pathFromRoot.startsWith(`..${sep}`) && pathFromRoot !== '..' && !isAbsolute(pathFromRoot))
+  );
 }
 
 export async function safeProjectPath(root: string, relativePath: string): Promise<string> {
@@ -89,7 +92,7 @@ function safeEnvironment(): NodeJS.ProcessEnv {
 
 export function redactOutput(value: string): string {
   return value
-    .replace(/(bearer\s+)[A-Za-z0-9._~+\/-]+/gi, '$1[hidden]')
+    .replace(/(bearer\s+)[A-Za-z0-9._~+/-]+/gi, '$1[hidden]')
     .replace(/((?:api[_-]?key|secret|token|password)\s*[:=]\s*)[^\s,;]+/gi, '$1[hidden]')
     .replace(/[A-Za-z0-9_-]{24,}\.[A-Za-z0-9_-]{16,}/g, '[hidden credential]')
     .slice(-6_000);
@@ -134,7 +137,9 @@ export async function runProjectCommand(
         ok: exitCode === 0 && !timedOut,
         exitCode,
         timedOut,
-        summary: timedOut ? 'The check took too long and was stopped.' : cleaned || (exitCode === 0 ? 'Passed.' : 'Failed without a message.'),
+        summary: timedOut
+          ? 'The check took too long and was stopped.'
+          : cleaned || (exitCode === 0 ? 'Passed.' : 'Failed without a message.'),
       });
     });
   });
@@ -145,6 +150,8 @@ export async function readPackageScripts(root: string): Promise<Record<string, s
     scripts?: Record<string, unknown>;
   };
   return Object.fromEntries(
-    Object.entries(parsed.scripts ?? {}).filter((entry): entry is [string, string] => typeof entry[1] === 'string')
+    Object.entries(parsed.scripts ?? {}).filter(
+      (entry): entry is [string, string] => typeof entry[1] === 'string'
+    )
   );
 }

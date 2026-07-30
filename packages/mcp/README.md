@@ -12,6 +12,27 @@ It can:
 - prepare a dry-run publishing plan; and
 - verify local release checks and a public HTTPS page.
 
+## The simple tools your agent should use
+
+These are the recommended tools for ordinary use. Their names follow the same order as the plain-English launch workflow.
+
+| Tool                        | What it does                                                                                                                            |
+| --------------------------- | --------------------------------------------------------------------------------------------------------------------------------------- |
+| `funnel_start`              | Explains what is ready and asks the short offer interview.                                                                              |
+| `funnel_list`               | Shows every funnel and its local page address.                                                                                          |
+| `funnel_create`             | Creates an unpublished landing page, disabled checkout, unselected order bump, two upsells, completion page, and delivery placeholders. |
+| `funnel_preview`            | Explains how to open the page and the Keystatic editor.                                                                                 |
+| `funnel_validate`           | Runs the project quality checks.                                                                                                        |
+| `funnel_configure_payments` | Reports Dodo setup status and gives safe next steps without accepting or displaying a key.                                              |
+| `funnel_configure_email`    | Reports Resend setup status and gives safe next steps without accepting or displaying a key.                                            |
+| `funnel_publish`            | Produces an explicit Cloudflare dry-run plan and reports blockers.                                                                      |
+| `funnel_status`             | Summarizes pages, integrations, editing, and publishing capabilities.                                                                   |
+| `funnel_rollback`           | Produces a non-destructive recovery plan from known Git and Cloudflare history.                                                         |
+
+New funnels are intentionally unpublished and have checkout disabled. Their order bump and two upsells are fully shaped but use generic draft copy, placeholder delivery links, and a placeholder support address. The agent must replace and verify those details before enabling payments.
+
+The lower-level tools (`project_status`, `list_offers`, `read_offer`, `update_offer`, `preview_instructions`, `validate_funnel`, `configuration_status`, `plan_publish`, and `verify_release`) remain available for compatibility and more focused operations.
+
 It cannot display credentials, run arbitrary shell commands, silently publish, or place a real order.
 
 ## Build and test
