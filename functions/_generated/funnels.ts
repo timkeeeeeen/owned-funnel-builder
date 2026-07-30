@@ -2,7 +2,7 @@
 export const FUNNELS = [
   {
     offerSlug: 'owned-funnel-builder',
-    supportEmail: 'support@example.com',
+    supportEmail: 'tim@modernagencysales.com',
     base: {
       productKey: 'owned-funnel-builder',
       name: 'Owned Funnel Builder',
@@ -11,7 +11,7 @@ export const FUNNELS = [
       deliverySubject: 'Your Owned Funnel Builder access',
       deliveryBody:
         'Thanks for your purchase. Your builder, zero-skill quickstart, and setup instructions are ready at the link below.',
-      accessUrl: 'https://example.com/replace-with-your-access-link',
+      accessUrl: 'https://customer.dodopayments.com',
     },
     bump: {
       key: 'conversion-copy-swipe-file',
@@ -22,7 +22,7 @@ export const FUNNELS = [
       deliverySubject: 'Your Conversion Copy Swipe File',
       deliveryBody:
         'Your headline starters, section prompts, objection answers, and guarantee swipe copy are ready at the link below.',
-      accessUrl: 'https://example.com/replace-with-your-access-link',
+      accessUrl: 'https://customer.dodopayments.com',
     },
     upsells: [
       {
@@ -52,7 +52,7 @@ export const FUNNELS = [
         deliverySubject: 'Your Ten-Funnel Blueprint Pack',
         deliveryBody:
           'Your ten funnel briefs, section maps, and offer-mechanic ideas are ready at the link below.',
-        accessUrl: 'https://example.com/replace-with-your-access-link',
+        accessUrl: 'https://customer.dodopayments.com',
         ordinal: 0,
       },
       {
@@ -82,7 +82,7 @@ export const FUNNELS = [
         deliverySubject: 'Your Client Funnel Delivery Toolkit',
         deliveryBody:
           'Your client intake, approval, handoff, launch, and maintenance toolkit is ready at the link below.',
-        accessUrl: 'https://example.com/replace-with-your-access-link',
+        accessUrl: 'https://customer.dodopayments.com',
         ordinal: 1,
       },
     ],
@@ -95,7 +95,7 @@ export const FUNNELS = [
   },
   {
     offerSlug: 'vibe-code-anything',
-    supportEmail: 'support@example.com',
+    supportEmail: 'tim@modernagencysales.com',
     base: {
       productKey: 'vibe-code-anything',
       name: 'Maestro SaaS UI Template',
@@ -104,7 +104,7 @@ export const FUNNELS = [
       deliverySubject: 'Your Maestro SaaS UI Template access',
       deliveryBody:
         'Thanks for your purchase. Your access instructions are ready at the link below.',
-      accessUrl: 'https://example.com/replace-with-your-access-link',
+      accessUrl: 'https://customer.dodopayments.com',
     },
     bump: {
       key: 'prompt-pack',
@@ -114,7 +114,7 @@ export const FUNNELS = [
       currency: 'USD',
       deliverySubject: 'Your Vibe Coding Prompt Pack',
       deliveryBody: 'Your prompt pack is ready at the link below.',
-      accessUrl: 'https://example.com/replace-with-your-access-link',
+      accessUrl: 'https://customer.dodopayments.com',
     },
     upsells: [
       {
@@ -143,7 +143,7 @@ export const FUNNELS = [
         declineLabel: 'No thanks — I’ll start with my own idea',
         deliverySubject: 'Your Five-App Blueprint Pack',
         deliveryBody: 'Your five app blueprints are ready at the link below.',
-        accessUrl: 'https://example.com/replace-with-your-access-link',
+        accessUrl: 'https://customer.dodopayments.com',
         ordinal: 0,
       },
       {
@@ -172,7 +172,7 @@ export const FUNNELS = [
         declineLabel: 'No thanks — I’ll wire the production services myself',
         deliverySubject: 'Your Production Launch Pack',
         deliveryBody: 'Your production launch pack is ready at the link below.',
-        accessUrl: 'https://example.com/replace-with-your-access-link',
+        accessUrl: 'https://customer.dodopayments.com',
         ordinal: 1,
       },
     ],

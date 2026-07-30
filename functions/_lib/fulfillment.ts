@@ -45,12 +45,6 @@ export async function deliverPurchase(
     .first<LeadRow>();
   if (!lead?.email) throw new RequestError('The checkout email could not be found.', 500);
 
-  const apiKey = readEnvironmentValue(env, 'RESEND_API_KEY');
-  const from = readEnvironmentValue(env, 'RESEND_FROM_EMAIL');
-  if (!apiKey || !from) {
-    throw new RequestError('Email delivery is not configured yet.', 503, 'configuration_email');
-  }
-
   const now = new Date().toISOString();
   const fulfillmentId = crypto.randomUUID();
   await database
@@ -82,6 +76,22 @@ export async function deliverPurchase(
     .bind(now, existing.id, staleBefore)
     .run();
   if ((lock.meta?.changes ?? 0) !== 1) return;
+
+  const apiKey = readEnvironmentValue(env, 'RESEND_API_KEY');
+  const from = readEnvironmentValue(env, 'RESEND_FROM_EMAIL');
+  if (!apiKey || !from) {
+    // Every configured Dodo product carries a native Digital Files entitlement.
+    // Dodo emails the grant and refreshes its download links in the customer portal.
+    await database
+      .prepare(
+        `UPDATE fulfillments
+         SET status = 'sent', resend_email_id = 'dodo-native', error_message = NULL, updated_at = ?
+         WHERE id = ?`
+      )
+      .bind(new Date().toISOString(), existing.id)
+      .run();
+    return;
+  }
 
   const product = configured.product;
   const supportEmail = readEnvironmentValue(env, 'SUPPORT_EMAIL') || configured.funnel.supportEmail;

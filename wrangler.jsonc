@@ -4,4 +4,12 @@
   "compatibility_date": "2026-07-30",
   "compatibility_flags": ["nodejs_compat"],
   "pages_build_output_dir": "./dist/client",
+  "d1_databases": [
+    {
+      "binding": "LEADS",
+      "database_name": "owned-funnel-builder",
+      "database_id": "f37a6e92-fcc6-43fd-898c-e8a7bf87767f",
+      "migrations_dir": "migrations",
+    },
+  ],
 }

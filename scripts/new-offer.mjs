@@ -374,7 +374,7 @@ const offer = {
 
 const funnel = {
   offerSlug: slug,
-  supportEmail: 'support@example.com',
+  supportEmail: 'tim@modernagencysales.com',
   base: {
     productKey: slug,
     name: productName,

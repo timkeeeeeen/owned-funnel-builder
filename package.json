@@ -10,6 +10,7 @@
     "setup": "node scripts/run-friendly.mjs setup-wizard.mjs",
     "setup:cloudflare": "node scripts/run-friendly.mjs setup-cloudflare.mjs",
     "setup:dodo": "node scripts/run-friendly.mjs configure-dodo.mjs",
+    "setup:deliverables": "node scripts/run-friendly.mjs prepare-deliverables.mjs",
     "setup:resend:test": "node scripts/run-friendly.mjs test-resend.mjs",
     "setup:upload": "node scripts/run-friendly.mjs upload-cloudflare-settings.mjs",
     "start": "astro dev",

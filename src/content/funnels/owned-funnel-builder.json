@@ -1,6 +1,6 @@
 {
   "offerSlug": "owned-funnel-builder",
-  "supportEmail": "support@example.com",
+  "supportEmail": "tim@modernagencysales.com",
   "base": {
     "productKey": "owned-funnel-builder",
     "name": "Owned Funnel Builder",
@@ -8,7 +8,7 @@
     "currency": "USD",
     "deliverySubject": "Your Owned Funnel Builder access",
     "deliveryBody": "Thanks for your purchase. Your builder, zero-skill quickstart, and setup instructions are ready at the link below.",
-    "accessUrl": "https://example.com/replace-with-your-access-link"
+    "accessUrl": "https://customer.dodopayments.com"
   },
   "bump": {
     "key": "conversion-copy-swipe-file",
@@ -18,7 +18,7 @@
     "currency": "USD",
     "deliverySubject": "Your Conversion Copy Swipe File",
     "deliveryBody": "Your headline starters, section prompts, objection answers, and guarantee swipe copy are ready at the link below.",
-    "accessUrl": "https://example.com/replace-with-your-access-link"
+    "accessUrl": "https://customer.dodopayments.com"
   },
   "upsells": [
     {
@@ -46,7 +46,7 @@
       "declineLabel": "No thanks — I’ll start with my own offer",
       "deliverySubject": "Your Ten-Funnel Blueprint Pack",
       "deliveryBody": "Your ten funnel briefs, section maps, and offer-mechanic ideas are ready at the link below.",
-      "accessUrl": "https://example.com/replace-with-your-access-link"
+      "accessUrl": "https://customer.dodopayments.com"
     },
     {
       "key": "agency-toolkit",
@@ -73,7 +73,7 @@
       "declineLabel": "No thanks — I’m building only for myself",
       "deliverySubject": "Your Client Funnel Delivery Toolkit",
       "deliveryBody": "Your client intake, approval, handoff, launch, and maintenance toolkit is ready at the link below.",
-      "accessUrl": "https://example.com/replace-with-your-access-link"
+      "accessUrl": "https://customer.dodopayments.com"
     }
   ],
   "completion": {

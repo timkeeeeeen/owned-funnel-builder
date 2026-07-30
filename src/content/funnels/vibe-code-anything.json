@@ -1,6 +1,6 @@
 {
   "offerSlug": "vibe-code-anything",
-  "supportEmail": "support@example.com",
+  "supportEmail": "tim@modernagencysales.com",
   "base": {
     "productKey": "vibe-code-anything",
     "name": "Maestro SaaS UI Template",
@@ -8,7 +8,7 @@
     "currency": "USD",
     "deliverySubject": "Your Maestro SaaS UI Template access",
     "deliveryBody": "Thanks for your purchase. Your access instructions are ready at the link below.",
-    "accessUrl": "https://example.com/replace-with-your-access-link"
+    "accessUrl": "https://customer.dodopayments.com"
   },
   "bump": {
     "key": "prompt-pack",
@@ -18,7 +18,7 @@
     "currency": "USD",
     "deliverySubject": "Your Vibe Coding Prompt Pack",
     "deliveryBody": "Your prompt pack is ready at the link below.",
-    "accessUrl": "https://example.com/replace-with-your-access-link"
+    "accessUrl": "https://customer.dodopayments.com"
   },
   "upsells": [
     {
@@ -46,7 +46,7 @@
       "declineLabel": "No thanks — I’ll start with my own idea",
       "deliverySubject": "Your Five-App Blueprint Pack",
       "deliveryBody": "Your five app blueprints are ready at the link below.",
-      "accessUrl": "https://example.com/replace-with-your-access-link"
+      "accessUrl": "https://customer.dodopayments.com"
     },
     {
       "key": "launch",
@@ -73,7 +73,7 @@
       "declineLabel": "No thanks — I’ll wire the production services myself",
       "deliverySubject": "Your Production Launch Pack",
       "deliveryBody": "Your production launch pack is ready at the link below.",
-      "accessUrl": "https://example.com/replace-with-your-access-link"
+      "accessUrl": "https://customer.dodopayments.com"
     }
   ],
   "completion": {

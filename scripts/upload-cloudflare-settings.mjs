@@ -5,14 +5,11 @@ import { readLocalSettings, requireSetting } from './lib/local-settings.mjs';
 const execute = promisify(execFile);
 const settings = await readLocalSettings();
 const projectName = requireSetting(settings, 'FUNNEL_CLOUDFLARE_PROJECT');
-for (const key of [
-  'DODO_PAYMENTS_API_KEY',
-  'DODO_PAYMENTS_ENVIRONMENT',
-  'RESEND_API_KEY',
-  'RESEND_FROM_EMAIL',
-  'SUPPORT_EMAIL',
-]) {
+for (const key of ['DODO_PAYMENTS_API_KEY', 'DODO_PAYMENTS_ENVIRONMENT', 'SUPPORT_EMAIL']) {
   requireSetting(settings, key);
+}
+if (Boolean(settings.RESEND_API_KEY) !== Boolean(settings.RESEND_FROM_EMAIL)) {
+  throw new Error('Resend needs both its API key and From address, or neither one.');
 }
 
 const wrangler = new URL('../node_modules/.bin/wrangler', import.meta.url).pathname;

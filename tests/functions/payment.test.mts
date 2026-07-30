@@ -389,6 +389,23 @@ test('fulfillment sends once for duplicate payment events', async () => {
   assert.equal(database.fulfillment?.attempt_count, 1);
 });
 
+test('Dodo-native delivery completes without a separate Resend credential', async () => {
+  const database = new FulfillmentDatabase();
+  let fetchCalls = 0;
+  globalThis.fetch = async () => {
+    fetchCalls += 1;
+    throw new Error('Resend should not be called.');
+  };
+  await deliverPurchase({}, database, {
+    paymentId: 'payment_dodo_native',
+    productKey: 'owned-funnel-builder',
+    leadId: 'lead_1',
+  });
+  assert.equal(fetchCalls, 0);
+  assert.equal(database.fulfillment?.status, 'sent');
+  assert.equal(database.fulfillment?.attempt_count, 1);
+});
+
 test('failed email delivery can retry without creating a second payment', async () => {
   const database = new FulfillmentDatabase();
   let fetchCalls = 0;

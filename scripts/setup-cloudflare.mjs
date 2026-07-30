@@ -40,7 +40,7 @@ try {
 }
 
 const projects = JSON.parse(await run(['pages', 'project', 'list', '--json']));
-if (!projects.some((project) => project.name === projectName)) {
+if (!projects.some((project) => (project.name ?? project['Project Name']) === projectName)) {
   await run(['pages', 'project', 'create', projectName, '--production-branch', 'main']);
   console.log(`Created the Cloudflare Pages site ${projectName}.`);
 } else {
