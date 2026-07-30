@@ -268,7 +268,7 @@ export async function onRequestPost(context: PagesContext): Promise<Response> {
           show_on_demand_tag: false,
           theme_config: {
             radius: '12px',
-            font_size: 'md',
+            font_size: 'lg',
             font_weight: 'medium',
             pay_button_text: 'Complete purchase',
             light: {
