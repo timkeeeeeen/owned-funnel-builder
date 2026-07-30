@@ -177,13 +177,25 @@ export async function onRequestPost(context: PagesContext): Promise<Response> {
       throw new RequestError('Email consent is required.', 400);
     }
     if (!env.LEADS) {
+      console.error('Checkout configuration is incomplete.', {
+        offerSlug,
+        missingBinding: 'LEADS',
+      });
       throw new RequestError('Checkout is not configured yet.', 503);
     }
 
     const apiKey = readEnvironmentValue(env, 'DODO_PAYMENTS_API_KEY');
     const dodoEnvironment = readEnvironmentValue(env, 'DODO_PAYMENTS_ENVIRONMENT');
-    const productId = readEnvironmentValue(env, productEnvironmentKey(offerSlug));
+    const productEnvironmentVariable = productEnvironmentKey(offerSlug);
+    const productId = readEnvironmentValue(env, productEnvironmentVariable);
     if (!apiKey || !PRODUCT_ID_PATTERN.test(productId)) {
+      console.error('Checkout configuration is incomplete.', {
+        offerSlug,
+        hasApiKey: Boolean(apiKey),
+        productEnvironmentVariable,
+        hasProductId: Boolean(productId),
+        productIdValid: PRODUCT_ID_PATTERN.test(productId),
+      });
       throw new RequestError('Checkout is not configured yet.', 503);
     }
 
