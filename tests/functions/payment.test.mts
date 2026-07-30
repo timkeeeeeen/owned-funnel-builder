@@ -120,6 +120,7 @@ test('checkout creates the configured cart, bump, steps, and first upsell return
   assert.equal(response.status, 200);
   assert.deepEqual((providerBody?.product_cart as unknown[]).length, 2);
   assert.deepEqual(providerBody?.customer, { email: 'owner@example.com' });
+  assert.equal(providerBody?.show_saved_payment_methods, true);
   const returnUrl = new URL(String(providerBody?.return_url));
   assert.equal(returnUrl.pathname, '/checkout/upsell/funnel-blueprints/');
   assert.equal(returnUrl.searchParams.get('offer'), 'owned-funnel-builder');
@@ -166,6 +167,7 @@ function funnelState(stepStatuses: Array<FunnelState['steps'][number]['status']>
       base_status: 'succeeded',
       base_payment_id: 'pay_base',
       dodo_customer_id: 'customer_1',
+      dodo_payment_method_id: 'method_from_payment',
       dodo_session_id: 'session_base',
       bump_selected: 1,
     },
@@ -235,38 +237,74 @@ test('upsells enforce ordering and declines are idempotent', async () => {
   );
 });
 
-test('upsell uses one-click payment when available and secure checkout fallback otherwise', async () => {
-  for (const paymentMethodId of ['method_1', undefined]) {
-    const database = stateDatabase(funnelState(['offered', 'offered']));
-    const providerBodies: Array<Record<string, unknown>> = [];
-    globalThis.fetch = async (input, init) => {
-      const path = new URL(String(input)).pathname;
-      if (path.endsWith('/payment-methods')) {
-        return Response.json({
-          items: paymentMethodId ? [{ payment_method_id: paymentMethodId }] : [],
-        });
-      }
-      providerBodies.push(JSON.parse(String(init?.body)) as Record<string, unknown>);
-      return Response.json({
-        checkout_url: 'https://checkout.dodopayments.com/session/upsell',
-        session_id: 'session_upsell',
-      });
-    };
+test('upsell prefers the original payment method for a true one-click charge', async () => {
+  const database = stateDatabase(funnelState(['offered', 'offered']));
+  const providerBodies: Array<Record<string, unknown>> = [];
+  let paymentMethodQueries = 0;
+  globalThis.fetch = async (input, init) => {
+    const path = new URL(String(input)).pathname;
+    if (path.endsWith('/payment-methods')) {
+      paymentMethodQueries += 1;
+      return Response.json({ items: [] });
+    }
+    providerBodies.push(JSON.parse(String(init?.body)) as Record<string, unknown>);
+    return Response.json({ session_id: 'session_upsell', payment_id: 'payment_upsell' });
+  };
 
-    const response = await decideUpsell({
-      request: decisionRequest('funnel-blueprints', 'accept'),
-      env: {
-        LEADS: database,
-        DODO_PAYMENTS_API_KEY: 'test_key',
-        DODO_PAYMENTS_ENVIRONMENT: 'test_mode',
-      },
+  const response = await decideUpsell({
+    request: decisionRequest('funnel-blueprints', 'accept'),
+    env: {
+      LEADS: database,
+      DODO_PAYMENTS_API_KEY: 'test_key',
+      DODO_PAYMENTS_ENVIRONMENT: 'test_mode',
+    },
+  });
+  const payload = (await response.json()) as Record<string, unknown>;
+  assert.equal(response.status, 200);
+  assert.equal(payload.state, 'processing');
+  assert.equal(paymentMethodQueries, 0);
+  assert.equal(providerBodies[0]?.payment_method_id, 'method_from_payment');
+  assert.equal(providerBodies[0]?.confirm, true);
+});
+
+test('upsell retains secure checkout fallback when no reusable method exists', async () => {
+  const state = funnelState(['offered', 'offered']);
+  state.run.dodo_payment_method_id = null;
+  const database = stateDatabase(state);
+  const providerBodies: Array<Record<string, unknown>> = [];
+  globalThis.fetch = async (input, init) => {
+    const path = new URL(String(input)).pathname;
+    if (path.endsWith('/payments/pay_base')) {
+      return Response.json({
+        payment_id: 'pay_base',
+        status: 'succeeded',
+        customer: { customer_id: 'customer_1' },
+        payment_method_id: null,
+      });
+    }
+    if (path.endsWith('/payment-methods')) {
+      return Response.json({ items: [] });
+    }
+    providerBodies.push(JSON.parse(String(init?.body)) as Record<string, unknown>);
+    return Response.json({
+      checkout_url: 'https://checkout.dodopayments.com/session/upsell',
+      session_id: 'session_upsell',
     });
-    const payload = (await response.json()) as Record<string, unknown>;
-    assert.equal(response.status, 200);
-    assert.equal(payload.state, paymentMethodId ? 'processing' : 'redirect');
-    assert.equal(providerBodies[0]?.payment_method_id, paymentMethodId);
-    assert.equal(providerBodies[0]?.confirm, paymentMethodId ? true : undefined);
-  }
+  };
+
+  const response = await decideUpsell({
+    request: decisionRequest('funnel-blueprints', 'accept'),
+    env: {
+      LEADS: database,
+      DODO_PAYMENTS_API_KEY: 'test_key',
+      DODO_PAYMENTS_ENVIRONMENT: 'test_mode',
+    },
+  });
+  const payload = (await response.json()) as Record<string, unknown>;
+  assert.equal(response.status, 200);
+  assert.equal(payload.state, 'redirect');
+  assert.equal(providerBodies[0]?.payment_method_id, undefined);
+  assert.equal(providerBodies[0]?.confirm, undefined);
 });
 
 test('funnel routing advances only after completed decisions', () => {

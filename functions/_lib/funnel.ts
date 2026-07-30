@@ -17,6 +17,7 @@ interface PaymentDetails {
   payment_id?: string;
   status?: string | null;
   customer?: { customer_id?: string };
+  payment_method_id?: string | null;
 }
 
 export interface FunnelRun {
@@ -27,6 +28,7 @@ export interface FunnelRun {
   base_status: 'pending' | 'succeeded' | 'failed';
   base_payment_id: string | null;
   dodo_customer_id: string | null;
+  dodo_payment_method_id: string | null;
   dodo_session_id: string | null;
   bump_selected: 0 | 1;
 }
@@ -76,30 +78,50 @@ async function refreshBasePayment(
   database: D1Database,
   run: FunnelRun
 ): Promise<void> {
-  if (run.base_status !== 'pending' || !run.dodo_session_id) return;
+  if (run.base_status === 'failed') return;
 
-  const session = await dodoRequest<CheckoutSessionStatus>(
-    env,
-    `/checkouts/${encodeURIComponent(run.dodo_session_id)}`
-  );
-  if (!session.payment_id || !session.payment_status) return;
-
-  if (session.payment_status === 'succeeded') {
-    const payment = await dodoRequest<PaymentDetails>(
+  let paymentId = run.base_payment_id;
+  if (run.base_status === 'pending') {
+    if (!run.dodo_session_id) return;
+    const session = await dodoRequest<CheckoutSessionStatus>(
       env,
-      `/payments/${encodeURIComponent(session.payment_id)}`
+      `/checkouts/${encodeURIComponent(run.dodo_session_id)}`
     );
+    if (!session.payment_id || !session.payment_status) return;
+
+    if (['failed', 'cancelled'].includes(session.payment_status)) {
+      await database
+        .prepare(`UPDATE funnel_runs SET base_status = 'failed', updated_at = ? WHERE id = ?`)
+        .bind(new Date().toISOString(), run.id)
+        .run();
+      return;
+    }
+    if (session.payment_status !== 'succeeded') return;
+    paymentId = session.payment_id;
+  }
+
+  if (!paymentId || (run.dodo_customer_id && run.dodo_payment_method_id)) return;
+
+  const payment = await dodoRequest<PaymentDetails>(
+    env,
+    `/payments/${encodeURIComponent(paymentId)}`
+  );
+  if (payment.status === 'succeeded') {
     const customerId = payment.customer?.customer_id;
-    if (!customerId || payment.status !== 'succeeded') return;
+    if (!customerId) return;
 
     const now = new Date().toISOString();
     await database
       .prepare(
         `UPDATE funnel_runs
-         SET base_status = 'succeeded', base_payment_id = ?, dodo_customer_id = ?, updated_at = ?
-         WHERE id = ? AND base_status = 'pending'`
+         SET base_status = 'succeeded',
+             base_payment_id = COALESCE(base_payment_id, ?),
+             dodo_customer_id = COALESCE(dodo_customer_id, ?),
+             dodo_payment_method_id = COALESCE(dodo_payment_method_id, ?),
+             updated_at = ?
+         WHERE id = ? AND base_status IN ('pending', 'succeeded')`
       )
-      .bind(session.payment_id, customerId, now, run.id)
+      .bind(paymentId, customerId, payment.payment_method_id ?? null, now, run.id)
       .run();
     await database
       .prepare(
@@ -107,15 +129,7 @@ async function refreshBasePayment(
          SET status = 'converted', dodo_payment_id = ?, updated_at = ?
          WHERE id = ?`
       )
-      .bind(session.payment_id, now, run.lead_id)
-      .run();
-    return;
-  }
-
-  if (['failed', 'cancelled'].includes(session.payment_status)) {
-    await database
-      .prepare(`UPDATE funnel_runs SET base_status = 'failed', updated_at = ? WHERE id = ?`)
-      .bind(new Date().toISOString(), run.id)
+      .bind(paymentId, now, run.lead_id)
       .run();
   }
 }

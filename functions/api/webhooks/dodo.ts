@@ -13,6 +13,7 @@ import {
 
 interface PaymentEventData {
   payment_id?: unknown;
+  payment_method_id?: unknown;
   status?: unknown;
   metadata?: unknown;
   customer?: { customer_id?: unknown } | null;
@@ -87,14 +88,16 @@ async function markPaymentSucceeded(
       .run();
   } else {
     const customerId = cleanString(data.customer?.customer_id ?? data.customer_id, 180);
+    const paymentMethodId = cleanString(data.payment_method_id, 180);
     if (!customerId) throw new Error('The payment event is missing the customer ID.');
     await database
       .prepare(
         `UPDATE funnel_runs
-         SET base_status = 'succeeded', base_payment_id = ?, dodo_customer_id = ?, updated_at = ?
+         SET base_status = 'succeeded', base_payment_id = ?, dodo_customer_id = ?,
+             dodo_payment_method_id = COALESCE(dodo_payment_method_id, ?), updated_at = ?
          WHERE id = ?`
       )
-      .bind(paymentId, customerId, now, funnelId)
+      .bind(paymentId, customerId, paymentMethodId || null, now, funnelId)
       .run();
     await database
       .prepare(

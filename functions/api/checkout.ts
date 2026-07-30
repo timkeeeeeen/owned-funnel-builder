@@ -207,6 +207,7 @@ export async function onRequestPost(context: PagesContext): Promise<Response> {
       body: JSON.stringify({
         product_cart: productCart,
         customer: { email },
+        show_saved_payment_methods: true,
         return_url: returnUrl.toString(),
         customization: {
           theme: 'light',

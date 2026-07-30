@@ -24,8 +24,35 @@ interface PaymentMethodsResponse {
 }
 
 interface CheckoutResponse {
-  checkout_url?: string;
+  checkout_url?: string | null;
   session_id?: string;
+  payment_id?: string | null;
+}
+
+const SAVED_METHOD_ATTEMPTS = 3;
+const SAVED_METHOD_RETRY_MS = 250;
+
+async function findReusablePaymentMethod(
+  env: PagesContext['env'],
+  customerId: string,
+  storedPaymentMethodId: string | null
+): Promise<string | null> {
+  if (storedPaymentMethodId) return storedPaymentMethodId;
+
+  for (let attempt = 0; attempt < SAVED_METHOD_ATTEMPTS; attempt += 1) {
+    const methods = await dodoRequest<PaymentMethodsResponse>(
+      env,
+      `/customers/${encodeURIComponent(customerId)}/payment-methods`
+    );
+    const paymentMethod = methods.items?.find(
+      (method) => method.payment_method_id && method.recurring_enabled !== false
+    );
+    if (paymentMethod?.payment_method_id) return paymentMethod.payment_method_id;
+    if (attempt < SAVED_METHOD_ATTEMPTS - 1) {
+      await new Promise((resolve) => setTimeout(resolve, SAVED_METHOD_RETRY_MS));
+    }
+  }
+  return null;
 }
 
 function validCheckoutUrl(value: unknown): value is string {
@@ -119,12 +146,10 @@ export async function onRequestPost({ request, env }: PagesContext): Promise<Res
       return json({ state: 'processing', nextUrl: nextUrl.toString() });
     }
 
-    const methods = await dodoRequest<PaymentMethodsResponse>(
+    const paymentMethodId = await findReusablePaymentMethod(
       env,
-      `/customers/${encodeURIComponent(state.run.dodo_customer_id)}/payment-methods`
-    );
-    const paymentMethod = methods.items?.find(
-      (method) => method.payment_method_id && method.recurring_enabled !== false
+      state.run.dodo_customer_id,
+      state.run.dodo_payment_method_id
     );
     const productId = await getProductId(env.LEADS, offerConfig.productKey);
     const checkoutBody: Record<string, unknown> = {
@@ -141,8 +166,8 @@ export async function onRequestPost({ request, env }: PagesContext): Promise<Res
         source: 'owned-funnel-builder',
       },
     };
-    if (paymentMethod?.payment_method_id) {
-      checkoutBody.payment_method_id = paymentMethod.payment_method_id;
+    if (paymentMethodId) {
+      checkoutBody.payment_method_id = paymentMethodId;
       checkoutBody.confirm = true;
     }
 
@@ -151,7 +176,7 @@ export async function onRequestPost({ request, env }: PagesContext): Promise<Res
       headers: { 'Idempotency-Key': `${state.run.id}:${stepKey}` },
       body: JSON.stringify(checkoutBody),
     });
-    if (!checkout.session_id || !validCheckoutUrl(checkout.checkout_url)) {
+    if (!checkout.session_id || (!paymentMethodId && !validCheckoutUrl(checkout.checkout_url))) {
       throw new Error('Dodo did not return a valid checkout session.');
     }
 
@@ -160,10 +185,15 @@ export async function onRequestPost({ request, env }: PagesContext): Promise<Res
        SET dodo_session_id = ?, checkout_url = ?, updated_at = ?
        WHERE id = ?`
     )
-      .bind(checkout.session_id, checkout.checkout_url, new Date().toISOString(), stepRun.id)
+      .bind(
+        checkout.session_id,
+        checkout.checkout_url ?? null,
+        new Date().toISOString(),
+        stepRun.id
+      )
       .run();
 
-    return paymentMethod?.payment_method_id
+    return paymentMethodId
       ? json({ state: 'processing', nextUrl: nextUrl.toString() })
       : json({ state: 'redirect', checkoutUrl: checkout.checkout_url });
   } catch (error) {
