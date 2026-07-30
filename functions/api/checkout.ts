@@ -2,6 +2,7 @@ import { assertFunnelDefinition } from '../_lib/funnel';
 import { getProductId } from '../_lib/products';
 import {
   cleanString,
+  dodoRequest,
   getDodoConfig,
   hashFlowToken,
   json,
@@ -25,6 +26,15 @@ interface CheckoutRequest {
 interface DodoCheckoutResponse {
   checkout_url?: unknown;
   session_id?: unknown;
+}
+
+interface DodoCustomer {
+  customer_id?: unknown;
+  email?: unknown;
+}
+
+interface DodoCustomerList {
+  items?: DodoCustomer[];
 }
 
 const MAX_BODY_BYTES = 16 * 1024;
@@ -85,6 +95,33 @@ function validateCheckoutUrl(value: unknown): string {
     throw new Error('Dodo returned an unexpected checkout URL.');
   }
   return checkoutUrl.toString();
+}
+
+function validateCustomerId(value: unknown): string {
+  const customerId = cleanString(value, 180);
+  if (!/^cus_[A-Za-z0-9]+$/.test(customerId)) {
+    throw new Error('Dodo response did not contain a valid customer ID.');
+  }
+  return customerId;
+}
+
+async function resolveDodoCustomer(env: PagesContext['env'], email: string): Promise<string> {
+  const query = new URLSearchParams({ email, page_number: '1', page_size: '10' });
+  const existing = await dodoRequest<DodoCustomerList>(env, `/customers?${query.toString()}`);
+  const match = existing.items?.find(
+    (customer) => cleanString(customer.email, 254).toLowerCase() === email
+  );
+  if (match) return validateCustomerId(match.customer_id);
+
+  const created = await dodoRequest<DodoCustomer>(env, '/customers', {
+    method: 'POST',
+    body: JSON.stringify({
+      email,
+      name: 'Customer',
+      metadata: { source: 'owned-funnel-builder' },
+    }),
+  });
+  return validateCustomerId(created.customer_id);
 }
 
 export async function onRequestPost(context: PagesContext): Promise<Response> {
@@ -198,6 +235,13 @@ export async function onRequestPost(context: PagesContext): Promise<Response> {
       });
     }
 
+    const customerId = await resolveDodoCustomer(env, email);
+    await env.LEADS.prepare(
+      `UPDATE funnel_runs SET dodo_customer_id = ?, updated_at = ? WHERE id = ?`
+    )
+      .bind(customerId, new Date().toISOString(), funnelId)
+      .run();
+
     const providerResponse = await fetch(`${apiBaseUrl}/checkouts`, {
       method: 'POST',
       headers: {
@@ -206,7 +250,7 @@ export async function onRequestPost(context: PagesContext): Promise<Response> {
       },
       body: JSON.stringify({
         product_cart: productCart,
-        customer: { email },
+        customer: { customer_id: customerId },
         show_saved_payment_methods: true,
         return_url: returnUrl.toString(),
         customization: {
@@ -243,6 +287,7 @@ export async function onRequestPost(context: PagesContext): Promise<Response> {
           allow_discount_code: false,
           allow_phone_number_collection: false,
           allow_tax_id: false,
+          redirect_immediately: true,
         },
         metadata: {
           offer_slug: offerSlug,

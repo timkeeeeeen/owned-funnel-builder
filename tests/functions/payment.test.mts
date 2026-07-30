@@ -93,7 +93,13 @@ test('checkout creates the configured cart, bump, steps, and first upsell return
     'owned-funnel-conversion-copy-swipe-file': 'prod_bump',
   });
   let providerBody: Record<string, unknown> | undefined;
-  globalThis.fetch = async (_input, init) => {
+  globalThis.fetch = async (input, init) => {
+    const url = new URL(String(input));
+    if (url.pathname === '/customers' && init?.method !== 'POST') {
+      return Response.json({
+        items: [{ customer_id: 'cus_existing', email: 'owner@example.com' }],
+      });
+    }
     providerBody = JSON.parse(String(init?.body)) as Record<string, unknown>;
     return Response.json({
       checkout_url: 'https://checkout.dodopayments.com/session/test',
@@ -119,8 +125,9 @@ test('checkout creates the configured cart, bump, steps, and first upsell return
 
   assert.equal(response.status, 200);
   assert.deepEqual((providerBody?.product_cart as unknown[]).length, 2);
-  assert.deepEqual(providerBody?.customer, { email: 'owner@example.com' });
+  assert.deepEqual(providerBody?.customer, { customer_id: 'cus_existing' });
   assert.equal(providerBody?.show_saved_payment_methods, true);
+  assert.equal((providerBody?.feature_flags as Record<string, unknown>).redirect_immediately, true);
   const returnUrl = new URL(String(providerBody?.return_url));
   assert.equal(returnUrl.pathname, '/checkout/upsell/funnel-blueprints/');
   assert.equal(returnUrl.searchParams.get('offer'), 'owned-funnel-builder');
@@ -131,6 +138,59 @@ test('checkout creates the configured cart, bump, steps, and first upsell return
     database.calls.filter((call) => call.query.includes('INSERT INTO funnel_step_runs')).length,
     2
   );
+  assert.equal(
+    database.calls.some(
+      (call) => call.query.includes('SET dodo_customer_id = ?') && call.values[0] === 'cus_existing'
+    ),
+    true
+  );
+});
+
+test('checkout creates and explicitly attaches a Dodo customer for a new email', async () => {
+  const database = checkoutDatabase({ 'owned-funnel-builder': 'prod_main' });
+  const providerCalls: Array<{ path: string; method: string; body?: Record<string, unknown> }> = [];
+  globalThis.fetch = async (input, init) => {
+    const url = new URL(String(input));
+    const method = init?.method ?? 'GET';
+    const body = init?.body
+      ? (JSON.parse(String(init.body)) as Record<string, unknown>)
+      : undefined;
+    providerCalls.push({ path: url.pathname, method, body });
+    if (url.pathname === '/customers' && method === 'GET') {
+      return Response.json({ items: [] });
+    }
+    if (url.pathname === '/customers' && method === 'POST') {
+      return Response.json({ customer_id: 'cus_created', email: 'new@example.com' });
+    }
+    return Response.json({
+      checkout_url: 'https://checkout.dodopayments.com/session/test',
+      session_id: 'session_123',
+    });
+  };
+
+  const response = await createCheckout({
+    request: checkoutRequest({
+      email: 'new@example.com',
+      offerSlug: 'owned-funnel-builder',
+      consentVersion: 'v1',
+    }),
+    env: {
+      LEADS: database,
+      DODO_PAYMENTS_API_KEY: 'test_key',
+      DODO_PAYMENTS_ENVIRONMENT: 'test_mode',
+    },
+  });
+
+  assert.equal(response.status, 200);
+  assert.deepEqual(
+    providerCalls.map((call) => [call.path, call.method]),
+    [
+      ['/customers', 'GET'],
+      ['/customers', 'POST'],
+      ['/checkouts', 'POST'],
+    ]
+  );
+  assert.deepEqual(providerCalls[2]?.body?.customer, { customer_id: 'cus_created' });
 });
 
 test('checkout fails closed when a configured product has no Dodo mapping', async () => {
