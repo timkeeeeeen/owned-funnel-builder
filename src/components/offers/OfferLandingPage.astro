@@ -1,0 +1,616 @@
+---
+import OfferLayout from '@/layouts/OfferLayout.astro';
+import OfferAnalytics from '@/components/offers/OfferAnalytics.astro';
+import type { Offer } from '@/data/offers';
+
+interface Props {
+  offer: Offer;
+}
+
+const { offer } = Astro.props;
+const checkoutTarget = offer.checkoutUrl.startsWith('http') ? '_blank' : undefined;
+const checkoutRel = checkoutTarget ? 'noopener noreferrer' : undefined;
+
+const productSchema = {
+  '@context': 'https://schema.org',
+  '@type': 'Product',
+  name: offer.productName,
+  description: offer.metaDescription,
+  brand: {
+    '@type': 'Brand',
+    name: 'Maestro',
+  },
+  offers: {
+    '@type': 'Offer',
+    price: offer.priceAmount.toString(),
+    priceCurrency: offer.currency,
+    availability: 'https://schema.org/InStock',
+    url: new URL(`/${offer.slug}/`, Astro.site ?? Astro.url).toString(),
+  },
+};
+---
+
+<OfferLayout title={offer.metaTitle} description={offer.metaDescription} image={offer.ogImage}>
+  <script is:inline type="application/ld+json" set:html={JSON.stringify(productSchema)} />
+
+  <div class="min-h-screen overflow-x-clip bg-background pb-24 text-foreground md:pb-0">
+    <header class="border-b border-border bg-background/95 px-4 py-3 backdrop-blur sm:px-6">
+      <div class="mx-auto flex max-w-7xl items-center justify-between gap-4">
+        <a
+          href={`/${offer.slug}/`}
+          aria-label={`${offer.productName} home`}
+          class="flex min-h-11 items-center gap-3 rounded-xl focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+        >
+          <span
+            class="grid size-10 place-items-center rounded-xl bg-foreground font-mono text-lg font-bold text-background"
+            aria-hidden="true">M</span
+          >
+          <span class="text-sm font-bold uppercase tracking-[0.16em] sm:text-base"
+            >Maestro Template</span
+          >
+        </a>
+
+        <a
+          href={offer.checkoutUrl}
+          target={checkoutTarget}
+          rel={checkoutRel}
+          data-offer-cta
+          data-offer-checkout
+          data-placement="header"
+          class="offer-cta hidden min-h-11 items-center justify-center rounded-xl bg-brand px-5 py-3 text-sm font-bold text-brand-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 md:inline-flex"
+        >
+          Get it — {offer.currentPrice}
+        </a>
+      </div>
+    </header>
+
+    <section class="offer-grid px-6 py-24" aria-labelledby="offer-title">
+      <div class="mx-auto flex max-w-7xl flex-col items-center text-center">
+        <div
+          class="mb-8 inline-flex items-center gap-2 rounded-full border border-border bg-card px-4 py-2 text-sm font-semibold shadow-sm"
+        >
+          <span class="size-2.5 rounded-full bg-success" aria-hidden="true"></span>
+          {offer.eyebrow}
+        </div>
+
+        <h1
+          id="offer-title"
+          class="max-w-6xl text-balance text-6xl font-bold leading-[0.88] tracking-[-0.065em] sm:text-7xl md:text-8xl lg:text-9xl"
+        >
+          {offer.headline}<br />
+          <mark class="offer-mark">{offer.headlineAccent}</mark>
+        </h1>
+
+        <p
+          class="mt-8 max-w-3xl text-pretty text-lg leading-relaxed text-muted-foreground sm:text-xl md:text-2xl"
+        >
+          {offer.subheadline}
+        </p>
+
+        <div class="mt-10 flex w-full max-w-2xl flex-col items-center gap-4">
+          <a
+            href={offer.checkoutUrl}
+            target={checkoutTarget}
+            rel={checkoutRel}
+            data-offer-cta
+            data-offer-checkout
+            data-placement="hero"
+            class="offer-cta inline-flex min-h-20 w-full items-center justify-center rounded-xl bg-brand px-8 py-5 text-center text-xl font-bold text-brand-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 sm:text-2xl"
+          >
+            {offer.ctaLabel}
+            <span class="ml-3" aria-hidden="true">→</span>
+          </a>
+          <p class="text-sm font-medium text-muted-foreground sm:text-base">{offer.ctaNote}</p>
+        </div>
+
+        <div
+          class="mt-16 w-full max-w-5xl rounded-xl border border-border bg-foreground p-2 text-left text-background shadow-lg"
+          role="img"
+          aria-label="Maestro workflow showing a product request moving through orientation, implementation, and proof"
+          data-animate="scale"
+        >
+          <div
+            class="rounded-xl border border-background/20 bg-panel-dark p-4 sm:p-6"
+            aria-hidden="true"
+          >
+            <div
+              class="mb-6 flex items-center justify-between gap-4 border-b border-background/20 pb-4"
+            >
+              <div class="flex gap-2">
+                <span class="size-3 rounded-full bg-destructive"></span>
+                <span class="size-3 rounded-full bg-highlight"></span>
+                <span class="size-3 rounded-full bg-success"></span>
+              </div>
+              <span class="font-mono text-xs text-background/60">maestro / new-product</span>
+            </div>
+
+            <div class="grid gap-4 md:grid-cols-[0.72fr_1.28fr]">
+              <div class="rounded-xl border border-background/20 bg-background/5 p-5">
+                <p class="font-mono text-xs uppercase tracking-[0.18em] text-highlight">
+                  your prompt
+                </p>
+                <p class="mt-4 text-xl font-semibold leading-snug sm:text-2xl">
+                  “Build a production app for my idea.”
+                </p>
+                <p class="mt-6 text-sm leading-relaxed text-background/60">
+                  The template supplies the architecture. Your prompt supplies the product.
+                </p>
+              </div>
+
+              <div class="grid gap-3 sm:grid-cols-2">
+                <div class="rounded-xl border border-background/20 bg-background/5 p-4">
+                  <span class="font-mono text-xs text-brand-soft">01 / ORIENT</span>
+                  <p class="mt-2 font-semibold">Read the real system</p>
+                </div>
+                <div class="rounded-xl border border-background/20 bg-background/5 p-4">
+                  <span class="font-mono text-xs text-brand-soft">02 / PROPOSE</span>
+                  <p class="mt-2 font-semibold">Fit the right pattern</p>
+                </div>
+                <div class="rounded-xl border border-background/20 bg-background/5 p-4">
+                  <span class="font-mono text-xs text-brand-soft">03 / IMPLEMENT</span>
+                  <p class="mt-2 font-semibold">Build inside the seams</p>
+                </div>
+                <div class="rounded-xl border border-success/50 bg-success/10 p-4">
+                  <span class="font-mono text-xs text-success">04 / PROVE</span>
+                  <p class="mt-2 font-semibold">Ship with receipts</p>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <section
+      class="border-y border-border bg-foreground px-6 py-6 text-background"
+      aria-label="Offer highlights"
+    >
+      <div
+        class="mx-auto grid max-w-7xl gap-4 text-center font-mono text-sm font-semibold uppercase tracking-[0.12em] sm:grid-cols-2 lg:grid-cols-4"
+      >
+        <span>Full-stack source</span>
+        <span>AI-native instructions</span>
+        <span>Typed architecture</span>
+        <span>Lifetime access</span>
+      </div>
+    </section>
+
+    <section class="bg-muted px-6 py-20" aria-labelledby="problem-title">
+      <div class="mx-auto max-w-7xl">
+        <div class="mx-auto max-w-4xl text-center">
+          <p class="font-mono text-sm font-bold uppercase tracking-[0.18em] text-brand">
+            The blank-repo tax
+          </p>
+          <h2
+            id="problem-title"
+            class="mt-4 text-balance text-4xl font-bold leading-tight tracking-tight md:text-6xl"
+          >
+            {offer.painTitle}
+          </h2>
+          <p class="mt-6 text-pretty text-lg leading-relaxed text-muted-foreground md:text-xl">
+            {offer.painBody}
+          </p>
+        </div>
+
+        <div class="mt-14 grid gap-8 lg:grid-cols-2">
+          <article
+            class="rounded-xl border border-border bg-card p-6 shadow-sm sm:p-8"
+            data-animate="slide-left"
+          >
+            <p class="font-mono text-sm font-bold uppercase tracking-[0.16em] text-destructive">
+              Without Maestro
+            </p>
+            <h3 class="mt-3 text-2xl font-semibold md:text-3xl">Fast demo. Fragile foundation.</h3>
+            <ul class="mt-8 space-y-4">
+              {
+                offer.without.map((item) => (
+                  <li class="flex gap-3 text-base text-muted-foreground sm:text-lg">
+                    <span class="mt-0.5 font-mono font-bold text-destructive" aria-hidden="true">
+                      ×
+                    </span>
+                    <span>{item}</span>
+                  </li>
+                ))
+              }
+            </ul>
+          </article>
+
+          <article
+            class="rounded-xl border border-brand bg-card p-6 shadow-sm sm:p-8"
+            data-animate="slide-right"
+          >
+            <p class="font-mono text-sm font-bold uppercase tracking-[0.16em] text-brand">
+              With Maestro
+            </p>
+            <h3 class="mt-3 text-2xl font-semibold md:text-3xl">Fast build. Serious foundation.</h3>
+            <ul class="mt-8 space-y-4">
+              {
+                offer.with.map((item) => (
+                  <li class="flex gap-3 text-base text-muted-foreground sm:text-lg">
+                    <span class="mt-0.5 font-mono font-bold text-success" aria-hidden="true">
+                      ✓
+                    </span>
+                    <span>{item}</span>
+                  </li>
+                ))
+              }
+            </ul>
+          </article>
+        </div>
+      </div>
+    </section>
+
+    <section class="px-6 py-20" aria-labelledby="outcomes-title">
+      <div class="mx-auto max-w-7xl">
+        <div class="mx-auto max-w-4xl text-center">
+          <p class="font-mono text-sm font-bold uppercase tracking-[0.18em] text-brand">
+            The shortcut
+          </p>
+          <h2
+            id="outcomes-title"
+            class="mt-4 text-balance text-4xl font-bold leading-tight tracking-tight md:text-6xl"
+          >
+            Stop prompting for plumbing. Start shipping the thing.
+          </h2>
+        </div>
+
+        <div class="mt-14 grid gap-8 md:grid-cols-3">
+          {
+            offer.outcomes.map((outcome, index) => (
+              <article
+                class="rounded-xl border border-border bg-card p-6 shadow-sm"
+                data-animate
+                data-delay={String(index + 1)}
+              >
+                <span class="grid size-12 place-items-center rounded-xl bg-highlight font-mono text-lg font-bold text-highlight-foreground">
+                  {String(index + 1).padStart(2, '0')}
+                </span>
+                <h3 class="mt-6 text-2xl font-semibold">{outcome.title}</h3>
+                <p class="mt-3 text-base leading-relaxed text-muted-foreground sm:text-lg">
+                  {outcome.description}
+                </p>
+              </article>
+            ))
+          }
+        </div>
+
+        <div class="mx-auto mt-12 flex max-w-2xl flex-col items-center gap-4 text-center">
+          <a
+            href={offer.checkoutUrl}
+            target={checkoutTarget}
+            rel={checkoutRel}
+            data-offer-cta
+            data-offer-checkout
+            data-placement="outcomes"
+            class="offer-cta inline-flex min-h-16 w-full items-center justify-center rounded-xl bg-brand px-8 py-4 text-lg font-bold text-brand-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 sm:text-xl"
+          >
+            {offer.ctaLabel}
+            <span class="ml-3" aria-hidden="true">→</span>
+          </a>
+          <p class="text-sm font-medium text-muted-foreground">{offer.ctaNote}</p>
+        </div>
+      </div>
+    </section>
+
+    <section class="bg-foreground px-6 py-20 text-background" aria-labelledby="included-title">
+      <div class="mx-auto max-w-7xl">
+        <div class="mx-auto max-w-4xl text-center">
+          <p class="font-mono text-sm font-bold uppercase tracking-[0.18em] text-brand-soft">
+            What you get
+          </p>
+          <h2
+            id="included-title"
+            class="mt-4 text-balance text-4xl font-bold leading-tight tracking-tight md:text-6xl"
+          >
+            One template. The whole serious-app starting line.
+          </h2>
+          <p class="mt-6 text-lg leading-relaxed text-background/65 md:text-xl">{offer.audience}</p>
+        </div>
+
+        <div class="mt-14 grid gap-5 md:grid-cols-2 lg:grid-cols-3">
+          {
+            offer.included.map((item, index) => (
+              <article
+                class="rounded-xl border border-background/20 bg-background/5 p-6"
+                data-animate
+              >
+                <p class="font-mono text-sm font-bold text-brand-soft">
+                  INCLUDED / {String(index + 1).padStart(2, '0')}
+                </p>
+                <h3 class="mt-4 text-2xl font-semibold">{item.title}</h3>
+                <p class="mt-3 text-base leading-relaxed text-background/65">{item.description}</p>
+              </article>
+            ))
+          }
+        </div>
+      </div>
+    </section>
+
+    <section
+      class="bg-highlight px-6 py-20 text-highlight-foreground"
+      aria-labelledby="bonus-title"
+    >
+      <div class="mx-auto max-w-7xl">
+        <div class="grid items-start gap-12 lg:grid-cols-[0.78fr_1.22fr]">
+          <div>
+            <p class="font-mono text-sm font-bold uppercase tracking-[0.18em]">Also included</p>
+            <h2
+              id="bonus-title"
+              class="mt-4 text-balance text-4xl font-bold leading-tight tracking-tight md:text-6xl"
+            >
+              The docs that keep “vibe coding” from becoming guess coding.
+            </h2>
+          </div>
+
+          <div class="space-y-4">
+            {
+              offer.bonuses.map((bonus, index) => (
+                <article
+                  class="rounded-xl border border-highlight-foreground/20 bg-background p-6 text-foreground shadow-sm"
+                  data-animate
+                >
+                  <div class="flex gap-4">
+                    <span class="font-mono text-sm font-bold text-brand">BONUS {index + 1}</span>
+                    <div>
+                      <h3 class="text-xl font-semibold md:text-2xl">{bonus.title}</h3>
+                      <p class="mt-2 leading-relaxed text-muted-foreground">{bonus.description}</p>
+                    </div>
+                  </div>
+                </article>
+              ))
+            }
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <section class="px-6 py-20" aria-labelledby="proof-title">
+      <div class="mx-auto max-w-7xl">
+        <div class="mx-auto max-w-4xl text-center">
+          <p class="font-mono text-sm font-bold uppercase tracking-[0.18em] text-brand">
+            Inspectable proof
+          </p>
+          <h2
+            id="proof-title"
+            class="mt-4 text-balance text-4xl font-bold leading-tight tracking-tight md:text-6xl"
+          >
+            Not another pretty starter with a dead backend.
+          </h2>
+          <p class="mt-6 text-lg leading-relaxed text-muted-foreground md:text-xl">
+            The reference app is live. The backend path is live. The gates and receipts are part of
+            the product.
+          </p>
+        </div>
+
+        <div class="mt-14 grid gap-6 sm:grid-cols-2 lg:grid-cols-4">
+          {
+            offer.proof.map((proof) => (
+              <article
+                class="rounded-xl border border-border bg-card p-6 text-center shadow-sm"
+                data-animate
+              >
+                <p class="text-5xl font-bold tracking-tight text-brand">{proof.value}</p>
+                <h3 class="mt-3 text-lg font-semibold">{proof.label}</h3>
+                <p class="mt-3 text-sm leading-relaxed text-muted-foreground">{proof.detail}</p>
+              </article>
+            ))
+          }
+        </div>
+
+        <div class="mt-10 text-center">
+          <a
+            href={offer.demoUrl}
+            target="_blank"
+            rel="noopener noreferrer"
+            class="inline-flex min-h-12 items-center justify-center rounded-xl border border-border bg-card px-6 py-3 font-semibold shadow-sm transition-shadow duration-200 hover:shadow-lg focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+          >
+            Open the live reference app <span class="ml-2" aria-hidden="true">↗</span>
+          </a>
+        </div>
+      </div>
+    </section>
+
+    <section
+      class="bg-guarantee px-6 py-20 text-guarantee-foreground"
+      aria-labelledby="guarantee-title"
+    >
+      <div
+        class="mx-auto max-w-4xl rounded-xl border-2 border-dashed border-guarantee-border bg-guarantee-card p-8 text-center shadow-sm sm:p-12"
+      >
+        <span
+          class="mx-auto grid size-16 place-items-center rounded-full bg-foreground font-mono text-xl font-bold text-background"
+          aria-hidden="true">30</span
+        >
+        <p class="mt-6 font-mono text-sm font-bold uppercase tracking-[0.18em]">
+          The no-drama guarantee
+        </p>
+        <h2
+          id="guarantee-title"
+          class="mt-4 text-balance text-3xl font-bold leading-tight tracking-tight md:text-5xl"
+        >
+          {offer.guaranteeTitle}
+        </h2>
+        <p class="mx-auto mt-6 max-w-2xl text-lg leading-relaxed opacity-80">
+          {offer.guaranteeBody}
+        </p>
+      </div>
+    </section>
+
+    <section
+      id="get-it"
+      class="bg-brand px-6 py-20 text-brand-foreground"
+      aria-labelledby="price-title"
+    >
+      <div class="mx-auto grid max-w-6xl items-center gap-10 lg:grid-cols-[0.9fr_1.1fr]">
+        <div>
+          <p
+            class="font-mono text-sm font-bold uppercase tracking-[0.18em] text-brand-foreground/70"
+          >
+            Launch offer
+          </p>
+          <h2
+            id="price-title"
+            class="mt-4 text-balance text-4xl font-bold leading-tight tracking-tight md:text-6xl"
+          >
+            Buy back the days you normally lose before the product even starts.
+          </h2>
+          <p class="mt-6 text-lg leading-relaxed text-brand-foreground/75 md:text-xl">
+            You can spend another week getting an agent to reinvent the same foundation—or open a
+            working system and start on the part your customer sees.
+          </p>
+        </div>
+
+        <article
+          class="rounded-xl border border-brand-foreground/20 bg-background p-6 text-foreground shadow-lg sm:p-10"
+        >
+          <p class="font-mono text-sm font-bold uppercase tracking-[0.16em] text-brand">
+            Early builder price
+          </p>
+          <div class="mt-5 flex items-end gap-4">
+            <span class="text-7xl font-bold tracking-[-0.06em] sm:text-8xl"
+              >{offer.currentPrice}</span
+            >
+            <span class="pb-2 text-xl text-muted-foreground line-through">{offer.regularPrice}</span
+            >
+          </div>
+          <p class="mt-3 font-semibold">One payment. Lifetime access.</p>
+
+          <ul class="mt-8 space-y-3 text-muted-foreground">
+            <li class="flex gap-3">
+              <span class="font-bold text-success" aria-hidden="true">✓</span> Full template source
+            </li>
+            <li class="flex gap-3">
+              <span class="font-bold text-success" aria-hidden="true">✓</span> Generators, guides, and
+              receipts
+            </li>
+            <li class="flex gap-3">
+              <span class="font-bold text-success" aria-hidden="true">✓</span> All three launch bonuses
+            </li>
+            <li class="flex gap-3">
+              <span class="font-bold text-success" aria-hidden="true">✓</span> 30-day money-back guarantee
+            </li>
+          </ul>
+
+          <a
+            href={offer.checkoutUrl}
+            target={checkoutTarget}
+            rel={checkoutRel}
+            data-offer-cta
+            data-offer-checkout
+            data-placement="pricing"
+            class="offer-cta mt-8 inline-flex min-h-20 w-full items-center justify-center rounded-xl bg-brand px-8 py-5 text-center text-xl font-bold text-brand-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 sm:text-2xl"
+          >
+            Get the full template — {offer.currentPrice}
+            <span class="ml-3" aria-hidden="true">→</span>
+          </a>
+          <p class="mt-4 text-center text-sm font-medium text-muted-foreground">{offer.ctaNote}</p>
+        </article>
+      </div>
+    </section>
+
+    <section class="px-6 py-20" aria-labelledby="faq-title">
+      <div class="mx-auto max-w-4xl">
+        <div class="text-center">
+          <p class="font-mono text-sm font-bold uppercase tracking-[0.18em] text-brand">
+            Questions, answered
+          </p>
+          <h2 id="faq-title" class="mt-4 text-4xl font-bold tracking-tight md:text-6xl">
+            No mystery box.
+          </h2>
+        </div>
+
+        <div class="mt-12 space-y-4">
+          {
+            offer.faqs.map((faq) => (
+              <details class="group rounded-xl border border-border bg-card p-6 shadow-sm">
+                <summary class="flex min-h-11 cursor-pointer list-none items-center justify-between gap-4 text-lg font-semibold focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring sm:text-xl">
+                  {faq.question}
+                  <span
+                    class="font-mono text-2xl text-brand transition-transform duration-200 group-open:rotate-45"
+                    aria-hidden="true"
+                  >
+                    +
+                  </span>
+                </summary>
+                <p class="mt-4 max-w-3xl border-t border-border pt-4 text-base leading-relaxed text-muted-foreground sm:text-lg">
+                  {faq.answer}
+                </p>
+              </details>
+            ))
+          }
+        </div>
+      </div>
+    </section>
+
+    <section
+      class="bg-foreground px-6 py-20 text-center text-background"
+      aria-labelledby="final-title"
+    >
+      <div class="mx-auto max-w-5xl">
+        <h2
+          id="final-title"
+          class="text-balance text-4xl font-bold leading-tight tracking-tight md:text-7xl"
+        >
+          {offer.finalTitle}
+        </h2>
+        <p class="mx-auto mt-6 max-w-3xl text-lg leading-relaxed text-background/65 md:text-xl">
+          {offer.finalBody}
+        </p>
+        <div class="mx-auto mt-10 flex max-w-2xl flex-col items-center gap-4">
+          <a
+            href={offer.checkoutUrl}
+            target={checkoutTarget}
+            rel={checkoutRel}
+            data-offer-cta
+            data-offer-checkout
+            data-placement="final"
+            class="offer-cta inline-flex min-h-20 w-full items-center justify-center rounded-xl bg-brand px-8 py-5 text-center text-xl font-bold text-brand-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring sm:text-2xl"
+          >
+            {offer.ctaLabel}
+            <span class="ml-3" aria-hidden="true">→</span>
+          </a>
+          <p class="text-sm font-medium text-background/60">{offer.ctaNote}</p>
+        </div>
+      </div>
+    </section>
+
+    <footer class="border-t border-border bg-background px-6 py-10">
+      <div
+        class="mx-auto flex max-w-7xl flex-col items-center justify-between gap-6 text-center sm:flex-row sm:text-left"
+      >
+        <div>
+          <p class="font-bold">Maestro Template</p>
+          <p class="mt-1 text-sm text-muted-foreground">Build the product. Keep the foundation.</p>
+        </div>
+        <nav
+          aria-label="Legal"
+          class="flex flex-wrap justify-center gap-5 text-sm font-medium text-muted-foreground"
+        >
+          <a class="min-h-11 py-3 hover:text-foreground" href="/privacy/">Privacy</a>
+          <a class="min-h-11 py-3 hover:text-foreground" href="/terms/">Terms</a>
+          <a class="min-h-11 py-3 hover:text-foreground" href="mailto:tim@keen.digital">Contact</a>
+        </nav>
+      </div>
+    </footer>
+
+    <aside
+      class="fixed inset-x-0 bottom-0 z-50 border-t border-border bg-background/95 p-3 backdrop-blur md:hidden"
+      aria-label="Quick purchase"
+    >
+      <a
+        href={offer.checkoutUrl}
+        target={checkoutTarget}
+        rel={checkoutRel}
+        data-offer-cta
+        data-offer-checkout
+        data-placement="mobile-sticky"
+        class="offer-cta inline-flex min-h-14 w-full items-center justify-center rounded-xl bg-brand px-5 py-4 text-center text-base font-bold text-brand-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+      >
+        Get the template — {offer.currentPrice}
+        <span class="ml-2" aria-hidden="true">→</span>
+      </a>
+    </aside>
+  </div>
+
+  <OfferAnalytics offerSlug={offer.slug} />
+</OfferLayout>

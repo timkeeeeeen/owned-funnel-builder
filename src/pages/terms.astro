@@ -1,0 +1,56 @@
+---
+import OfferLayout from '@/layouts/OfferLayout.astro';
+
+const title = 'Terms — Maestro Offers';
+const description =
+  'Terms for Maestro digital template offers, including licensing, payment, delivery, refunds, and acceptable use.';
+---
+
+<OfferLayout title={title} description={description}>
+  <article class="mx-auto max-w-4xl px-6 py-20">
+    <a class="font-semibold text-brand hover:underline" href="/vibe-code-anything/"
+      >← Back to the offer</a
+    >
+    <h1 class="mt-8 text-5xl font-bold tracking-tight md:text-7xl">Terms</h1>
+    <p class="mt-4 text-muted-foreground">Last updated July 29, 2026.</p>
+
+    <div class="prose prose-lg mt-12 max-w-none dark:prose-invert">
+      <h2>Digital product</h2>
+      <p>
+        Maestro offers are digital products. Your purchase grants you access to the materials
+        described on the offer page for your own personal or commercial product work.
+      </p>
+
+      <h2>License</h2>
+      <p>
+        You may use and modify your purchased copy to build products for yourself or your clients.
+        You may not resell, publish, sublicense, or redistribute the original template or a
+        substantially similar starter as a competing template product.
+      </p>
+
+      <h2>Payments and delivery</h2>
+      <p>
+        Prices are shown in US dollars unless the checkout says otherwise. Access instructions are
+        delivered through the purchase flow or directly by email. You are responsible for using a
+        valid email address.
+      </p>
+
+      <h2>Refunds</h2>
+      <p>
+        The Vibe Code Anything launch offer includes a 30-day money-back guarantee. Contact <a
+          href="mailto:tim@keen.digital">tim@keen.digital</a
+        > within 30 days of purchase and include the email used to buy the product.
+      </p>
+
+      <h2>No guaranteed business outcome</h2>
+      <p>
+        The template is a software starting point, not a guarantee of revenue, launch timing,
+        security certification, or production fitness for a particular use. You remain responsible
+        for reviewing, configuring, testing, and operating the product you build.
+      </p>
+
+      <h2>Questions</h2>
+      <p>Contact <a href="mailto:tim@keen.digital">tim@keen.digital</a>.</p>
+    </div>
+  </article>
+</OfferLayout>

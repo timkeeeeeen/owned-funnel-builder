@@ -1,0 +1,22 @@
+---
+import OfferLandingPage from '@/components/offers/OfferLandingPage.astro';
+import { offers, publishedOffers, type Offer } from '@/data/offers';
+
+// Each generated route gets its unique description from the offer data object.
+export function getStaticPaths() {
+  const routableOffers = import.meta.env.DEV ? offers : publishedOffers;
+
+  return routableOffers.map((offer) => ({
+    params: { slug: offer.slug },
+    props: { offer },
+  }));
+}
+
+interface Props {
+  offer: Offer;
+}
+
+const { offer } = Astro.props;
+---
+
+<OfferLandingPage offer={offer} />

@@ -1,0 +1,118 @@
+---
+/**
+ * SEO Head Component
+ *
+ * Provides comprehensive SEO meta tags including:
+ * - Basic meta tags (title, description)
+ * - Canonical URL
+ * - Open Graph tags for social sharing
+ * - Twitter Card tags
+ * - Sitemap and RSS links
+ *
+ * @example
+ * ```astro
+ * <SEO
+ *   title="Page Title"
+ *   description="Page description for SEO"
+ *   image="/images/og-image.png"
+ *   type="website"
+ * />
+ * ```
+ */
+interface Props {
+  title: string;
+  description: string;
+  image?: string;
+  type?: 'website' | 'article';
+  publishedTime?: Date;
+  author?: string;
+  noindex?: boolean;
+}
+
+const {
+  title,
+  description,
+  image,
+  type = 'website',
+  publishedTime,
+  author = 'Maestro',
+  noindex = false,
+} = Astro.props;
+
+// Fallback for dev server when Astro.site might be undefined
+const siteUrl = Astro.site ?? new URL('http://localhost:4321');
+const canonicalURL = new URL(Astro.url.pathname, siteUrl);
+const socialImageURL = image ? new URL(image, siteUrl) : undefined;
+
+const siteName = 'Maestro Offers';
+---
+
+<!-- Primary Meta Tags -->
+<meta name="title" content={title} />
+<meta name="description" content={description} />
+{noindex && <meta name="robots" content="noindex, nofollow" />}
+
+<!-- Browser UI theming (light + dark, matching --color-background tokens) -->
+<meta name="color-scheme" content="light dark" />
+<meta name="theme-color" media="(prefers-color-scheme: light)" content="#fbfaf6" />
+<meta name="theme-color" media="(prefers-color-scheme: dark)" content="#11131d" />
+
+<!-- Structured data -->
+<script
+  is:inline
+  type="application/ld+json"
+  set:html={JSON.stringify({
+    '@context': 'https://schema.org',
+    '@type': 'WebSite',
+    name: siteName,
+    url: siteUrl.toString(),
+    description,
+  })}
+/>
+
+<!-- Canonical URL -->
+<link rel="canonical" href={canonicalURL} />
+
+<!-- Open Graph / Facebook -->
+<meta property="og:type" content={type} />
+<meta property="og:url" content={canonicalURL} />
+<meta property="og:title" content={title} />
+<meta property="og:description" content={description} />
+{
+  socialImageURL && (
+    <>
+      <meta property="og:image" content={socialImageURL} />
+      <meta property="og:image:width" content="1200" />
+      <meta property="og:image:height" content="630" />
+      <meta property="og:image:alt" content={title} />
+    </>
+  )
+}
+<meta property="og:site_name" content={siteName} />
+<meta property="og:locale" content="en_US" />
+
+{
+  type === 'article' && publishedTime && (
+    <>
+      <meta property="article:published_time" content={publishedTime.toISOString()} />
+      <meta property="article:author" content={author} />
+    </>
+  )
+}
+
+<!-- Twitter -->
+<meta name="twitter:card" content="summary_large_image" />
+<meta name="twitter:url" content={canonicalURL} />
+<meta name="twitter:title" content={title} />
+<meta name="twitter:description" content={description} />
+{
+  socialImageURL && (
+    <>
+      <meta name="twitter:image" content={socialImageURL} />
+      <meta name="twitter:image:alt" content={title} />
+    </>
+  )
+}
+
+<!-- Sitemap -->
+<link rel="sitemap" href="/sitemap-index.xml" />

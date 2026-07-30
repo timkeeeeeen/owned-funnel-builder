@@ -1,0 +1,45 @@
+---
+interface Props {
+  offerSlug: string;
+}
+
+const { offerSlug } = Astro.props;
+---
+
+<script is:inline define:vars={{ offerSlug }}>
+  const attributionKeys = [
+    'utm_source',
+    'utm_medium',
+    'utm_campaign',
+    'utm_content',
+    'utm_term',
+    'gclid',
+    'fbclid',
+  ];
+  const currentParams = new URLSearchParams(window.location.search);
+
+  document.querySelectorAll('[data-offer-checkout]').forEach((element) => {
+    const href = element.getAttribute('href');
+    if (!href || !href.startsWith('http')) return;
+
+    const checkoutUrl = new URL(href);
+    attributionKeys.forEach((key) => {
+      const value = currentParams.get(key);
+      if (value) checkoutUrl.searchParams.set(key, value);
+    });
+    element.setAttribute('href', checkoutUrl.toString());
+  });
+
+  document.querySelectorAll('[data-offer-cta]').forEach((element) => {
+    element.addEventListener('click', () => {
+      window.dispatchEvent(
+        new CustomEvent('offer:cta-click', {
+          detail: {
+            offer: offerSlug,
+            placement: element.getAttribute('data-placement') ?? 'unknown',
+          },
+        })
+      );
+    });
+  });
+</script>

@@ -1,0 +1,44 @@
+---
+import OfferLayout from '@/layouts/OfferLayout.astro';
+
+const title = 'Privacy — Maestro Offers';
+const description =
+  'Privacy information for Maestro offer pages, including attribution parameters, checkout providers, email contact, and data requests.';
+---
+
+<OfferLayout title={title} description={description}>
+  <article class="mx-auto max-w-4xl px-6 py-20">
+    <a class="font-semibold text-brand hover:underline" href="/vibe-code-anything/"
+      >← Back to the offer</a
+    >
+    <h1 class="mt-8 text-5xl font-bold tracking-tight md:text-7xl">Privacy</h1>
+    <p class="mt-4 text-muted-foreground">Last updated July 29, 2026.</p>
+
+    <div class="prose prose-lg mt-12 max-w-none dark:prose-invert">
+      <h2>What this site collects</h2>
+      <p>
+        These pages do not currently set advertising or analytics cookies. Standard campaign
+        parameters in the page URL may be passed to an external checkout link so a purchase can be
+        attributed to the ad or campaign that produced it.
+      </p>
+
+      <h2>Email</h2>
+      <p>
+        If you contact us, we receive the information you include in your message and use it to
+        answer your request, deliver a purchase, or provide support.
+      </p>
+
+      <h2>Checkout providers</h2>
+      <p>
+        When a checkout provider is connected, payment and billing data is handled by that provider
+        under its own privacy terms. This site does not store card details.
+      </p>
+
+      <h2>Your choices</h2>
+      <p>
+        You can ask what personal information we hold, request a correction, or request deletion by
+        emailing <a href="mailto:tim@keen.digital">tim@keen.digital</a>.
+      </p>
+    </div>
+  </article>
+</OfferLayout>

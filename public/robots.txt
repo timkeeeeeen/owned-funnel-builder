@@ -1,0 +1,8 @@
+# robots.txt for Maestro Offers
+# https://offers.maestrogtm.com
+
+User-agent: *
+Allow: /
+
+# Sitemap location
+Sitemap: https://offers.maestrogtm.com/sitemap-index.xml

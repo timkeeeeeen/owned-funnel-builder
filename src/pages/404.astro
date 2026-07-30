@@ -1,0 +1,26 @@
+---
+import OfferLayout from '@/layouts/OfferLayout.astro';
+
+const title = 'Page not found — Maestro Offers';
+const description = 'The requested Maestro offer page could not be found.';
+---
+
+<OfferLayout title={title} description={description} noindex>
+  <section class="grid min-h-screen place-items-center px-6 py-20 text-center">
+    <div class="max-w-3xl">
+      <p class="font-mono text-sm font-bold uppercase tracking-[0.18em] text-brand">
+        404 / wrong turn
+      </p>
+      <h1 class="mt-4 text-5xl font-bold tracking-tight md:text-7xl">This page did not ship.</h1>
+      <p class="mx-auto mt-6 max-w-xl text-lg text-muted-foreground">
+        The offer moved, the link changed, or your browser found a route that does not exist.
+      </p>
+      <a
+        class="offer-cta mt-10 inline-flex min-h-14 items-center justify-center rounded-xl bg-brand px-8 py-4 font-bold text-brand-foreground"
+        href="/vibe-code-anything/"
+      >
+        See Vibe Code Anything →
+      </a>
+    </div>
+  </section>
+</OfferLayout>

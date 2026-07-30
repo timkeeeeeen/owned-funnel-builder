@@ -1,0 +1,44 @@
+---
+import { ClientRouter } from 'astro:transitions';
+import '@/styles/globals.css';
+import SEO from '@/components/SEO.astro';
+import FontPreload from '@/components/FontPreload.astro';
+import ThemeScript from '@/components/ThemeScript.astro';
+import AnimationObserver from '@/components/AnimationObserver.astro';
+
+interface Props {
+  title: string;
+  description: string;
+  image?: string;
+  noindex?: boolean;
+}
+
+const { title, description, image, noindex = false } = Astro.props;
+---
+
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <FontPreload />
+    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+    <link rel="manifest" href="/site.webmanifest" />
+    <title>{title}</title>
+    <SEO title={title} description={description} image={image} noindex={noindex} />
+    <ClientRouter />
+    <ThemeScript />
+  </head>
+  <body class="min-h-screen antialiased">
+    <a
+      href="#main-content"
+      class="sr-only focus:not-sr-only focus:fixed focus:left-4 focus:top-4 focus:z-[100] focus:rounded-xl focus:bg-foreground focus:px-4 focus:py-3 focus:text-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+    >
+      Skip to content
+    </a>
+    <main id="main-content" class="min-h-screen">
+      <slot />
+    </main>
+    <AnimationObserver />
+  </body>
+</html>

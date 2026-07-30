@@ -1,0 +1,9 @@
+{
+  "name": "Maestro Offers",
+  "short_name": "Maestro",
+  "description": "Low-ticket templates and systems for builders who want to ship faster.",
+  "start_url": "/vibe-code-anything/",
+  "display": "standalone",
+  "background_color": "#fbfaf6",
+  "theme_color": "#315cf5"
+}
