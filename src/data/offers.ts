@@ -95,6 +95,9 @@ export interface OfferCheckoutSection {
   emailLabel: string;
   emailPlaceholder: string;
   buttonLabel: string;
+  summaryDescription: string;
+  guaranteeLabel: string;
+  paymentTrustLabel: string;
   consentCopy: string;
   consentVersion: string;
   bump?: {
@@ -103,6 +106,45 @@ export interface OfferCheckoutSection {
     price: string;
     items: string[];
   };
+}
+
+export interface OfferHeroStep {
+  label: string;
+  title: string;
+}
+
+export interface OfferHeroPreview {
+  ariaLabel: string;
+  windowLabel: string;
+  promptLabel: string;
+  prompt: string;
+  description: string;
+  steps: OfferHeroStep[];
+}
+
+export interface OfferSectionCopy {
+  highlights: string[];
+  problemEyebrow: string;
+  outcomesEyebrow: string;
+  outcomesTitle: string;
+  includedEyebrow: string;
+  includedTitle: string;
+  bonusesEyebrow: string;
+  bonusesTitle: string;
+  proofEyebrow: string;
+  proofTitle: string;
+  proofDescription: string;
+  proofLinkLabel: string;
+  guaranteeBadge: string;
+  guaranteeEyebrow: string;
+  pricingEyebrow: string;
+  pricingTitle: string;
+  pricingDescription: string;
+  priceLabel: string;
+  priceNote: string;
+  priceIncludes: string[];
+  faqEyebrow: string;
+  faqTitle: string;
 }
 
 export interface Offer {
@@ -119,6 +161,8 @@ export interface Offer {
   audience: string;
   checkoutUrl: string;
   checkout?: OfferCheckoutSection;
+  heroPreview: OfferHeroPreview;
+  sections: OfferSectionCopy;
   demoUrl: string;
   currentPrice: string;
   regularPrice: string;
@@ -128,6 +172,10 @@ export interface Offer {
   ctaNote: string;
   painTitle: string;
   painBody: string;
+  withoutLabel: string;
+  withoutTitle: string;
+  withLabel: string;
+  withTitle: string;
   without: string[];
   with: string[];
   outcomes: OfferItem[];

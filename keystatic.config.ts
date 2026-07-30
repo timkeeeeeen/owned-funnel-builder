@@ -1,4 +1,4 @@
-import { collection, config, fields } from '@keystatic/core';
+import { collection, config, fields, singleton } from '@keystatic/core';
 
 const requiredText = (label: string, description?: string) =>
   fields.text({ label, description, validation: { isRequired: true } });
@@ -30,11 +30,28 @@ const sectionHeading = () => ({
   description: longText('Supporting copy'),
 });
 
+const deliveryProduct = () => ({
+  productKey: requiredText('Internal product key'),
+  name: requiredText('Product name'),
+  priceAmount: fields.integer({
+    label: 'Price in whole currency units',
+    validation: { isRequired: true, min: 0 },
+  }),
+  currency: requiredText('Currency code'),
+  deliverySubject: requiredText('Access email subject'),
+  deliveryBody: longText('Access email message'),
+  accessUrl: requiredText('Customer access link'),
+});
+
 export default config({
   storage: { kind: 'local' },
   ui: {
     brand: { name: 'Owned Funnel Builder' },
-    navigation: { Offers: ['offers'] },
+    navigation: {
+      'Landing pages': ['offers'],
+      'Checkout funnels': ['funnels'],
+      'Site settings': ['site'],
+    },
   },
   collections: {
     offers: collection({
@@ -83,6 +100,9 @@ export default config({
             emailLabel: requiredText('Email field label'),
             emailPlaceholder: requiredText('Email field example'),
             buttonLabel: requiredText('Checkout button text'),
+            summaryDescription: longText('Order summary description'),
+            guaranteeLabel: requiredText('Guarantee reassurance'),
+            paymentTrustLabel: requiredText('Payment security reassurance'),
             consentCopy: longText('Consent message'),
             consentVersion: requiredText('Consent version'),
             bump: fields.object(
@@ -97,7 +117,57 @@ export default config({
           },
           { label: 'Checkout and order bump' }
         ),
-        demoUrl: requiredText('Demo or preview link'),
+        heroPreview: fields.object(
+          {
+            ariaLabel: requiredText('Accessible description'),
+            windowLabel: requiredText('Small window label'),
+            promptLabel: requiredText('Prompt label'),
+            prompt: requiredText('Example request'),
+            description: longText('Example explanation'),
+            steps: fields.array(
+              fields.object({
+                label: requiredText('Step label'),
+                title: requiredText('Step title'),
+              }),
+              {
+                label: 'Steps',
+                itemLabel: (props) => props.fields.title.value,
+              }
+            ),
+          },
+          { label: 'Hero product preview' }
+        ),
+        sections: fields.object(
+          {
+            highlights: stringList('Highlight bar', 'Highlight'),
+            problemEyebrow: requiredText('Problem section small label'),
+            outcomesEyebrow: requiredText('Outcomes section small label'),
+            outcomesTitle: requiredText('Outcomes section headline'),
+            includedEyebrow: requiredText('Included section small label'),
+            includedTitle: requiredText('Included section headline'),
+            bonusesEyebrow: requiredText('Bonuses section small label'),
+            bonusesTitle: requiredText('Bonuses section headline'),
+            proofEyebrow: requiredText('Proof section small label'),
+            proofTitle: requiredText('Proof section headline'),
+            proofDescription: longText('Proof section explanation'),
+            proofLinkLabel: requiredText('Demo link text'),
+            guaranteeBadge: requiredText('Guarantee badge'),
+            guaranteeEyebrow: requiredText('Guarantee small label'),
+            pricingEyebrow: requiredText('Pricing section small label'),
+            pricingTitle: requiredText('Pricing section headline'),
+            pricingDescription: longText('Pricing section explanation'),
+            priceLabel: requiredText('Price card small label'),
+            priceNote: requiredText('Price card reassurance'),
+            priceIncludes: stringList('Price card inclusions', 'Inclusion'),
+            faqEyebrow: requiredText('FAQ small label'),
+            faqTitle: requiredText('FAQ headline'),
+          },
+          { label: 'Section headings and labels' }
+        ),
+        demoUrl: fields.text({
+          label: 'Demo or preview link',
+          description: 'Optional. Leave blank when there is no separate working preview.',
+        }),
         currentPrice: requiredText('Current price'),
         regularPrice: requiredText('Regular price'),
         priceAmount: fields.number({
@@ -109,13 +179,20 @@ export default config({
         ctaNote: requiredText('Small reassurance below buttons'),
         painTitle: requiredText('Problem section headline'),
         painBody: longText('Problem section copy'),
+        withoutLabel: requiredText('Problem list label'),
+        withoutTitle: requiredText('Problem list headline'),
+        withLabel: requiredText('Solution list label'),
+        withTitle: requiredText('Solution list headline'),
         without: stringList('Without this product', 'Problem'),
         with: stringList('With this product', 'Benefit'),
         outcomes: copyItem('Primary outcomes'),
         video: fields.object(
           {
             ...sectionHeading(),
-            embedUrl: requiredText('Video embed URL', 'Leave blank until the video is ready.'),
+            embedUrl: fields.text({
+              label: 'Video embed URL',
+              description: 'Leave blank until the video is ready.',
+            }),
             fallbackTitle: requiredText('Message shown before a video is added'),
             fallbackBody: longText('Supporting message before a video is added'),
           },
@@ -225,6 +302,78 @@ export default config({
         ),
         finalTitle: requiredText('Final call-to-action headline'),
         finalBody: longText('Final call-to-action copy'),
+      },
+    }),
+    funnels: collection({
+      label: 'Checkout funnels',
+      slugField: 'offerSlug',
+      path: 'src/content/funnels/*',
+      format: { data: 'json' },
+      columns: ['offerSlug', 'supportEmail'],
+      schema: {
+        offerSlug: fields.slug({
+          name: {
+            label: 'Landing page address',
+            description: 'This must match the landing page address exactly.',
+            validation: { isRequired: true },
+          },
+        }),
+        supportEmail: requiredText('Customer support email'),
+        base: fields.object(deliveryProduct(), { label: 'Main product' }),
+        bump: fields.object(
+          {
+            key: requiredText('Order bump key'),
+            ...deliveryProduct(),
+          },
+          { label: 'Order bump' }
+        ),
+        upsells: fields.array(
+          fields.object({
+            key: requiredText('Upsell page key'),
+            ...deliveryProduct(),
+            stepLabel: requiredText('Progress label'),
+            eyebrow: requiredText('Small label'),
+            title: requiredText('Headline'),
+            accent: requiredText('Highlighted headline words'),
+            description: longText('Supporting copy'),
+            price: requiredText('Displayed price'),
+            regularPrice: requiredText('Displayed regular price'),
+            items: stringList('Included benefits', 'Benefit'),
+            acceptLabel: requiredText('Yes button text'),
+            declineLabel: requiredText('No thanks link text'),
+          }),
+          {
+            label: 'One-click upsells',
+            description: 'Use no more than two. The agent will verify this before publishing.',
+            itemLabel: (props) => props.fields.name.value,
+          }
+        ),
+        completion: fields.object(
+          {
+            title: requiredText('Thank-you headline'),
+            description: longText('Thank-you explanation'),
+            backLabel: requiredText('Back button text'),
+          },
+          { label: 'Order complete page' }
+        ),
+      },
+    }),
+  },
+  singletons: {
+    site: singleton({
+      label: 'Site name and contact details',
+      path: 'src/content/site',
+      format: { data: 'json' },
+      schema: {
+        siteName: requiredText('Site name'),
+        shortName: requiredText('Short name'),
+        author: requiredText('Business or author name'),
+        supportEmail: requiredText('Default support email'),
+        homeEyebrow: requiredText('Home page small label'),
+        homeHeadline: requiredText('Home page headline'),
+        homeAccent: requiredText('Highlighted headline words'),
+        homeDescription: longText('Home page supporting copy'),
+        defaultImage: requiredText('Default social sharing image path'),
       },
     }),
   },

@@ -29,4 +29,4 @@ Choose the section order, visual rhythm, composition, artwork, and necessary com
 - Preserve readable type, strong contrast, touch targets, focus states, and no horizontal overflow.
 - Use real product visuals or honest placeholders; never add stock imagery, fake logos, or invented proof.
 - Keep checkout, bump, decline, and upsell actions visually calm and unambiguous.
-- Do not name or include external reference pages, screenshots, assets, copy, or trademarks in the product.
+- Do not carry a design-reference site's identity, screenshots, assets, copy, URL, or provenance into the product. Honest competitor comparisons are allowed when they are relevant, accurate, and not confusing about affiliation.

@@ -1,4 +1,4 @@
 interface:
-  display_name: "Publish to Cloudflare"
-  short_description: "Publish and verify the exact funnel release"
-  default_prompt: "Use $publish-cloudflare to put this funnel online and verify it."
+  display_name: 'Publish to Cloudflare'
+  short_description: 'Publish and verify the exact funnel release'
+  default_prompt: 'Use $publish-cloudflare to put this funnel online and verify it.'

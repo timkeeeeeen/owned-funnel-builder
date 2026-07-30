@@ -13,6 +13,13 @@ Use labels a first-time website owner understands:
 ## Expose
 
 - Copy, images, video, proof, FAQs, guarantee, price display, CTA labels, bump copy, upsell copy, completion copy, email copy, and safe brand settings.
+- Hero preview copy and steps, section headings, highlight-bar items, price-card inclusions, and demo-link labels live in the offer record rather than the Astro component.
+
+## Verify the editor
+
+- Load `/keystatic`, the target landing-page item, its matching checkout-funnel item, and the site singleton in a real browser.
+- Treat a styled error page with HTTP 200 as a failure. Check visible fields and browser errors.
+- Keep offer routes pre-rendered in editor mode so the generic `src/pages/[slug].astro` route cannot intercept `/keystatic`.
 
 ## Protect
 

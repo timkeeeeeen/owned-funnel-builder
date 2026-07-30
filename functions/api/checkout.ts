@@ -1,4 +1,5 @@
-import { getProductId, PRODUCT_KEYS } from '../_lib/products';
+import { assertFunnelDefinition } from '../_lib/funnel';
+import { getProductId } from '../_lib/products';
 import {
   cleanString,
   getDodoConfig,
@@ -30,7 +31,6 @@ const MAX_BODY_BYTES = 16 * 1024;
 const DODO_TIMEOUT_MS = 15_000;
 const OFFER_SLUG_PATTERN = /^[a-z][a-z0-9]*(?:-[a-z0-9]+)*$/;
 const EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-const PRODUCT_ID_PATTERN = /^(?:pdt|prod)_[A-Za-z0-9]+$/;
 const ATTRIBUTION_KEYS = new Set([
   'utm_source',
   'utm_medium',
@@ -42,10 +42,6 @@ const ATTRIBUTION_KEYS = new Set([
   'ttclid',
   'msclkid',
 ]);
-
-function productEnvironmentKey(offerSlug: string): string {
-  return `DODO_PRODUCT_${offerSlug.toUpperCase().replaceAll('-', '_')}`;
-}
 
 function sanitizeAttribution(value: unknown): Record<string, string> {
   if (!value || typeof value !== 'object' || Array.isArray(value)) return {};
@@ -78,9 +74,7 @@ async function parseRequest(request: Request): Promise<CheckoutRequest> {
 }
 
 function validateCheckoutUrl(value: unknown): string {
-  if (typeof value !== 'string') {
-    throw new Error('Dodo response did not contain a checkout URL.');
-  }
+  if (typeof value !== 'string') throw new Error('Dodo response did not contain a checkout URL.');
 
   const checkoutUrl = new URL(value);
   if (
@@ -114,8 +108,7 @@ export async function onRequestPost(context: PagesContext): Promise<Response> {
     const honeypot = cleanString(input.website, 200);
     const referrer = cleanString(input.referrer, 1024);
     const attribution = sanitizeAttribution(input.attribution);
-    const bumpAccepted = input.bumpAccepted === true;
-    const hasFunnel = offerSlug === 'vibe-code-anything';
+    const requestedBump = input.bumpAccepted === true;
 
     if (honeypot) return json({ error: 'Checkout request is invalid.' }, 400);
     if (!EMAIL_PATTERN.test(email) || email.length > 254) {
@@ -124,28 +117,15 @@ export async function onRequestPost(context: PagesContext): Promise<Response> {
     if (!OFFER_SLUG_PATTERN.test(offerSlug) || offerSlug.length > 80) {
       throw new RequestError('Offer is invalid.', 400);
     }
-    if (!consentVersion) {
-      throw new RequestError('Email consent is required.', 400);
-    }
+    if (!consentVersion) throw new RequestError('Email consent is required.', 400);
     if (!env.LEADS) {
-      console.error('Checkout configuration is incomplete.', {
-        offerSlug,
-        missingBinding: 'LEADS',
-      });
       throw new RequestError('Checkout is not configured yet.', 503, 'configuration_storage');
     }
 
+    const definition = assertFunnelDefinition(offerSlug);
+    const bumpAccepted = requestedBump && Boolean(definition.bump);
     const { apiKey, apiBaseUrl, checkoutMode } = getDodoConfig(env);
-    const productEnvironmentVariable = productEnvironmentKey(offerSlug);
-    const productId = readEnvironmentValue(env, productEnvironmentVariable);
-    if (!PRODUCT_ID_PATTERN.test(productId)) {
-      console.error('Checkout configuration is incomplete.', {
-        offerSlug,
-        productEnvironmentVariable,
-        hasProductId: Boolean(productId),
-      });
-      throw new RequestError('Checkout is not configured yet.', 503, 'configuration_product');
-    }
+    const productId = await getProductId(env.LEADS, definition.base.productKey);
 
     leadId = crypto.randomUUID();
     const funnelId = crypto.randomUUID();
@@ -159,19 +139,8 @@ export async function onRequestPost(context: PagesContext): Promise<Response> {
 
     const insertResult = await env.LEADS.prepare(
       `INSERT INTO checkout_leads (
-        id,
-        email,
-        offer_slug,
-        placement,
-        marketing_consent,
-        consent_version,
-        attribution_json,
-        referrer,
-        country,
-        status,
-        bump_selected,
-        created_at,
-        updated_at
+        id, email, offer_slug, placement, marketing_consent, consent_version,
+        attribution_json, referrer, country, status, bump_selected, created_at, updated_at
       ) VALUES (?, ?, ?, ?, 1, ?, ?, ?, ?, 'captured', ?, ?, ?)`
     )
       .bind(
@@ -188,34 +157,43 @@ export async function onRequestPost(context: PagesContext): Promise<Response> {
         now
       )
       .run();
+    if (!insertResult.success) throw new Error('Lead capture failed.');
 
-    if (!insertResult.success) {
-      throw new Error('Lead capture failed.');
-    }
+    const funnelResult = await env.LEADS.prepare(
+      `INSERT INTO funnel_runs (
+        id, lead_id, offer_slug, token_hash, created_at, updated_at
+      ) VALUES (?, ?, ?, ?, ?, ?)`
+    )
+      .bind(funnelId, leadId, offerSlug, flowTokenHash, now, now)
+      .run();
+    if (!funnelResult.success) throw new Error('Checkout funnel initialization failed.');
 
-    if (hasFunnel) {
-      const funnelResult = await env.LEADS.prepare(
-        `INSERT INTO checkout_funnels (id, lead_id, token_hash, created_at, updated_at)
-         VALUES (?, ?, ?, ?, ?)`
+    for (const step of definition.upsells) {
+      const stepResult = await env.LEADS.prepare(
+        `INSERT INTO funnel_step_runs (
+          id, funnel_id, step_key, ordinal, created_at, updated_at
+        ) VALUES (?, ?, ?, ?, ?, ?)`
       )
-        .bind(funnelId, leadId, flowTokenHash, now, now)
+        .bind(crypto.randomUUID(), funnelId, step.key, step.ordinal, now, now)
         .run();
-      if (!funnelResult.success) throw new Error('Checkout funnel initialization failed.');
+      if (!stepResult.success) throw new Error('Checkout step initialization failed.');
     }
 
     const configuredReturnUrl = readEnvironmentValue(env, 'DODO_PAYMENTS_RETURN_URL');
+    const firstStep = definition.upsells[0];
     const returnUrl = new URL(
-      hasFunnel ? '/checkout/upsell/blueprints/' : configuredReturnUrl || '/checkout/success/',
+      firstStep
+        ? `/checkout/upsell/${firstStep.key}/`
+        : configuredReturnUrl || '/checkout/complete/',
       requestUrl.origin
     );
     returnUrl.searchParams.set('offer', offerSlug);
-    if (hasFunnel) returnUrl.searchParams.set('flow', flowToken);
-    else returnUrl.searchParams.set('lead', leadId);
+    returnUrl.searchParams.set('flow', flowToken);
 
     const productCart = [{ product_id: productId, quantity: 1 }];
-    if (hasFunnel && bumpAccepted) {
+    if (bumpAccepted && definition.bump) {
       productCart.push({
-        product_id: await getProductId(env.LEADS, PRODUCT_KEYS.promptPack),
+        product_id: await getProductId(env.LEADS, definition.bump.productKey),
         quantity: 1,
       });
     }
@@ -267,10 +245,13 @@ export async function onRequestPost(context: PagesContext): Promise<Response> {
         },
         metadata: {
           offer_slug: offerSlug,
+          product_key: definition.base.productKey,
           lead_id: leadId,
+          funnel_id: funnelId,
           placement,
           bump_selected: bumpAccepted ? 'true' : 'false',
-          source: 'maestro-offers',
+          bump_product_key: bumpAccepted && definition.bump ? definition.bump.productKey : '',
+          source: 'owned-funnel-builder',
         },
       }),
       signal: AbortSignal.timeout(DODO_TIMEOUT_MS),

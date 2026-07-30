@@ -1,8 +1,8 @@
-# robots.txt for Maestro Offers
-# https://maestro-offers.pages.dev
+# robots.txt for Owned Funnel Builder
+# Update the sitemap host when you connect a custom domain.
 
 User-agent: *
 Allow: /
 
 # Sitemap location
-Sitemap: https://maestro-offers.pages.dev/sitemap-index.xml
+Sitemap: https://owned-funnel-builder.pages.dev/sitemap-index.xml

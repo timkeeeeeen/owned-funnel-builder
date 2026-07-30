@@ -1,0 +1,84 @@
+{
+  "offerSlug": "vibe-code-anything",
+  "supportEmail": "support@example.com",
+  "base": {
+    "productKey": "vibe-code-anything",
+    "name": "Maestro SaaS UI Template",
+    "priceAmount": 29,
+    "currency": "USD",
+    "deliverySubject": "Your Maestro SaaS UI Template access",
+    "deliveryBody": "Thanks for your purchase. Your access instructions are ready at the link below.",
+    "accessUrl": "https://example.com/replace-with-your-access-link"
+  },
+  "bump": {
+    "key": "prompt-pack",
+    "productKey": "vibe-code-prompt-pack",
+    "name": "Vibe Coding Prompt Pack",
+    "priceAmount": 19,
+    "currency": "USD",
+    "deliverySubject": "Your Vibe Coding Prompt Pack",
+    "deliveryBody": "Your prompt pack is ready at the link below.",
+    "accessUrl": "https://example.com/replace-with-your-access-link"
+  },
+  "upsells": [
+    {
+      "key": "blueprints",
+      "productKey": "vibe-code-five-app-blueprints",
+      "name": "Five-App Blueprint Pack",
+      "stepLabel": "Upgrade 1 of 2",
+      "eyebrow": "Five complete starting points",
+      "title": "Want five apps",
+      "accent": "already mapped for Maestro?",
+      "description": "Skip the product-planning blank page too. Each blueprint tells your coding agent exactly what to build, where it belongs, and how to prove it works.",
+      "price": "$39",
+      "regularPrice": "$99",
+      "priceAmount": 39,
+      "currency": "USD",
+      "items": [
+        "Client portal blueprint",
+        "Launch tracker blueprint",
+        "AI research workspace",
+        "Approval and operations app",
+        "Vertical SaaS starter",
+        "PRD, schema, screens, prompts, and gates"
+      ],
+      "acceptLabel": "Yes — add all five blueprints for $39",
+      "declineLabel": "No thanks — I’ll start with my own idea",
+      "deliverySubject": "Your Five-App Blueprint Pack",
+      "deliveryBody": "Your five app blueprints are ready at the link below.",
+      "accessUrl": "https://example.com/replace-with-your-access-link"
+    },
+    {
+      "key": "launch",
+      "productKey": "vibe-code-production-launch-pack",
+      "name": "Production Launch Pack",
+      "stepLabel": "Upgrade 2 of 2",
+      "eyebrow": "The production provider playbook",
+      "title": "Want the boring production services",
+      "accent": "mapped out too?",
+      "description": "Give your coding agent reviewed implementation paths for the services every serious app eventually needs—without pretending your real credentials are already connected.",
+      "price": "$79",
+      "regularPrice": "$199",
+      "priceAmount": 79,
+      "currency": "USD",
+      "items": [
+        "Auth provider setup recipes",
+        "Dodo billing implementation",
+        "Transactional email wiring",
+        "Analytics and error monitoring",
+        "Storage and deployment checklist",
+        "Launch gates and rollback proof"
+      ],
+      "acceptLabel": "Yes — add the Production Launch Pack for $79",
+      "declineLabel": "No thanks — I’ll wire the production services myself",
+      "deliverySubject": "Your Production Launch Pack",
+      "deliveryBody": "Your production launch pack is ready at the link below.",
+      "accessUrl": "https://example.com/replace-with-your-access-link"
+    }
+  ],
+  "completion": {
+    "title": "You’re in. Everything is attached to your email.",
+    "description": "Your receipt and access instructions will arrive at the email used at checkout.",
+    "backLabel": "Back to Vibe Code Anything"
+  }
+}

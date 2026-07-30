@@ -1,122 +1,125 @@
-# Maestro Offers
+# Owned Funnel Builder
 
-Reusable, conversion-focused landing pages for low-ticket Maestro products. The site is built on [AstroDeck](https://github.com/holger1411/astrodeck) with Astro 7 and Tailwind CSS 4, then reduced to a focused offer-page system.
+A fast, conversion-focused funnel builder you own forever.
 
-The first offer is available at:
+It includes:
 
-```text
-/vibe-code-anything/
-```
+- polished Astro landing pages with large, unmistakable calls to action;
+- a visual Keystatic editor for changing copy without touching code;
+- email-first Dodo checkout;
+- one order bump and up to two one-click upsells;
+- Resend access emails after verified payment;
+- Cloudflare Pages, Functions, and D1 setup;
+- bundled agent skills and a safe local MCP;
+- desktop, tablet, mobile, accessibility, and checkout release checks.
 
-## Start locally
+## If you do not know anything about computers
+
+You do not need to learn Git, a terminal, YAML, environment variables, or Cloudflare infrastructure.
+
+1. Open Claude Cowork, Claude Code, Codex, or another agent that can work with files and GitHub.
+2. Give it the folder or private GitHub access link you received.
+3. Say:
+
+> Help me launch my offer. Assume I have no computer skills and handle the technical work for me.
+
+The agent will ask normal business questions: what you sell, who it is for, the price, what buyers receive, and what proof you have. It can open the visual editor when you want to change words yourself.
+
+When the agent asks you to connect services, it opens a private setup screen on your computer. Paste your Dodo and Resend keys there. The file is excluded from GitHub and the setup screen never prints the values.
+
+When you are ready, say:
+
+> Check everything and publish it to Cloudflare.
+
+The agent should return the real public URL only after the build, payment configuration, and release checks pass.
+
+## Useful sentences to give your agent
+
+- “Make me a landing page for this offer.”
+- “Open the visual editor so I can change the copy.”
+- “Add a $19 order bump that is an obvious yes.”
+- “Write two one-click upsells that naturally follow the purchase.”
+- “Show me the mobile version.”
+- “Connect Dodo and Resend.”
+- “Run every release check.”
+- “Publish this and give me the URL.”
+- “Roll back to the last known-good version.”
+
+## What the buyer edits
+
+Keystatic edits ordinary JSON files in `src/content/`. The published website is still a fast static Astro site. Keystatic does not run publicly and customers never see an admin screen.
+
+The agent can also write explicit Astro when an offer needs a custom section. This is intentional: the content editor handles routine changes, while a smart agent remains free to create a page that fits the offer.
+
+## Agent quickstart
+
+Read [AGENTS.md](./AGENTS.md), [PROJECT.md](./PROJECT.md), the applicable skill under `skills/`, and the relevant design primitives under `system/globals/`.
+
+Common commands for the agent:
 
 ```bash
 npm install
-npm run dev
-```
-
-## Create another offer
-
-Create a safe draft in one command:
-
-```bash
-npm run offer:new -- my-offer "My Product" "Get The Outcome"
-```
-
-Then:
-
-1. Open the generated JSON file in `src/data/offers/`.
-2. Replace the scaffold copy, optional conversion sections, proof, price, guarantee, FAQ, and checkout fallback URL.
-3. Add the social card to `public/` and set `ogImage` to its public path.
-4. Preview it locally at the generated slug.
-5. Set `published` to `true` only when it is ready for a production build.
-
-The dynamic route in `src/pages/[slug].astro` discovers the JSON and generates the landing page automatically. Shared layout, email-first Dodo checkout, attribution capture, legal links, repeated CTAs, responsive behavior, and structured data stay consistent across every offer.
-
-## Dodo inline checkout
-
-The inline flow is deliberately email-first:
-
-1. A CTA opens the checkout dialog and asks for an email.
-2. The Pages Function records consent and campaign attribution in D1.
-3. The server creates a fresh, single-use Dodo checkout session with the email prefilled.
-4. Dodo's complete secure frame opens inline without exposing the API key or card data to this site.
-
-The lead ledger is the Cloudflare D1 database `maestro-offer-leads`. Apply migrations with:
-
-```bash
-npx wrangler d1 migrations apply maestro-offer-leads --remote
-```
-
-Set these Pages secrets interactively; never commit their values:
-
-```bash
-npx wrangler pages secret put DODO_PAYMENTS_API_KEY --project-name maestro-offers
-npx wrangler pages secret put DODO_PAYMENTS_ENVIRONMENT --project-name maestro-offers
-npx wrangler pages secret put DODO_PRODUCT_VIBE_CODE_ANYTHING --project-name maestro-offers
-```
-
-Use `live_mode` or `test_mode` for `DODO_PAYMENTS_ENVIRONMENT`. Each new offer maps its slug to a predictable secret named `DODO_PRODUCT_<UPPERCASE_SLUG>`, with hyphens converted to underscores.
-
-Inline checkout is enabled by default, so a normal production build cannot silently fall back to email:
-
-```bash
-npm run build
-```
-
-For an intentional maintenance window, set `PUBLIC_VIBE_CODE_DODO_CHECKOUT_ENABLED=false` and configure `PUBLIC_VIBE_CODE_CHECKOUT_URL` as the temporary CTA fallback. Dodo's dashboard can also enable its native abandoned-cart recovery sequence after the live product exists.
-
-The lead record captures these campaign parameters:
-
-- `utm_source`
-- `utm_medium`
-- `utm_campaign`
-- `utm_content`
-- `utm_term`
-- `gclid`
-- `fbclid`
-- `ttclid`
-- `msclkid`
-
-Every CTA dispatches `offer:cta-click`. Successful session creation dispatches `offer:checkout-session-created`, and Dodo frame events dispatch `offer:checkout-event`, ready for an analytics adapter without coupling the site to a specific vendor.
-
-Export consented checkout leads from D1 with a focused query, then reconcile converted buyers before building a reminder or ad audience:
-
-```bash
-npx wrangler d1 execute maestro-offer-leads --remote --command "SELECT email, offer_slug, attribution_json, created_at FROM checkout_leads WHERE marketing_consent = 1 AND status IN ('captured', 'session_created') ORDER BY created_at DESC"
-```
-
-## Quality checks
-
-```bash
-npm run check:kpis
-npm run lint
-npm run format:check
+npm run editor
+npm run validate:config
 npm run typecheck
 npm run build
+npm run check:functions
+npm run test:quality
+npm run test:functions
+npm run mcp:test
+npm run quality:smoke
+npm run quality:capture
+npm run quality:verify
 ```
 
-## Deploy to Cloudflare Pages
-
-The production project is `maestro-offers`, with `main` as its production branch. Deploy the current source with:
+The private service setup workflow is:
 
 ```bash
-npm run deploy
+npm run setup
+npm run setup:cloudflare
+npm run setup:dodo
+npm run setup:resend:test
+npm run publish
 ```
 
-The live Pages URL is:
+Do not ask a nontechnical buyer to run those commands. Run them on the buyer’s behalf and explain only the human decision or browser approval required.
 
-```text
-https://maestro-offers.pages.dev/
-```
+## Local MCP
 
-## Important launch checks
+Build it with `npm run mcp:build`. The high-level tools include `funnel_start`, `funnel_create`, `funnel_preview`, `funnel_validate`, payment/email configuration guidance, publish planning, status, and rollback planning.
 
-- Configure and verify the live Dodo product, API key, return URL, delivery email, and abandoned-cart settings.
-- Confirm price, delivery, refund promise, and license language.
-- Connect the intended custom domain and update `PUBLIC_SITE_URL` when moving beyond the Pages domain.
-- Add only the ad pixels and analytics tools you actually plan to use, then update the privacy page and consent behavior as required.
+See [packages/mcp/README.md](./packages/mcp/README.md) for client configuration and the security contract. It never accepts secret values, runs arbitrary shell commands, creates paid orders, or silently publishes.
 
-## Foundation credit
+## Payment and fulfillment contract
 
-This project retains AstroDeck's MIT license and AI-friendly project conventions. See `LICENSE` and `AGENTS.md`.
+Dodo Payments is the supported default. Every configured funnel has:
+
+- one main product;
+- one optional checkout bump;
+- zero to two post-purchase upsells;
+- a visible decline path;
+- saved-payment-method one-click charging when available;
+- a secure checkout fallback when one-click charging is unavailable;
+- idempotent server-side payment verification;
+- one access email per purchased product.
+
+Dodo webhooks are the fulfillment source of truth. Resend failures never create a second charge, and retry keys prevent duplicate access emails.
+
+Stripe is a future adapter seam, not a supported claim. Do not advertise Stripe parity until the same checkout, upsell, webhook, and fulfillment tests exist for it.
+
+## GitHub safety
+
+The repository is designed to be the source of truth. Commit and push coherent milestones after they pass focused checks. Never commit `.dev.vars`, secrets, D1 customer data, or generated screenshot evidence.
+
+The original working funnel was preserved before this product was extracted. The reusable repository keeps that funnel as a dogfood example while all infrastructure identifiers and private contact details are generic.
+
+## Included dogfood funnels
+
+- `/vibe-code-anything/` preserves the first complete paid-offer implementation.
+- `/owned-funnel-builder/` sells this builder using the same editable page, $19 bump, two upsells, fulfillment contract, and release gates customers receive.
+
+The repository intentionally ships with example support emails and access links. `npm run publish` fails closed until the owner replaces them through the visual editor and private setup workflow. This prevents a buyer from paying successfully and receiving a placeholder link.
+
+## Foundation
+
+Built from the MIT-licensed [AstroDeck](https://github.com/holger1411/astrodeck) foundation. The distributable product contains only generic design primitives and original implementation.

@@ -6,7 +6,14 @@ export default [
   eslint.configs.recommended,
   ...tseslint.configs.recommended,
   {
-    ignores: ['dist/**', 'node_modules/**', '.astro/**'],
+    ignores: [
+      'dist/**',
+      'node_modules/**',
+      '.astro/**',
+      '.wrangler/**',
+      'packages/mcp/dist/**',
+      'quality-evidence/**',
+    ],
   },
   {
     // Node.js tooling scripts (hooks, KPI checks) run outside the browser

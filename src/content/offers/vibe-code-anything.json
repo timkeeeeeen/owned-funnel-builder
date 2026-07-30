@@ -20,6 +20,9 @@
     "emailLabel": "Email address",
     "emailPlaceholder": "you@company.com",
     "buttonLabel": "Continue to secure checkout",
+    "summaryDescription": "Full source, coding-agent skills, generators, guides, gates, and lifetime access.",
+    "guaranteeLabel": "30-day guarantee",
+    "paymentTrustLabel": "Payment secured by Dodo",
     "consentCopy": "By continuing, you agree to receive product access and occasional emails about this offer, including a reminder if you leave checkout unfinished. Unsubscribe anytime.",
     "consentVersion": "v1-2026-07-30",
     "bump": {
@@ -33,6 +36,65 @@
       ]
     }
   },
+  "heroPreview": {
+    "ariaLabel": "Maestro workflow showing a product request moving through orientation, implementation, and proof",
+    "windowLabel": "maestro / new-product",
+    "promptLabel": "your prompt",
+    "prompt": "Build a production app for my idea.",
+    "description": "The template supplies the architecture. Your prompt supplies the product.",
+    "steps": [
+      {
+        "label": "01 / ORIENT",
+        "title": "Read the real system"
+      },
+      {
+        "label": "02 / PROPOSE",
+        "title": "Fit the right pattern"
+      },
+      {
+        "label": "03 / IMPLEMENT",
+        "title": "Build inside the seams"
+      },
+      {
+        "label": "04 / PROVE",
+        "title": "Ship with receipts"
+      }
+    ]
+  },
+  "sections": {
+    "highlights": [
+      "Full-stack source",
+      "AI-native instructions",
+      "Typed architecture",
+      "Lifetime access"
+    ],
+    "problemEyebrow": "The blank-repo tax",
+    "outcomesEyebrow": "The shortcut",
+    "outcomesTitle": "Stop prompting for plumbing. Start shipping the thing.",
+    "includedEyebrow": "What you get",
+    "includedTitle": "One template. The whole serious-app starting line.",
+    "bonusesEyebrow": "Also included",
+    "bonusesTitle": "The docs that keep ‘vibe coding’ from becoming guess coding.",
+    "proofEyebrow": "Inspectable proof",
+    "proofTitle": "Not another pretty starter with a dead backend.",
+    "proofDescription": "The reference app is live. The backend path is live. The gates and receipts are part of the product.",
+    "proofLinkLabel": "Open the live reference app",
+    "guaranteeBadge": "30",
+    "guaranteeEyebrow": "The no-drama guarantee",
+    "pricingEyebrow": "Launch offer",
+    "pricingTitle": "Buy back the days you normally lose before the product even starts.",
+    "pricingDescription": "You can spend another week getting an agent to reinvent the same foundation—or open a working system and start on the part your customer sees.",
+    "priceLabel": "Early builder price",
+    "priceNote": "One payment. Lifetime access.",
+    "priceIncludes": [
+      "Full template source",
+      "Generators, guides, and receipts",
+      "All three launch bonuses",
+      "30-day money-back guarantee"
+    ],
+    "faqEyebrow": "Questions, answered",
+    "faqTitle": "No mystery box."
+  },
   "demoUrl": "https://maestro-template.pages.dev/",
   "currentPrice": "$29",
   "regularPrice": "$149",
@@ -42,6 +104,10 @@
   "ctaNote": "One payment · lifetime access · 30-day guarantee",
   "painTitle": "Vibe coding is fast—until your app has to survive reality.",
   "painBody": "A blank repo feels liberating for the first hour. Then you hit tenancy, permissions, data contracts, workflows, provider setup, failure states, and deployment proof. Your agent can generate each piece. The expensive part is making every piece agree.",
+  "withoutLabel": "Without Maestro",
+  "withoutTitle": "Fast demo. Fragile foundation.",
+  "withLabel": "With Maestro",
+  "withTitle": "Fast build. Serious foundation.",
   "without": [
     "Rebuild auth, tenancy, and permissions from scratch",
     "Glue AI workflows to ad-hoc handlers",
@@ -85,27 +151,13 @@
     "workspaceLabel": "CLIENT BRAIN / WORKSPACE",
     "productLabel": "Maestro",
     "productDescription": "Business app shell",
-    "navItems": [
-      "Overview",
-      "Brain",
-      "Sources",
-      "Workflows",
-      "Agents",
-      "Runs",
-      "API",
-      "Settings"
-    ],
+    "navItems": ["Overview", "Brain", "Sources", "Workflows", "Agents", "Runs", "API", "Settings"],
     "activeNavItem": "Workflows",
     "activeEyebrow": "Workflow / active",
     "activeTitle": "Source-grounded plan",
     "activeDescription": "Durable work with visible evidence.",
     "statusLabel": "Ready to run",
-    "stages": [
-      "Source",
-      "Context",
-      "Agent",
-      "Receipt"
-    ],
+    "stages": ["Source", "Context", "Agent", "Receipt"],
     "panels": [
       {
         "title": "Source-grounded plan",

@@ -27,7 +27,6 @@ if (headlineWords.length < 2) {
 
 const headlineAccent = headlineWords.pop();
 const headlineLead = headlineWords.join(' ');
-const checkoutSubject = encodeURIComponent(`${productName} — access`);
 
 const offer = {
   published: false,
@@ -41,7 +40,7 @@ const offer = {
   metaDescription: `${productName} is a focused, low-ticket system for getting to a useful result faster with less setup, less guessing, and a clearer path forward.`,
   ogImage: '',
   audience: `For people who want ${headline.toLowerCase()} without rebuilding the same foundation or piecing together scattered advice.`,
-  checkoutUrl: `mailto:tim@keen.digital?subject=${checkoutSubject}`,
+  checkoutUrl: `/${slug}/#checkout`,
   checkout: {
     provider: 'dodo-inline',
     enabled: false,
@@ -51,11 +50,64 @@ const offer = {
     emailLabel: 'Email address',
     emailPlaceholder: 'you@company.com',
     buttonLabel: 'Continue to secure checkout',
+    summaryDescription: `Everything included with ${productName}, delivered to your email after purchase.`,
+    guaranteeLabel: '30-day guarantee',
+    paymentTrustLabel: 'Payment secured by Dodo',
     consentCopy:
       'By continuing, you agree to receive product access and occasional emails about this offer, including a reminder if you leave checkout unfinished. Unsubscribe anytime.',
     consentVersion: 'v1-2026-07-30',
+    bump: {
+      title: `Add the ${productName} Quickstart Pack`,
+      description: 'Get the checklists and copy/paste prompts that make the first result easier.',
+      price: '$19',
+      items: ['Start with a proven brief', 'Avoid common mistakes', 'Finish with a clear check'],
+    },
   },
-  demoUrl: 'https://maestro-template.pages.dev/',
+  heroPreview: {
+    ariaLabel: `${productName} example moving from request to finished result`,
+    windowLabel: `${slug} / new-result`,
+    promptLabel: 'your request',
+    prompt: `Help me use ${productName} to reach my goal.`,
+    description: 'You describe the outcome. The system supplies the useful structure.',
+    steps: [
+      { label: '01 / START', title: 'Understand the goal' },
+      { label: '02 / PLAN', title: 'Choose the shortest path' },
+      { label: '03 / BUILD', title: 'Create the useful result' },
+      { label: '04 / CHECK', title: 'Make sure it works' },
+    ],
+  },
+  sections: {
+    highlights: ['Complete system', 'Clear quickstart', 'Reusable examples', 'Lifetime access'],
+    problemEyebrow: 'The slow way',
+    outcomesEyebrow: 'The shortcut',
+    outcomesTitle: 'Start with the useful structure already in place.',
+    includedEyebrow: 'What you get',
+    includedTitle: `Everything inside ${productName}.`,
+    bonusesEyebrow: 'Also included',
+    bonusesTitle: 'The extras that make the first result easier.',
+    proofEyebrow: 'Concrete proof',
+    proofTitle: 'Show the buyer what is real and ready now.',
+    proofDescription:
+      'Replace these placeholders with verifiable results, examples, screenshots, or working previews before publishing.',
+    proofLinkLabel: 'Open the live preview',
+    guaranteeBadge: '30',
+    guaranteeEyebrow: 'The simple guarantee',
+    pricingEyebrow: 'Launch offer',
+    pricingTitle: `Get ${productName} without the usual setup tax.`,
+    pricingDescription:
+      'One focused purchase gives you the complete system and a clear path to the first useful result.',
+    priceLabel: 'Launch price',
+    priceNote: 'One payment. Lifetime access.',
+    priceIncludes: [
+      `The complete ${productName}`,
+      'Quickstart guide and examples',
+      'Included launch bonus',
+      '30-day money-back guarantee',
+    ],
+    faqEyebrow: 'Questions, answered',
+    faqTitle: 'Know exactly what you are buying.',
+  },
+  demoUrl: '',
   currentPrice: '$19',
   regularPrice: '$99',
   priceAmount: 19,
@@ -65,6 +117,10 @@ const offer = {
   painTitle: 'The result should not require weeks of setup.',
   painBody:
     'Most people lose momentum before the useful work starts. They collect advice, rebuild the basics, and make decisions with no clear sequence. This offer gives them a shorter path.',
+  withoutLabel: 'Without this system',
+  withoutTitle: 'More setup. More guessing.',
+  withLabel: `With ${productName}`,
+  withTitle: 'A clear path to the result.',
   without: [
     'Start from a blank page',
     'Piece together disconnected advice',
@@ -316,26 +372,103 @@ const offer = {
   finalBody: `Get ${productName}, follow the clear path, and spend your time on the part that actually creates the result.`,
 };
 
+const funnel = {
+  offerSlug: slug,
+  supportEmail: 'support@example.com',
+  base: {
+    productKey: slug,
+    name: productName,
+    priceAmount: 19,
+    currency: 'USD',
+    deliverySubject: `Your ${productName} access`,
+    deliveryBody: `Thanks for your purchase. Your ${productName} access is ready below.`,
+    accessUrl: 'https://example.com/replace-with-your-access-link',
+  },
+  bump: {
+    key: `${slug}-quickstart`,
+    productKey: `${slug}-quickstart`,
+    name: `${productName} Quickstart Pack`,
+    priceAmount: 19,
+    currency: 'USD',
+    deliverySubject: `Your ${productName} Quickstart Pack`,
+    deliveryBody: 'Your quickstart pack is ready below.',
+    accessUrl: 'https://example.com/replace-with-your-access-link',
+  },
+  upsells: [
+    {
+      key: `${slug}-upgrade-one`,
+      productKey: `${slug}-upgrade-one`,
+      name: `${productName} Example Pack`,
+      stepLabel: 'Upgrade 1 of 2',
+      eyebrow: 'The worked-example shortcut',
+      title: 'Want the complete examples',
+      accent: 'ready to copy?',
+      description: 'Add a small companion product that makes the main result faster or easier.',
+      price: '$39',
+      regularPrice: '$99',
+      priceAmount: 39,
+      currency: 'USD',
+      items: ['Example one', 'Example two', 'Example three', 'Quick adaptation guide'],
+      acceptLabel: 'Yes — add the Example Pack for $39',
+      declineLabel: 'No thanks — I’ll start with the main product',
+      deliverySubject: `Your ${productName} Example Pack`,
+      deliveryBody: 'Your example pack is ready below.',
+      accessUrl: 'https://example.com/replace-with-your-access-link',
+    },
+    {
+      key: `${slug}-upgrade-two`,
+      productKey: `${slug}-upgrade-two`,
+      name: `${productName} Implementation Pack`,
+      stepLabel: 'Upgrade 2 of 2',
+      eyebrow: 'The implementation shortcut',
+      title: 'Want the complete rollout plan',
+      accent: 'mapped out too?',
+      description: 'Add the checklists, scripts, or services that help the buyer finish the job.',
+      price: '$79',
+      regularPrice: '$199',
+      priceAmount: 79,
+      currency: 'USD',
+      items: ['Setup checklist', 'Implementation sequence', 'Review rubric', 'Launch plan'],
+      acceptLabel: 'Yes — add the Implementation Pack for $79',
+      declineLabel: 'No thanks — I’ll implement it myself',
+      deliverySubject: `Your ${productName} Implementation Pack`,
+      deliveryBody: 'Your implementation pack is ready below.',
+      accessUrl: 'https://example.com/replace-with-your-access-link',
+    },
+  ],
+  completion: {
+    title: 'You’re in. Everything is attached to your email.',
+    description: 'Your receipt and access instructions will arrive at the email used at checkout.',
+    backLabel: `Back to ${productName}`,
+  },
+};
+
 const output = `${JSON.stringify(offer, null, 2)}\n`;
-const offersDirectory = resolve('src/data/offers');
+const offersDirectory = resolve('src/content/offers');
 const outputPath = resolve(offersDirectory, `${slug}.json`);
+const funnelsDirectory = resolve('src/content/funnels');
+const funnelPath = resolve(funnelsDirectory, `${slug}.json`);
 
 if (dryRun) {
   process.stdout.write(output);
   process.exit(0);
 }
 
-if (existsSync(outputPath)) {
-  fail(`An offer file already exists at ${outputPath}.`);
+if (existsSync(outputPath) || existsSync(funnelPath)) {
+  fail(`An offer or checkout funnel already exists for ${slug}.`);
 }
 
 mkdirSync(offersDirectory, { recursive: true });
+mkdirSync(funnelsDirectory, { recursive: true });
 writeFileSync(outputPath, output, 'utf8');
+writeFileSync(funnelPath, `${JSON.stringify(funnel, null, 2)}\n`, 'utf8');
 
 console.log(`\nCreated ${outputPath}`);
+console.log(`Created ${funnelPath}`);
 console.log(`Preview locally at /${slug}/`);
 console.log(
   'Edit the copy, optional sections, price, guarantee, checkout fallback, proof, and social image.'
 );
-console.log(`Dodo product secret: DODO_PRODUCT_${slug.toUpperCase().replaceAll('-', '_')}`);
-console.log('Set "published" to true only when the offer is ready for a production build.\n');
+console.log(
+  'Keep it unpublished until your copy, access links, checkout, and proof are verified.\n'
+);

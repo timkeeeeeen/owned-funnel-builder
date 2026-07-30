@@ -1,8 +1,8 @@
 {
-  "name": "Maestro Offers",
-  "short_name": "Maestro",
+  "name": "Owned Funnel Builder",
+  "short_name": "Funnels",
   "description": "Low-ticket templates and systems for builders who want to ship faster.",
-  "start_url": "/vibe-code-anything/",
+  "start_url": "/",
   "display": "standalone",
   "background_color": "#fbfaf6",
   "theme_color": "#315cf5"

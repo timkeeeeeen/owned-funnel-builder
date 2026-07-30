@@ -1,4 +1,4 @@
 interface:
-  display_name: "Design a Funnel"
-  short_description: "Compose an original, conversion-focused Astro funnel"
-  default_prompt: "Use $design-funnel to create an intentional, responsive design for my offer."
+  display_name: 'Design a Funnel'
+  short_description: 'Compose an original, conversion-focused Astro funnel'
+  default_prompt: 'Use $design-funnel to create an intentional, responsive design for my offer.'

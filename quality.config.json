@@ -1,0 +1,51 @@
+{
+  "$schema": "./tooling/quality/quality-config.schema.json",
+  "distDirectory": "dist/client",
+  "evidenceDirectory": "quality-evidence",
+  "excludeRoutes": ["/privacy", "/terms", "/checkout/success"],
+  "routes": [
+    {
+      "route": "/vibe-code-anything",
+      "primaryCta": {
+        "kind": "checkout",
+        "selector": "[data-offer-checkout-trigger]",
+        "activate": true,
+        "readySelector": "[data-offer-checkout-dialog][open]"
+      }
+    },
+    {
+      "route": "/owned-funnel-builder",
+      "primaryCta": {
+        "kind": "checkout",
+        "selector": "[data-offer-checkout-trigger]",
+        "activate": true,
+        "readySelector": "[data-offer-checkout-dialog][open]"
+      }
+    },
+    {
+      "route": "/checkout/upsell/blueprints",
+      "profiles": ["desktop", "mobile"],
+      "captures": ["first-fold", "full-page"]
+    },
+    {
+      "route": "/checkout/upsell/launch",
+      "profiles": ["desktop", "mobile"],
+      "captures": ["first-fold", "full-page"]
+    },
+    {
+      "route": "/checkout/upsell/funnel-blueprints",
+      "profiles": ["desktop", "mobile"],
+      "captures": ["first-fold", "full-page"]
+    },
+    {
+      "route": "/checkout/upsell/agency-toolkit",
+      "profiles": ["desktop", "mobile"],
+      "captures": ["first-fold", "full-page"]
+    },
+    {
+      "route": "/checkout/complete",
+      "profiles": ["desktop", "mobile"],
+      "captures": ["first-fold", "full-page"]
+    }
+  ]
+}

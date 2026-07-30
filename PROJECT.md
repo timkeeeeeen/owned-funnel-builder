@@ -1,33 +1,92 @@
-# PROJECT.md — Maestro Offers
+# PROJECT.md — Owned Funnel Builder
 
 ## Purpose
 
-This repository produces fast, conversion-focused landing pages for low-ticket Maestro offers. Every paid traffic destination must make one promise, present one offer, and drive one primary action.
+This repository lets a nontechnical owner launch and operate high-converting offer funnels through an intelligent coding agent and a visual copy editor.
 
-## Runtime
+The product is not a rigid block renderer. A good agent may compose explicit Astro around the offer. Shared primitives, payment contracts, and release checks provide the consistency.
 
-- Use Astro 7.1.6 or newer. The Astro 6 version references inherited from upstream AstroDeck documentation are historical for this fork and do not override the patched project runtime.
+## Product promise
 
-## Design direction
+The owner can:
 
-- Use a spare, high-contrast editorial layout inspired by direct-response pages: oversized headlines, wide buttons, clear section rhythm, and repeated CTAs.
-- Geist is the primary typeface. Use Geist Mono only for labels, steps, and technical proof.
-- Electric cobalt is the action color. Warm yellow is reserved for highlights, bonuses, and guarantees.
-- Keep the first viewport focused on the promise, product, price, and CTA. Avoid navigation menus and decorative distractions.
-- Use CSS shapes and real product facts. Do not add stock photography, invented testimonials, fake logos, or vanity metrics.
+1. describe an offer in plain language;
+2. preview a polished landing page;
+3. hand-edit routine copy in Keystatic;
+4. connect Dodo, Resend, and Cloudflare through guided browser authorization;
+5. publish a tested funnel with a main checkout, order bump, and up to two one-click upsells;
+6. own the repository and hosting permanently.
 
-## Voice
+## Creative rule
 
-- Direct, specific, confident, and slightly irreverent.
-- Short sentences. Concrete nouns. Product truth over generic AI claims.
-- Explain technical features as saved time, avoided rework, or a safer path to shipping.
-- Never imply that fake-safe provider adapters are already connected live.
+Constrain what must be true, not exactly how the agent creates it.
 
-## Offer rules
+A strong page should usually have a clear promise, useful specificity, visible product proof, honest objections, a qualified audience, repeated conversion opportunities, and intentional mobile composition. The offer determines the best section order.
 
-- One offer per route.
-- Every route needs a unique title, meta description, social image, price, guarantee, FAQ, and checkout URL.
-- Repeat the primary CTA after the hero, outcomes, price, and final close.
-- Preserve campaign parameters when the checkout URL is an HTTP URL.
-- New offers are created as JSON files in `src/data/offers/`; page rendering stays shared.
-- Confirm the real checkout URL, price, guarantee, and delivery method before sending paid traffic.
+Do not invent testimonials, revenue, customer logos, scarcity, guarantees, or product capabilities. Label concepts and examples honestly.
+
+## Stable design primitives
+
+Read the relevant files under `system/globals/` before design work.
+
+Preserve these outcomes:
+
+- unmistakable hierarchy and readable fonts;
+- large, high-contrast action buttons;
+- constrained text widths;
+- alternating surfaces and clear section rhythm;
+- strong first-fold promise, price, and action;
+- deliberate desktop, tablet, and mobile layouts;
+- accessible focus states and touch targets;
+- payment surfaces that remain visually calm and trustworthy.
+
+Users may change tokens and compositions. New work should feel designed by a human, not generated from a generic component catalog.
+
+## Content architecture
+
+- `src/content/offers/*.json`: landing-page copy.
+- `src/content/funnels/*.json`: products, bump, upsells, delivery, and completion copy.
+- `src/content/site.json`: site name, contact details, and home-page defaults.
+- `keystatic.config.ts`: visual editing schema.
+- `src/components/offers/`: reusable conversion components.
+- `src/pages/[slug].astro`: static offer routes.
+
+Routine edits belong in content. Add or revise explicit Astro when the offer benefits from a custom visual or persuasion role. Do not force every future idea into a universal block schema.
+
+## Payment invariants
+
+Dodo is the supported default.
+
+- Capture email before opening inline checkout.
+- Never expose provider secrets to the browser.
+- Record consent and campaign attribution in D1.
+- Resolve every product through the server-side product registry.
+- Accept at most one order bump and two upsells.
+- Verify the original payment before showing an actionable upsell.
+- Lock and idempotently process each upsell decision.
+- Reuse a saved method when eligible; otherwise offer secure checkout.
+- Always show a readable decline path.
+- Treat signed Dodo webhooks as fulfillment truth.
+- Send access through Resend with idempotency keys.
+- Never let an email retry create or repeat a payment.
+- Keep the original known-good funnel tag recoverable.
+
+## Release definition
+
+Before calling a funnel ready:
+
+- validate content and delivery links;
+- typecheck and build Astro;
+- compile Cloudflare Pages Functions;
+- run focused unit tests;
+- verify checkout cart, bump, upsell ordering, idempotency, webhook rejection, and email retry tests;
+- verify desktop, tablet, and mobile routes;
+- check horizontal overflow and resource errors;
+- check serious and critical Axe findings;
+- activate the checkout CTA without submitting a payment;
+- capture fresh screenshots tied to the current build;
+- test Resend to an address the owner controls;
+- perform a Dodo test-mode purchase before live traffic;
+- verify the exact public HTTPS URL after deployment.
+
+A Git push is backup. It is not proof that a public deployment or payment flow works.

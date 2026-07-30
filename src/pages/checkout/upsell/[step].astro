@@ -1,0 +1,33 @@
+---
+import UpsellPage from '@/components/offers/UpsellPage.astro';
+import { funnels, type FunnelUpsell } from '@/data/funnels';
+
+export function getStaticPaths() {
+  return funnels.flatMap((funnel) =>
+    funnel.upsells.map((upsell) => ({
+      params: { step: upsell.key },
+      props: { upsell },
+    }))
+  );
+}
+
+interface Props {
+  upsell: FunnelUpsell;
+}
+
+const { upsell } = Astro.props;
+---
+
+<UpsellPage
+  offerKey={upsell.key}
+  step={upsell.stepLabel}
+  eyebrow={upsell.eyebrow}
+  title={upsell.title}
+  accent={upsell.accent}
+  description={upsell.description}
+  price={upsell.price}
+  value={upsell.regularPrice}
+  items={upsell.items}
+  acceptLabel={upsell.acceptLabel}
+  declineLabel={upsell.declineLabel}
+/>

@@ -2,6 +2,10 @@
 import OfferLandingPage from '@/components/offers/OfferLandingPage.astro';
 import { offers, publishedOffers, type Offer } from '@/data/offers';
 
+// Keep offer pages content-driven and pre-rendered even when the local editor
+// runs Astro in server mode. This also leaves /keystatic to the editor route.
+export const prerender = true;
+
 // Each generated route gets its unique description from the offer data object.
 export function getStaticPaths() {
   const routableOffers = import.meta.env.DEV ? offers : publishedOffers;

@@ -8,13 +8,17 @@ import OfferFitSection from '@/components/offers/OfferFitSection.astro';
 import OfferGatesSection from '@/components/offers/OfferGatesSection.astro';
 import OfferProductPreview from '@/components/offers/OfferProductPreview.astro';
 import OfferVideoSection from '@/components/offers/OfferVideoSection.astro';
+import { getFunnel } from '@/data/funnels';
 import type { Offer } from '@/data/offers';
+import { siteSettings } from '@/data/site';
 
 interface Props {
   offer: Offer;
 }
 
 const { offer } = Astro.props;
+const funnel = getFunnel(offer.slug);
+const productInitial = offer.productName.trim().charAt(0).toUpperCase() || 'O';
 const usesInlineCheckout = offer.checkout?.provider === 'dodo-inline' && offer.checkout.enabled;
 const checkoutHref = usesInlineCheckout ? '#get-it' : offer.checkoutUrl;
 const checkoutTarget =
@@ -28,7 +32,7 @@ const productSchema = {
   description: offer.metaDescription,
   brand: {
     '@type': 'Brand',
-    name: 'Maestro',
+    name: offer.productName,
   },
   offers: {
     '@type': 'Offer',
@@ -53,10 +57,10 @@ const productSchema = {
         >
           <span
             class="grid size-10 place-items-center rounded-xl bg-foreground font-mono text-lg font-bold text-background"
-            aria-hidden="true">M</span
+            aria-hidden="true">{productInitial}</span
           >
           <span class="text-sm font-bold uppercase tracking-[0.16em] sm:text-base"
-            >Maestro Template</span
+            >{offer.productName}</span
           >
         </a>
 
@@ -124,7 +128,7 @@ const productSchema = {
         <div
           class="mt-16 w-full max-w-5xl rounded-xl border border-border bg-foreground p-2 text-left text-background shadow-lg"
           role="img"
-          aria-label="Maestro workflow showing a product request moving through orientation, implementation, and proof"
+          aria-label={offer.heroPreview.ariaLabel}
           data-animate="scale"
         >
           <div
@@ -139,39 +143,49 @@ const productSchema = {
                 <span class="size-3 rounded-full bg-highlight"></span>
                 <span class="size-3 rounded-full bg-success"></span>
               </div>
-              <span class="font-mono text-xs text-background/60">maestro / new-product</span>
+              <span class="font-mono text-xs text-background/60"
+                >{offer.heroPreview.windowLabel}</span
+              >
             </div>
 
             <div class="grid gap-4 md:grid-cols-[0.72fr_1.28fr]">
               <div class="rounded-xl border border-background/20 bg-background/5 p-5">
                 <p class="font-mono text-xs uppercase tracking-[0.18em] text-highlight">
-                  your prompt
+                  {offer.heroPreview.promptLabel}
                 </p>
                 <p class="mt-4 text-xl font-semibold leading-snug sm:text-2xl">
-                  “Build a production app for my idea.”
+                  “{offer.heroPreview.prompt}”
                 </p>
                 <p class="mt-6 text-sm leading-relaxed text-background/60">
-                  The template supplies the architecture. Your prompt supplies the product.
+                  {offer.heroPreview.description}
                 </p>
               </div>
 
               <div class="grid gap-3 sm:grid-cols-2">
-                <div class="rounded-xl border border-background/20 bg-background/5 p-4">
-                  <span class="font-mono text-xs text-brand-soft">01 / ORIENT</span>
-                  <p class="mt-2 font-semibold">Read the real system</p>
-                </div>
-                <div class="rounded-xl border border-background/20 bg-background/5 p-4">
-                  <span class="font-mono text-xs text-brand-soft">02 / PROPOSE</span>
-                  <p class="mt-2 font-semibold">Fit the right pattern</p>
-                </div>
-                <div class="rounded-xl border border-background/20 bg-background/5 p-4">
-                  <span class="font-mono text-xs text-brand-soft">03 / IMPLEMENT</span>
-                  <p class="mt-2 font-semibold">Build inside the seams</p>
-                </div>
-                <div class="rounded-xl border border-success/50 bg-success/10 p-4">
-                  <span class="font-mono text-xs text-success">04 / PROVE</span>
-                  <p class="mt-2 font-semibold">Ship with receipts</p>
-                </div>
+                {
+                  offer.heroPreview.steps.map((step, index) => (
+                    <div
+                      class:list={[
+                        'rounded-xl border p-4',
+                        index === offer.heroPreview.steps.length - 1
+                          ? 'border-success-bright/50 bg-success/10'
+                          : 'border-background/20 bg-background/5',
+                      ]}
+                    >
+                      <span
+                        class:list={[
+                          'font-mono text-xs',
+                          index === offer.heroPreview.steps.length - 1
+                            ? 'text-success-bright'
+                            : 'text-brand-soft',
+                        ]}
+                      >
+                        {step.label}
+                      </span>
+                      <p class="mt-2 font-semibold">{step.title}</p>
+                    </div>
+                  ))
+                }
               </div>
             </div>
           </div>
@@ -186,10 +200,7 @@ const productSchema = {
       <div
         class="mx-auto grid max-w-7xl gap-4 text-center font-mono text-sm font-semibold uppercase tracking-[0.12em] sm:grid-cols-2 lg:grid-cols-4"
       >
-        <span>Full-stack source</span>
-        <span>AI-native instructions</span>
-        <span>Typed architecture</span>
-        <span>Lifetime access</span>
+        {offer.sections.highlights.map((highlight) => <span>{highlight}</span>)}
       </div>
     </section>
 
@@ -197,7 +208,7 @@ const productSchema = {
       <div class="mx-auto max-w-7xl">
         <div class="mx-auto max-w-4xl text-center">
           <p class="font-mono text-sm font-bold uppercase tracking-[0.18em] text-brand">
-            The blank-repo tax
+            {offer.sections.problemEyebrow}
           </p>
           <h2
             id="problem-title"
@@ -216,9 +227,9 @@ const productSchema = {
             data-animate="slide-left"
           >
             <p class="font-mono text-sm font-bold uppercase tracking-[0.16em] text-destructive">
-              Without Maestro
+              {offer.withoutLabel}
             </p>
-            <h3 class="mt-3 text-2xl font-semibold md:text-3xl">Fast demo. Fragile foundation.</h3>
+            <h3 class="mt-3 text-2xl font-semibold md:text-3xl">{offer.withoutTitle}</h3>
             <ul class="mt-8 space-y-4">
               {
                 offer.without.map((item) => (
@@ -238,9 +249,9 @@ const productSchema = {
             data-animate="slide-right"
           >
             <p class="font-mono text-sm font-bold uppercase tracking-[0.16em] text-brand">
-              With Maestro
+              {offer.withLabel}
             </p>
-            <h3 class="mt-3 text-2xl font-semibold md:text-3xl">Fast build. Serious foundation.</h3>
+            <h3 class="mt-3 text-2xl font-semibold md:text-3xl">{offer.withTitle}</h3>
             <ul class="mt-8 space-y-4">
               {
                 offer.with.map((item) => (
@@ -262,13 +273,13 @@ const productSchema = {
       <div class="mx-auto max-w-7xl">
         <div class="mx-auto max-w-4xl text-center">
           <p class="font-mono text-sm font-bold uppercase tracking-[0.18em] text-brand">
-            The shortcut
+            {offer.sections.outcomesEyebrow}
           </p>
           <h2
             id="outcomes-title"
             class="mt-4 text-balance text-4xl font-bold leading-tight tracking-tight md:text-6xl"
           >
-            Stop prompting for plumbing. Start shipping the thing.
+            {offer.sections.outcomesTitle}
           </h2>
         </div>
 
@@ -318,13 +329,13 @@ const productSchema = {
       <div class="mx-auto max-w-7xl">
         <div class="mx-auto max-w-4xl text-center">
           <p class="font-mono text-sm font-bold uppercase tracking-[0.18em] text-brand-soft">
-            What you get
+            {offer.sections.includedEyebrow}
           </p>
           <h2
             id="included-title"
             class="mt-4 text-balance text-4xl font-bold leading-tight tracking-tight md:text-6xl"
           >
-            One template. The whole serious-app starting line.
+            {offer.sections.includedTitle}
           </h2>
           <p class="mt-6 text-lg leading-relaxed text-background/65 md:text-xl">{offer.audience}</p>
         </div>
@@ -359,12 +370,14 @@ const productSchema = {
       <div class="mx-auto max-w-7xl">
         <div class="grid items-start gap-12 lg:grid-cols-[0.78fr_1.22fr]">
           <div>
-            <p class="font-mono text-sm font-bold uppercase tracking-[0.18em]">Also included</p>
+            <p class="font-mono text-sm font-bold uppercase tracking-[0.18em]">
+              {offer.sections.bonusesEyebrow}
+            </p>
             <h2
               id="bonus-title"
               class="mt-4 text-balance text-4xl font-bold leading-tight tracking-tight md:text-6xl"
             >
-              The docs that keep “vibe coding” from becoming guess coding.
+              {offer.sections.bonusesTitle}
             </h2>
           </div>
 
@@ -394,17 +407,16 @@ const productSchema = {
       <div class="mx-auto max-w-7xl">
         <div class="mx-auto max-w-4xl text-center">
           <p class="font-mono text-sm font-bold uppercase tracking-[0.18em] text-brand">
-            Inspectable proof
+            {offer.sections.proofEyebrow}
           </p>
           <h2
             id="proof-title"
             class="mt-4 text-balance text-4xl font-bold leading-tight tracking-tight md:text-6xl"
           >
-            Not another pretty starter with a dead backend.
+            {offer.sections.proofTitle}
           </h2>
           <p class="mt-6 text-lg leading-relaxed text-muted-foreground md:text-xl">
-            The reference app is live. The backend path is live. The gates and receipts are part of
-            the product.
+            {offer.sections.proofDescription}
           </p>
         </div>
 
@@ -423,16 +435,23 @@ const productSchema = {
           }
         </div>
 
-        <div class="mt-10 text-center">
-          <a
-            href={offer.demoUrl}
-            target="_blank"
-            rel="noopener noreferrer"
-            class="inline-flex min-h-12 items-center justify-center rounded-xl border border-border bg-card px-6 py-3 font-semibold shadow-sm transition-shadow duration-200 hover:shadow-lg focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-          >
-            Open the live reference app <span class="ml-2" aria-hidden="true">↗</span>
-          </a>
-        </div>
+        {
+          offer.demoUrl && (
+            <div class="mt-10 text-center">
+              <a
+                href={offer.demoUrl}
+                target="_blank"
+                rel="noopener noreferrer"
+                class="inline-flex min-h-12 items-center justify-center rounded-xl border border-border bg-card px-6 py-3 font-semibold shadow-sm transition-shadow duration-200 hover:shadow-lg focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+              >
+                {offer.sections.proofLinkLabel}{' '}
+                <span class="ml-2" aria-hidden="true">
+                  ↗
+                </span>
+              </a>
+            </div>
+          )
+        }
       </div>
     </section>
 
@@ -445,10 +464,10 @@ const productSchema = {
       >
         <span
           class="mx-auto grid size-16 place-items-center rounded-full bg-foreground font-mono text-xl font-bold text-background"
-          aria-hidden="true">30</span
+          aria-hidden="true">{offer.sections.guaranteeBadge}</span
         >
         <p class="mt-6 font-mono text-sm font-bold uppercase tracking-[0.18em]">
-          The no-drama guarantee
+          {offer.sections.guaranteeEyebrow}
         </p>
         <h2
           id="guarantee-title"
@@ -469,20 +488,17 @@ const productSchema = {
     >
       <div class="mx-auto grid max-w-6xl items-center gap-10 lg:grid-cols-[0.9fr_1.1fr]">
         <div>
-          <p
-            class="font-mono text-sm font-bold uppercase tracking-[0.18em] text-brand-foreground/70"
-          >
-            Launch offer
+          <p class="font-mono text-sm font-bold uppercase tracking-[0.18em] text-brand-foreground">
+            {offer.sections.pricingEyebrow}
           </p>
           <h2
             id="price-title"
             class="mt-4 text-balance text-4xl font-bold leading-tight tracking-tight md:text-6xl"
           >
-            Buy back the days you normally lose before the product even starts.
+            {offer.sections.pricingTitle}
           </h2>
-          <p class="mt-6 text-lg leading-relaxed text-brand-foreground/75 md:text-xl">
-            You can spend another week getting an agent to reinvent the same foundation—or open a
-            working system and start on the part your customer sees.
+          <p class="mt-6 text-lg leading-relaxed text-brand-foreground md:text-xl">
+            {offer.sections.pricingDescription}
           </p>
         </div>
 
@@ -490,7 +506,7 @@ const productSchema = {
           class="rounded-xl border border-brand-foreground/20 bg-background p-6 text-foreground shadow-lg sm:p-10"
         >
           <p class="font-mono text-sm font-bold uppercase tracking-[0.16em] text-brand">
-            Early builder price
+            {offer.sections.priceLabel}
           </p>
           <div class="mt-5 flex items-end gap-4">
             <span class="text-7xl font-bold tracking-[-0.06em] sm:text-8xl"
@@ -499,22 +515,19 @@ const productSchema = {
             <span class="pb-2 text-xl text-muted-foreground line-through">{offer.regularPrice}</span
             >
           </div>
-          <p class="mt-3 font-semibold">One payment. Lifetime access.</p>
+          <p class="mt-3 font-semibold">{offer.sections.priceNote}</p>
 
           <ul class="mt-8 space-y-3 text-muted-foreground">
-            <li class="flex gap-3">
-              <span class="font-bold text-success" aria-hidden="true">✓</span> Full template source
-            </li>
-            <li class="flex gap-3">
-              <span class="font-bold text-success" aria-hidden="true">✓</span> Generators, guides, and
-              receipts
-            </li>
-            <li class="flex gap-3">
-              <span class="font-bold text-success" aria-hidden="true">✓</span> All three launch bonuses
-            </li>
-            <li class="flex gap-3">
-              <span class="font-bold text-success" aria-hidden="true">✓</span> 30-day money-back guarantee
-            </li>
+            {
+              offer.sections.priceIncludes.map((item) => (
+                <li class="flex gap-3">
+                  <span class="font-bold text-success" aria-hidden="true">
+                    ✓
+                  </span>{' '}
+                  {item}
+                </li>
+              ))
+            }
           </ul>
 
           <a
@@ -527,7 +540,7 @@ const productSchema = {
             data-placement="pricing"
             class="offer-cta mt-8 inline-flex min-h-20 w-full items-center justify-center rounded-xl bg-brand px-8 py-5 text-center text-xl font-bold text-brand-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 sm:text-2xl"
           >
-            Get the full template — {offer.currentPrice}
+            {offer.ctaLabel}
             <span class="ml-3" aria-hidden="true">→</span>
           </a>
           <p class="mt-4 text-center text-sm font-medium text-muted-foreground">{offer.ctaNote}</p>
@@ -539,10 +552,10 @@ const productSchema = {
       <div class="mx-auto max-w-4xl">
         <div class="text-center">
           <p class="font-mono text-sm font-bold uppercase tracking-[0.18em] text-brand">
-            Questions, answered
+            {offer.sections.faqEyebrow}
           </p>
           <h2 id="faq-title" class="mt-4 text-4xl font-bold tracking-tight md:text-6xl">
-            No mystery box.
+            {offer.sections.faqTitle}
           </h2>
         </div>
 
@@ -607,8 +620,8 @@ const productSchema = {
         class="mx-auto flex max-w-7xl flex-col items-center justify-between gap-6 text-center sm:flex-row sm:text-left"
       >
         <div>
-          <p class="font-bold">Maestro Template</p>
-          <p class="mt-1 text-sm text-muted-foreground">Build the product. Keep the foundation.</p>
+          <p class="font-bold">{offer.productName}</p>
+          <p class="mt-1 text-sm text-muted-foreground">{offer.audience}</p>
         </div>
         <nav
           aria-label="Legal"
@@ -616,7 +629,10 @@ const productSchema = {
         >
           <a class="min-h-11 py-3 hover:text-foreground" href="/privacy/">Privacy</a>
           <a class="min-h-11 py-3 hover:text-foreground" href="/terms/">Terms</a>
-          <a class="min-h-11 py-3 hover:text-foreground" href="mailto:tim@keen.digital">Contact</a>
+          <a
+            class="min-h-11 py-3 hover:text-foreground"
+            href={`mailto:${funnel?.supportEmail ?? siteSettings.supportEmail}`}>Contact</a
+          >
         </nav>
       </div>
     </footer>
@@ -635,7 +651,7 @@ const productSchema = {
         data-placement="mobile-sticky"
         class="offer-cta inline-flex min-h-14 w-full items-center justify-center rounded-xl bg-brand px-5 py-4 text-center text-base font-bold text-brand-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
       >
-        Get the template — {offer.currentPrice}
+        {offer.ctaLabel}
         <span class="ml-2" aria-hidden="true">→</span>
       </a>
     </aside>

@@ -3,8 +3,8 @@ import OfferLayout from '@/layouts/OfferLayout.astro';
 ---
 
 <OfferLayout
-  title="Purchase complete — Maestro Builder Bundle"
-  description="Your Maestro purchase is complete."
+  title="Purchase complete"
+  description="Your purchase is complete. Your receipt and access instructions are on the way."
   noindex
 >
   <section
@@ -23,27 +23,23 @@ import OfferLayout from '@/layouts/OfferLayout.astro';
       <p class="mt-7 font-mono text-sm font-bold uppercase tracking-[0.18em] text-brand">
         Purchase complete
       </p>
-      <h1 class="mt-4 text-balance text-4xl font-bold leading-tight tracking-tight sm:text-6xl">
+      <h1
+        class="mt-4 text-balance text-4xl font-bold leading-tight tracking-tight sm:text-6xl"
+        data-complete-title
+      >
         You’re in. Everything is attached to your email.
       </h1>
-      <p class="mx-auto mt-6 max-w-2xl text-lg leading-relaxed text-muted-foreground">
-        Dodo will send the receipts to the email used at checkout. Your Maestro access instructions
-        will follow there too.
+      <p
+        class="mx-auto mt-6 max-w-2xl text-lg leading-relaxed text-muted-foreground"
+        data-complete-description
+      >
+        Your receipt and access instructions will arrive at the email used at checkout.
       </p>
 
       <div class="mx-auto mt-8 max-w-xl rounded-xl border border-border bg-muted p-5 text-left">
         <p class="font-mono text-xs font-bold uppercase tracking-[0.14em] text-brand">Your order</p>
-        <ul class="mt-4 space-y-3 font-semibold">
-          <li class="flex gap-3"><span class="text-success">✓</span> Maestro SaaS UI Template</li>
-          <li class="hidden gap-3" data-complete-bump>
-            <span class="text-success">✓</span> Vibe Coding Prompt Pack
-          </li>
-          <li class="hidden gap-3" data-complete-blueprints>
-            <span class="text-success">✓</span> Five-App Blueprint Pack
-          </li>
-          <li class="hidden gap-3" data-complete-launch>
-            <span class="text-success">✓</span> Production Launch Pack
-          </li>
+        <ul class="mt-4 space-y-3 font-semibold" data-complete-items>
+          <li class="flex gap-3"><span class="text-success">✓</span> Your purchase</li>
         </ul>
       </div>
 
@@ -55,54 +51,91 @@ import OfferLayout from '@/layouts/OfferLayout.astro';
       >
         Verifying the final order…
       </p>
-      <p class="mt-5 text-sm text-muted-foreground">
-        Nothing after a few minutes? Email <a
-          class="font-semibold text-brand underline"
-          href="mailto:tim@keen.digital">tim@keen.digital</a
-        > from the address you used to buy.
+      <p class="mt-5 hidden text-sm text-muted-foreground" data-complete-support>
+        Nothing after a few minutes? Email
+        <a class="font-semibold text-brand underline" data-complete-support-link>support</a>
+        from the address you used to buy.
       </p>
       <a
-        href="/vibe-code-anything/"
+        href="/"
+        data-complete-back
         class="mt-9 inline-flex min-h-14 items-center justify-center rounded-xl border border-border bg-background px-6 py-4 font-bold shadow-sm hover:shadow-lg focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
       >
-        Back to Vibe Code Anything
+        Back to the offers
       </a>
     </div>
   </section>
 </OfferLayout>
 
 <script>
+  interface StatusResult {
+    offerSlug?: string;
+    supportEmail?: string;
+    baseProduct?: { key: string; name: string };
+    bump?: { key: string; name: string; accepted: boolean } | null;
+    steps?: Array<{ key: string; name: string; status: string }>;
+    completion?: { title: string; description: string; backLabel: string };
+    error?: string;
+  }
+
   const completePage = document.querySelector<HTMLElement>('[data-complete-page]');
   if (completePage) {
     const flow = new URLSearchParams(window.location.search).get('flow') ?? '';
     const status = completePage.querySelector<HTMLElement>('[data-complete-status]');
-    const bump = completePage.querySelector<HTMLElement>('[data-complete-bump]');
-    const blueprints = completePage.querySelector<HTMLElement>('[data-complete-blueprints]');
-    const launch = completePage.querySelector<HTMLElement>('[data-complete-launch]');
+    const title = completePage.querySelector<HTMLElement>('[data-complete-title]');
+    const description = completePage.querySelector<HTMLElement>('[data-complete-description]');
+    const items = completePage.querySelector<HTMLUListElement>('[data-complete-items]');
+    const support = completePage.querySelector<HTMLElement>('[data-complete-support]');
+    const supportLink = completePage.querySelector<HTMLAnchorElement>(
+      '[data-complete-support-link]'
+    );
+    const back = completePage.querySelector<HTMLAnchorElement>('[data-complete-back]');
+
+    const addOrderItem = (name: string) => {
+      if (!items) return;
+      const item = document.createElement('li');
+      item.className = 'flex gap-3';
+      const check = document.createElement('span');
+      check.className = 'text-success';
+      check.textContent = '✓';
+      item.append(check, document.createTextNode(name));
+      items.append(item);
+    };
 
     if (/^[A-Za-z0-9_-]{43}$/.test(flow)) {
       fetch(`/api/funnel/status?flow=${encodeURIComponent(flow)}`)
         .then((response) => response.json())
-        .then(
-          (result: {
-            bumpAccepted?: boolean;
-            blueprintsStatus?: string;
-            launchStatus?: string;
-            error?: string;
-          }) => {
-            if (result.error) throw new Error(result.error);
-            bump?.classList.toggle('hidden', result.bumpAccepted !== true);
-            bump?.classList.toggle('flex', result.bumpAccepted === true);
-            blueprints?.classList.toggle('hidden', result.blueprintsStatus !== 'accepted');
-            blueprints?.classList.toggle('flex', result.blueprintsStatus === 'accepted');
-            launch?.classList.toggle('hidden', result.launchStatus !== 'accepted');
-            launch?.classList.toggle('flex', result.launchStatus === 'accepted');
-            if (status) status.textContent = 'Order verified.';
+        .then((result: StatusResult) => {
+          if (result.error) throw new Error(result.error);
+
+          if (result.completion) {
+            if (title) title.textContent = result.completion.title;
+            if (description) description.textContent = result.completion.description;
+            if (back) back.textContent = result.completion.backLabel;
           }
-        )
+          if (back && result.offerSlug) back.href = `/${result.offerSlug}/`;
+
+          if (items) items.replaceChildren();
+          if (result.baseProduct) addOrderItem(result.baseProduct.name);
+          if (result.bump?.accepted) addOrderItem(result.bump.name);
+          result.steps
+            ?.filter((step) => step.status === 'accepted')
+            .forEach((step) => addOrderItem(step.name));
+
+          if (support && supportLink && result.supportEmail) {
+            support.classList.remove('hidden');
+            supportLink.href = `mailto:${result.supportEmail}`;
+            supportLink.textContent = result.supportEmail;
+          }
+          if (status) {
+            status.textContent =
+              'Order verified. Your access email may take a minute or two to arrive.';
+          }
+        })
         .catch(() => {
-          if (status)
+          if (status) {
             status.textContent = 'Your payment is complete. Receipt delivery may take a moment.';
+          }
         });
     } else if (status) {
       status.textContent = 'Your payment is complete.';

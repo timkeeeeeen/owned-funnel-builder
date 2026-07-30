@@ -2,7 +2,7 @@
 import OfferLayout from '@/layouts/OfferLayout.astro';
 
 interface Props {
-  offerKey: 'blueprints' | 'launch';
+  offerKey: string;
   step: string;
   eyebrow: string;
   title: string;
@@ -30,7 +30,7 @@ const {
 } = Astro.props;
 ---
 
-<OfferLayout title={`${title} — Maestro`} description={description} noindex>
+<OfferLayout title={title} description={description} noindex>
   <section
     class="offer-grid grid min-h-screen place-items-center px-4 py-10 sm:px-6 sm:py-16"
     data-upsell-page
@@ -134,7 +134,7 @@ const {
 <script>
   const page = document.querySelector<HTMLElement>('[data-upsell-page]');
   if (page) {
-    const offer = page.dataset.offerKey === 'launch' ? 'launch' : 'blueprints';
+    const offer = page.dataset.offerKey ?? '';
     const flow = new URLSearchParams(window.location.search).get('flow') ?? '';
     const accept = page.querySelector<HTMLButtonElement>('[data-upsell-accept]');
     const decline = page.querySelector<HTMLButtonElement>('[data-upsell-decline]');
@@ -163,8 +163,7 @@ const {
       const response = await fetch(`/api/funnel/status?flow=${encodeURIComponent(flow)}`);
       const result = (await response.json()) as {
         baseStatus?: string;
-        blueprintsStatus?: string;
-        launchStatus?: string;
+        steps?: Array<{ key: string; status: string }>;
         nextPath?: string | null;
         error?: string;
       };
@@ -180,7 +179,7 @@ const {
       try {
         for (let attempt = 0; attempt < 20; attempt += 1) {
           const result = await fetchStatus();
-          const current = offer === 'launch' ? result.launchStatus : result.blueprintsStatus;
+          const current = result.steps?.find((step) => step.key === offer)?.status;
           if (result.baseStatus === 'failed')
             throw new Error('The original payment did not complete.');
           if (result.baseStatus !== 'succeeded') {

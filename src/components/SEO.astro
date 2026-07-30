@@ -1,4 +1,6 @@
 ---
+import { siteSettings } from '@/data/site';
+
 /**
  * SEO Head Component
  *
@@ -35,7 +37,7 @@ const {
   image,
   type = 'website',
   publishedTime,
-  author = 'Maestro',
+  author = siteSettings.author,
   noindex = false,
 } = Astro.props;
 
@@ -44,7 +46,7 @@ const siteUrl = Astro.site ?? new URL('http://localhost:4321');
 const canonicalURL = new URL(Astro.url.pathname, siteUrl);
 const socialImageURL = image ? new URL(image, siteUrl) : undefined;
 
-const siteName = 'Maestro Offers';
+const siteName = siteSettings.siteName;
 ---
 
 <!-- Primary Meta Tags -->

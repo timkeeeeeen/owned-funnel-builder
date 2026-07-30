@@ -1,16 +1,15 @@
 ---
 import OfferLayout from '@/layouts/OfferLayout.astro';
+import { siteSettings } from '@/data/site';
 
-const title = 'Privacy — Maestro Offers';
+const title = `Privacy — ${siteSettings.siteName}`;
 const description =
-  'Privacy information for Maestro offer pages, including attribution parameters, checkout providers, email contact, and data requests.';
+  'Privacy information for our offer pages, including attribution parameters, checkout providers, email contact, and data requests.';
 ---
 
 <OfferLayout title={title} description={description}>
   <article class="mx-auto max-w-4xl px-6 py-20">
-    <a class="font-semibold text-brand hover:underline" href="/vibe-code-anything/"
-      >← Back to the offer</a
-    >
+    <a class="font-semibold text-brand hover:underline" href="/">← Back to the offers</a>
     <h1 class="mt-8 text-5xl font-bold tracking-tight md:text-7xl">Privacy</h1>
     <p class="mt-4 text-muted-foreground">Last updated July 30, 2026.</p>
 
@@ -51,7 +50,7 @@ const description =
       <h2>Your choices</h2>
       <p>
         You can ask what personal information we hold, request a correction, or request deletion by
-        emailing <a href="mailto:tim@keen.digital">tim@keen.digital</a>.
+        emailing <a href={`mailto:${siteSettings.supportEmail}`}>{siteSettings.supportEmail}</a>.
       </p>
     </div>
   </article>

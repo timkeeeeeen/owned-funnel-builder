@@ -43,7 +43,14 @@ export async function checkPrimaryCta(
     result.errors.push(`No primary action matched ${selector}`);
     return result;
   }
-  const cta = ctas.first();
+  let cta = ctas.first();
+  for (let index = 0; index < result.found; index += 1) {
+    const candidate = ctas.nth(index);
+    if (await candidate.isVisible()) {
+      cta = candidate;
+      break;
+    }
+  }
   if (!(await cta.isVisible())) result.errors.push('The primary action is not visible');
   result.label = (await cta.getAttribute('aria-label')) ?? (await cta.innerText()).trim();
   if (!result.label) result.errors.push('The primary action has no readable label');

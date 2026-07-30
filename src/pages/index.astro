@@ -1,36 +1,36 @@
 ---
 import OfferLayout from '@/layouts/OfferLayout.astro';
 import { publishedOffers } from '@/data/offers';
+import { siteSettings } from '@/data/site';
 
-const title = 'Maestro Offers — Small Products, Serious Leverage';
-const description =
-  'Focused, low-ticket templates and systems for founders and builders who want to move faster without lowering the quality bar.';
+const title = siteSettings.siteName;
+const description = siteSettings.homeDescription;
+const siteInitial = siteSettings.shortName.trim().charAt(0).toUpperCase() || 'O';
 ---
 
-<OfferLayout title={title} description={description} image="/og-vibe-code-anything.jpg">
+<OfferLayout title={title} description={description} image={siteSettings.defaultImage}>
   <div class="offer-grid min-h-screen px-6 py-20">
     <div class="mx-auto max-w-6xl">
       <header class="flex items-center gap-3">
         <span
           class="grid size-12 place-items-center rounded-xl bg-foreground font-mono text-xl font-bold text-background"
-          aria-hidden="true">M</span
+          aria-hidden="true">{siteInitial}</span
         >
-        <span class="font-bold uppercase tracking-[0.16em]">Maestro Offers</span>
+        <span class="font-bold uppercase tracking-[0.16em]">{siteSettings.siteName}</span>
       </header>
 
       <section class="py-20" aria-labelledby="offers-title">
         <p class="font-mono text-sm font-bold uppercase tracking-[0.18em] text-brand">
-          Useful by tonight
+          {siteSettings.homeEyebrow}
         </p>
         <h1
           id="offers-title"
           class="mt-4 max-w-5xl text-balance text-6xl font-bold leading-[0.92] tracking-[-0.055em] md:text-8xl"
         >
-          Small products.<br /><mark class="offer-mark">Serious leverage.</mark>
+          {siteSettings.homeHeadline}<br /><mark class="offer-mark">{siteSettings.homeAccent}</mark>
         </h1>
         <p class="mt-8 max-w-2xl text-xl leading-relaxed text-muted-foreground">
-          Focused templates and systems for builders who want a faster path to a real result—without
-          lowering the quality bar.
+          {siteSettings.homeDescription}
         </p>
       </section>
 

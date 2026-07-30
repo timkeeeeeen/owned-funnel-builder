@@ -18,7 +18,7 @@
 
 ## Technical
 
-- Format, lint, typecheck, build, Functions build, accessibility, and KPI checks pass where configured.
+- Format, lint, typecheck, build, Functions build, payment-function tests, accessibility, and KPI checks pass where configured.
 - No browser errors, failed assets, broken links, stale screenshots, or secret leakage.
 - Prices and product IDs match verified provider state.
 - Flow tokens are opaque and hashed; API requests are same-origin and validated.
@@ -31,4 +31,5 @@
 - Cloudflare stable URL serves that commit and every required route.
 - D1 migrations and bindings are present without altering real records.
 - Checkout is enabled; it has not fallen back to email contact.
+- Publish-mode validation reports no example support address, access link, or missing social asset.
 - Real paid paths are marked unverified unless an authorized charge proved them.

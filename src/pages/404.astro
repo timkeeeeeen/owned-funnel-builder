@@ -1,8 +1,9 @@
 ---
 import OfferLayout from '@/layouts/OfferLayout.astro';
+import { siteSettings } from '@/data/site';
 
-const title = 'Page not found — Maestro Offers';
-const description = 'The requested Maestro offer page could not be found.';
+const title = `Page not found — ${siteSettings.siteName}`;
+const description = 'The requested offer page could not be found.';
 ---
 
 <OfferLayout title={title} description={description} noindex>
@@ -17,9 +18,9 @@ const description = 'The requested Maestro offer page could not be found.';
       </p>
       <a
         class="offer-cta mt-10 inline-flex min-h-14 items-center justify-center rounded-xl bg-brand px-8 py-4 font-bold text-brand-foreground"
-        href="/vibe-code-anything/"
+        href="/"
       >
-        See Vibe Code Anything →
+        See all offers →
       </a>
     </div>
   </section>

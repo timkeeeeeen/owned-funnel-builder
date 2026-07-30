@@ -14,6 +14,9 @@ dist/
 .env
 .env.local
 .env.production
+.dev.vars
+.funnel-state/
+quality-evidence/
 
 # IDE
 .idea/

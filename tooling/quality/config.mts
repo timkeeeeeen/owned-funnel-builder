@@ -130,7 +130,7 @@ export async function loadQualityConfig(path: string): Promise<QualityConfig> {
     return parseQualityConfig(JSON.parse(raw));
   } catch (error) {
     if (error instanceof SyntaxError) {
-      throw new Error(`Could not read ${path}: invalid JSON`);
+      throw new Error(`Could not read ${path}: invalid JSON`, { cause: error });
     }
     throw error;
   }

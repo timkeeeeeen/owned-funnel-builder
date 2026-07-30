@@ -34,7 +34,7 @@ const { section, demoUrl, aboveFold = false } = Astro.props;
         {section.description}
       </p>
       {
-        !section.embedUrl && (
+        !section.embedUrl && demoUrl && (
           <a
             href={demoUrl}
             target="_blank"
@@ -84,7 +84,7 @@ const { section, demoUrl, aboveFold = false } = Astro.props;
                 <span aria-hidden="true">→</span>
                 <span class="rounded-full border border-background/20 px-3 py-1">Prove</span>
                 <span aria-hidden="true">→</span>
-                <span class="rounded-full border border-success/50 px-3 py-1 text-success">
+                <span class="rounded-full border border-success-bright/50 px-3 py-1 text-success-bright">
                   Run
                 </span>
               </div>
