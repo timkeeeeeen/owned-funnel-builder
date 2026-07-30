@@ -26,11 +26,14 @@ const { section } = Astro.props;
     </div>
 
     <div class="mt-14 grid gap-8 lg:grid-cols-[0.9fr_1.1fr]">
-      <article class="rounded-xl border border-background/20 bg-panel-dark p-5 sm:p-7" data-animate>
+      <article
+        class="rounded-xl border border-background/20 bg-panel-dark p-5 text-brand-foreground sm:p-7"
+        data-animate
+      >
         <div class="flex items-center justify-between gap-4 border-b border-background/20 pb-4">
           <div>
-            <p class="font-semibold">Talk to the repository</p>
-            <p class="mt-1 text-sm text-background/55">Claude Code or Codex</p>
+            <p class="font-semibold text-brand-foreground">Talk to the repository</p>
+            <p class="mt-1 text-sm text-brand-foreground/60">Claude Code or Codex</p>
           </div>
           <span class="size-2.5 rounded-full bg-success">
             <span class="sr-only">Agent ready</span>
@@ -45,7 +48,7 @@ const { section } = Astro.props;
                   class={`max-w-[92%] rounded-xl border p-4 sm:max-w-[84%] ${
                     line.speaker === 'You'
                       ? 'border-brand/50 bg-brand text-brand-foreground'
-                      : 'border-background/20 bg-background/5 text-background'
+                      : 'border-brand-foreground/20 bg-brand-foreground/5 text-brand-foreground'
                   }`}
                 >
                   <p
