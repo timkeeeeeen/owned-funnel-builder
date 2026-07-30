@@ -1,0 +1,94 @@
+---
+import type { OfferVideoSection as VideoSection } from '@/data/offers';
+
+interface Props {
+  section: VideoSection;
+  demoUrl: string;
+}
+
+const { section, demoUrl } = Astro.props;
+---
+
+<section class="bg-muted px-6 py-20" aria-labelledby="video-title">
+  <div class="mx-auto grid max-w-7xl items-center gap-12 lg:grid-cols-[0.72fr_1.28fr]">
+    <div>
+      <p class="font-mono text-sm font-bold uppercase tracking-[0.18em] text-brand">
+        {section.eyebrow}
+      </p>
+      <h2
+        id="video-title"
+        class="mt-4 text-balance text-4xl font-bold leading-tight tracking-tight md:text-6xl"
+      >
+        {section.title}
+      </h2>
+      <p class="mt-6 text-lg leading-relaxed text-muted-foreground md:text-xl">
+        {section.description}
+      </p>
+      {
+        !section.embedUrl && (
+          <a
+            href={demoUrl}
+            target="_blank"
+            rel="noopener noreferrer"
+            class="mt-8 inline-flex min-h-12 items-center justify-center rounded-xl border border-border bg-card px-6 py-3 font-semibold shadow-sm transition-shadow duration-200 hover:shadow-lg focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+          >
+            Open the live reference app{' '}
+            <span class="ml-2" aria-hidden="true">
+              ↗
+            </span>
+          </a>
+        )
+      }
+    </div>
+
+    <div
+      class="aspect-video overflow-hidden rounded-xl border border-border bg-foreground text-background shadow-lg"
+      data-animate="scale"
+    >
+      {
+        section.embedUrl ? (
+          <iframe
+            class="size-full"
+            src={section.embedUrl}
+            title={section.title}
+            loading="lazy"
+            allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
+            referrerpolicy="strict-origin-when-cross-origin"
+            allowfullscreen
+          />
+        ) : (
+          <div class="flex size-full flex-col justify-between p-6 sm:p-10">
+            <div class="flex items-center justify-between gap-4">
+              <span class="font-mono text-xs font-bold uppercase tracking-[0.18em] text-brand-soft">
+                Video walkthrough
+              </span>
+              <span class="rounded-full border border-background/20 px-3 py-1 font-mono text-xs text-background/60">
+                02:00
+              </span>
+            </div>
+
+            <div>
+              <div class="mb-5 flex flex-wrap gap-2 font-mono text-xs text-background/60">
+                <span class="rounded-full border border-background/20 px-3 py-1">Prompt</span>
+                <span aria-hidden="true">→</span>
+                <span class="rounded-full border border-background/20 px-3 py-1">Preview</span>
+                <span aria-hidden="true">→</span>
+                <span class="rounded-full border border-background/20 px-3 py-1">Prove</span>
+                <span aria-hidden="true">→</span>
+                <span class="rounded-full border border-success/50 px-3 py-1 text-success">
+                  Run
+                </span>
+              </div>
+              <h3 class="max-w-2xl text-2xl font-semibold leading-tight sm:text-4xl">
+                {section.fallbackTitle}
+              </h3>
+              <p class="mt-4 max-w-2xl text-sm leading-relaxed text-background/65 sm:text-base">
+                {section.fallbackBody}
+              </p>
+            </div>
+          </div>
+        )
+      }
+    </div>
+  </div>
+</section>

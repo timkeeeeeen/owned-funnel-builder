@@ -14,6 +14,91 @@ export interface OfferFaq {
   answer: string;
 }
 
+export interface OfferVideoSection {
+  eyebrow: string;
+  title: string;
+  description: string;
+  embedUrl: string;
+  fallbackTitle: string;
+  fallbackBody: string;
+}
+
+export interface OfferPreviewSection {
+  eyebrow: string;
+  title: string;
+  description: string;
+  workspaceLabel: string;
+  productLabel: string;
+  productDescription: string;
+  navItems: string[];
+  activeNavItem: string;
+  activeEyebrow: string;
+  activeTitle: string;
+  activeDescription: string;
+  statusLabel: string;
+  stages: string[];
+  panels: OfferItem[];
+}
+
+export interface OfferConversationLine {
+  speaker: string;
+  text: string;
+}
+
+export interface OfferAssistantSection {
+  eyebrow: string;
+  title: string;
+  description: string;
+  skills: OfferItem[];
+  conversation: OfferConversationLine[];
+}
+
+export interface OfferFitSection {
+  eyebrow: string;
+  title: string;
+  description: string;
+  forYou: string[];
+  notForYou: string[];
+}
+
+export interface OfferExample extends OfferItem {
+  label: string;
+}
+
+export interface OfferExamplesSection {
+  eyebrow: string;
+  title: string;
+  description: string;
+  items: OfferExample[];
+}
+
+export interface OfferGateItem {
+  label: string;
+  question: string;
+  description: string;
+  catches: string;
+}
+
+export interface OfferGatesSection {
+  eyebrow: string;
+  title: string;
+  description: string;
+  items: OfferGateItem[];
+}
+
+export interface OfferCheckoutSection {
+  provider: 'dodo-inline';
+  enabled: boolean;
+  eyebrow: string;
+  title: string;
+  description: string;
+  emailLabel: string;
+  emailPlaceholder: string;
+  buttonLabel: string;
+  consentCopy: string;
+  consentVersion: string;
+}
+
 export interface Offer {
   published: boolean;
   slug: string;
@@ -27,6 +112,7 @@ export interface Offer {
   ogImage: string;
   audience: string;
   checkoutUrl: string;
+  checkout?: OfferCheckoutSection;
   demoUrl: string;
   currentPrice: string;
   regularPrice: string;
@@ -39,7 +125,13 @@ export interface Offer {
   without: string[];
   with: string[];
   outcomes: OfferItem[];
+  video?: OfferVideoSection;
+  productPreview?: OfferPreviewSection;
+  assistant?: OfferAssistantSection;
   included: OfferItem[];
+  gates?: OfferGatesSection;
+  fit?: OfferFitSection;
+  examples?: OfferExamplesSection;
   bonuses: OfferItem[];
   proof: OfferProof[];
   guaranteeTitle: string;
@@ -52,6 +144,8 @@ export interface Offer {
 const vibeCodeCheckoutUrl =
   import.meta.env.PUBLIC_VIBE_CODE_CHECKOUT_URL ??
   'mailto:tim@keen.digital?subject=Vibe%20Code%20Anything%20%E2%80%94%20template%20access';
+const vibeCodeDodoCheckoutEnabled =
+  import.meta.env.PUBLIC_VIBE_CODE_DODO_CHECKOUT_ENABLED === 'true';
 
 const featuredOffers: Offer[] = [
   {
@@ -65,11 +159,25 @@ const featuredOffers: Offer[] = [
       'Skip the blank repo. Start with the boring, difficult parts already designed, typed, and gated—then tell your coding agent what you actually want to ship.',
     metaTitle: 'Vibe Code Anything — Maestro SaaS UI Template',
     metaDescription:
-      'Build production-grade AI and SaaS apps faster with a full-stack template for tenancy, workflows, agents, typed contracts, provider seams, and CI gates.',
+      'Build production-grade AI and SaaS apps faster with Claude Code and Codex skills, a full-stack shell, guided recipes, typed contracts, and proof gates.',
     ogImage: '/og-vibe-code-anything.jpg',
     audience:
       'For founders, consultants, and product builders who want AI coding speed without rebuilding the same app foundations every time.',
     checkoutUrl: vibeCodeCheckoutUrl,
+    checkout: {
+      provider: 'dodo-inline',
+      enabled: vibeCodeDodoCheckoutEnabled,
+      eyebrow: 'Secure inline checkout',
+      title: 'First, where should we send your access?',
+      description:
+        'Enter your best email. We will prefill the secure Dodo checkout, keep you on this page, and send the template access there after purchase.',
+      emailLabel: 'Email address',
+      emailPlaceholder: 'you@company.com',
+      buttonLabel: 'Continue to secure checkout',
+      consentCopy:
+        'By continuing, you agree to receive product access and occasional emails about this offer, including a reminder if you leave checkout unfinished. Unsubscribe anytime.',
+      consentVersion: 'v1-2026-07-30',
+    },
     demoUrl: 'https://maestro-template.pages.dev/',
     currentPrice: '$29',
     regularPrice: '$149',
@@ -111,38 +219,234 @@ const featuredOffers: Offer[] = [
           'Tenancy, capabilities, workflows, headless surfaces, and provider adapters are designed as explicit seams from day one.',
       },
     ],
+    video: {
+      eyebrow: 'Watch the build loop',
+      title: 'See a prompt become a proved app change.',
+      description:
+        'The walkthrough shows the whole loop: describe the outcome, let Maestro find the right owner and recipe, preview the write, run the gates, and open the working app.',
+      embedUrl: '',
+      fallbackTitle: 'The video slot is ready for the two-minute walkthrough.',
+      fallbackBody:
+        'The recording is next. Until then, open the live reference app and inspect the shell, workflows, agents, runs, API surface, and settings yourself.',
+    },
+    productPreview: {
+      eyebrow: 'What it looks like',
+      title: 'A real business app shell—not a hero page and a TODO list.',
+      description:
+        'You start with a cohesive workspace for Brain, sources, workflows, capabilities, agents, runs, API access, settings, and operational proof. Rename the nouns and compose the blocks around your product.',
+      workspaceLabel: 'CLIENT BRAIN / WORKSPACE',
+      productLabel: 'Maestro',
+      productDescription: 'Business app shell',
+      navItems: ['Overview', 'Brain', 'Sources', 'Workflows', 'Agents', 'Runs', 'API', 'Settings'],
+      activeNavItem: 'Workflows',
+      activeEyebrow: 'Workflow / active',
+      activeTitle: 'Source-grounded plan',
+      activeDescription: 'Durable work with visible evidence.',
+      statusLabel: 'Ready to run',
+      stages: ['Source', 'Context', 'Agent', 'Receipt'],
+      panels: [
+        {
+          title: 'Source-grounded plan',
+          description: 'Source → context → agent → Trust Receipt, with durable run state.',
+        },
+        {
+          title: 'Provider posture',
+          description:
+            'Start safely in fake mode. Connect live auth, billing, email, storage, and LLM providers when approved.',
+        },
+        {
+          title: 'One typed operation',
+          description:
+            'The same capability can appear in the web app, API docs, CLI, and MCP instead of being rebuilt four times.',
+        },
+      ],
+    },
+    assistant: {
+      eyebrow: 'The codebase talks back',
+      title: 'Open Claude Code or Codex. Tell it what you want.',
+      description:
+        'The template ships with host-native Maestro and official Convex skills. The skill teaches your coding agent the method; the CLI performs reviewed writes; deterministic gates decide whether the result is safe to keep.',
+      skills: [
+        {
+          title: 'Maestro app factory',
+          description:
+            'Finds the canonical owner, chooses the smallest recipe, previews changes, and keeps work inside the architecture.',
+        },
+        {
+          title: 'Convex quickstart',
+          description:
+            'Sets up or diagnoses the backend and verifies the first schema and function loop.',
+        },
+        {
+          title: 'Auth setup',
+          description:
+            'Guides reviewed WorkOS, Clerk, Auth0, or Convex Auth integration instead of guessing at provider wiring.',
+        },
+        {
+          title: 'Component builder',
+          description:
+            'Creates reusable Convex components using the official patterns bundled with the release.',
+        },
+        {
+          title: 'Migration helper',
+          description:
+            'Plans schema and data changes so a fast edit does not become a destructive production surprise.',
+        },
+        {
+          title: 'Performance audit',
+          description:
+            'Checks subscriptions, hot paths, conflicts, and function budgets before scale exposes them.',
+        },
+      ],
+      conversation: [
+        {
+          speaker: 'You',
+          text: 'Build me a launch tracker. Add milestones and keep every record workspace-scoped.',
+        },
+        {
+          speaker: 'Maestro',
+          text: 'I found record-management as the canonical owner. I can extend it with the CRUD recipe. First I will preview every write and collision. Nothing has changed yet.',
+        },
+        {
+          speaker: 'You',
+          text: 'Proceed with the reviewed plan.',
+        },
+        {
+          speaker: 'Maestro',
+          text: 'The files are staged atomically. Next I will regenerate the contracts, run the focused gates, and start the app in fake mode.',
+        },
+      ],
+    },
     included: [
       {
-        title: 'A real full-stack SaaS shell',
+        title: 'The complete full-stack source',
         description:
-          'A polished React and SaaS UI application backed by Convex, with a working live-data path and a reviewer-safe reference app.',
+          'A polished React and SaaS UI application backed by Convex, plus the working reference app and every customization seam.',
       },
       {
-        title: 'The architecture AI agents need',
+        title: 'Claude Code and Codex skill packs',
         description:
-          'Clear routes, screens, features, blocks, typed specs, domain boundaries, and canonical ownership rules—documented in the repo.',
+          'The Maestro skill, official Convex skills, host plugins, and optional MCP configuration are committed with the code.',
+      },
+      {
+        title: 'Outcome recipes and generators',
+        description:
+          'Preview and add business entities, capabilities, workflows, agents, routes, and client domains without guessing where files belong.',
       },
       {
         title: 'Agents, workflows, and capabilities',
         description:
-          'Production-shaped contracts for durable work, agent surfaces, approvals, runs, and headless access through API, CLI, and MCP.',
+          'Production-shaped contracts for durable work, approvals, runs, and headless access through API, CLI, and MCP.',
       },
       {
-        title: 'Provider-shaped seams',
+        title: 'Fake-safe provider seams',
         description:
-          'Contained adapters for auth, analytics, billing, email, storage, and LLM providers, with fake-safe defaults for local building.',
+          'Contained adapters for auth, analytics, billing, email, storage, and LLM providers, with safe local defaults before live credentials exist.',
       },
       {
-        title: 'Generators and guided commands',
+        title: 'Gates, receipts, and handoff docs',
         description:
-          'Initialize a product, add a capability, workflow, agent, or client domain, run a doctor, and create a clean handoff without guessing file placement.',
-      },
-      {
-        title: 'A serious proof system',
-        description:
-          'Formatting, linting, type checks, tests, boundary checks, security checks, smoke tests, review receipts, and gated deployment paths.',
+          'Focused verification, transaction journals, provenance, architecture guides, and reviewer packets show what changed and why it is trustworthy.',
       },
     ],
+    gates: {
+      eyebrow: 'Gates, explained like a human',
+      title: 'The agent can move fast. The gates stop it from confidently breaking things.',
+      description:
+        'A gate is just a deterministic check with permission to say “no.” It does not care how persuasive the AI sounds. If the code, ownership, data rules, or build do not agree, the change stays red.',
+      items: [
+        {
+          label: '01 / PREFLIGHT',
+          question: 'Are we safe to start?',
+          description:
+            'Checks the release, Node version, Git state, host, dependencies, and provider mode before anything is written.',
+          catches:
+            'Wrong environment, dirty work, missing baseline, and unsafe live-provider assumptions.',
+        },
+        {
+          label: '02 / OWNERSHIP',
+          question: 'Does this feature have one clear home?',
+          description:
+            'Looks up which system owns the responsibility, table, route, and lifecycle so the agent extends the existing authority.',
+          catches:
+            'Duplicate subsystems, two tables for the same noun, and business logic scattered across routes.',
+        },
+        {
+          label: '03 / CONTRACTS',
+          question: 'Do all the pieces agree?',
+          description:
+            'Regenerates typed contracts so the backend, web app, API, CLI, and MCP expose the same operation and failures.',
+          catches:
+            'UI/backend drift, hand-edited generated files, missing error cases, and broken headless surfaces.',
+        },
+        {
+          label: '04 / FOCUSED PROOF',
+          question: 'Did this exact change actually work?',
+          description:
+            'Runs the smallest relevant set of formatting, types, tests, builds, schema, topology, security, and route checks.',
+          catches:
+            'Code that compiles but breaks a route, a migration, tenancy, a provider boundary, or another package.',
+        },
+        {
+          label: '05 / RECEIPT',
+          question: 'Can another human verify what happened?',
+          description:
+            'Keeps the approved fingerprints, generated-file provenance, transaction journal, and verification result with the change.',
+          catches: 'Mystery edits, unverifiable AI claims, and “it worked on my machine” handoffs.',
+        },
+      ],
+    },
+    fit: {
+      eyebrow: 'Who this is for',
+      title:
+        'You do not need to be an Effect expert. You do need to be comfortable driving a coding agent.',
+      description:
+        'This is a serious codebase with an unusually good guide rail—not a no-code builder. Claude Code or Codex does most of the typing, but you still review plans, run commands, and make product decisions.',
+      forYou: [
+        'You already use Claude Code, Codex, or another repo-aware coding agent—or genuinely want to learn that workflow.',
+        'You can work in a terminal, use Git, read a diff, and paste an error back to the agent.',
+        'You are building software with users, workspace data, workflows, agents, integrations, or operational risk.',
+        'You want a fast start that can survive past the demo instead of a disposable prototype.',
+      ],
+      notForYou: [
+        'You want a drag-and-drop, no-code, one-click app generator.',
+        'You do not want to touch code, Git, package commands, or a terminal.',
+        'You expect production auth, billing, email, storage, and LLM accounts to arrive pre-connected.',
+        'You only need a static marketing page or the quickest possible throwaway mockup.',
+      ],
+    },
+    examples: {
+      eyebrow: 'What you can build',
+      title: 'Start with a working shell. Change the nouns and the business rules.',
+      description:
+        'These are product directions the architecture supports. The labels tell you what is proven, what is included as a blueprint, and what still requires a custom build.',
+      items: [
+        {
+          label: 'PROVEN IN EXTERNAL DOGFOOD',
+          title: 'Launch tracker',
+          description:
+            'A clean agent created a separate Launch Tracker app, added a workspace-scoped Milestone CRUD slice through the recipe system, passed the focused gates, and served the working route in fake mode.',
+        },
+        {
+          label: 'IMPLEMENTED DEFAULT BLUEPRINT',
+          title: 'Source-grounded client brain',
+          description:
+            'Sources, context packs, grounded briefs, workflows, agents, Trust Receipts, and shared web/API/CLI/MCP access.',
+        },
+        {
+          label: 'IMPLEMENTED OPTIONAL BLUEPRINT',
+          title: 'Account research workbench',
+          description:
+            'Account and buying-committee context, CRM/Drive/Notion seams, grounded account briefs, follow-up actions, and reporting surfaces.',
+        },
+        {
+          label: 'GOOD FIT / CUSTOM BUILD',
+          title: 'Internal ops and approvals app',
+          description:
+            'Queues, approval steps, retryable workflows, agent tool grants, notifications, admin surfaces, and auditable run receipts.',
+        },
+      ],
+    },
     bonuses: [
       {
         title: 'The golden-path build guide',
@@ -195,6 +499,11 @@ const featuredOffers: Offer[] = [
         question: 'Do I need to know Convex, Effect, or Confect first?',
         answer:
           'No. You can start from the working reference patterns and let your coding agent follow the repo instructions. The deeper architecture is there when your app needs stronger contracts, workflows, and failure handling.',
+      },
+      {
+        question: 'Do I need to be a developer?',
+        answer:
+          'You do not need to be a senior engineer or know this stack already. You do need to be comfortable working in Claude Code or Codex, using a terminal and Git, reviewing a plan or diff, and asking the agent to fix red checks. This is agent-assisted coding, not no-code.',
       },
       {
         question: 'Does it include live authentication and billing?',

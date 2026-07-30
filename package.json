@@ -23,6 +23,7 @@
     "@tailwindcss/typography": "^0.5.19",
     "@tailwindcss/vite": "^4.3.0",
     "astro": "^7.1.6",
+    "dodopayments-checkout": "^1.9.5",
     "tailwindcss": "^4.3.0"
   },
   "devDependencies": {

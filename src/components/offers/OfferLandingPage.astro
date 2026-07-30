@@ -1,6 +1,13 @@
 ---
 import OfferLayout from '@/layouts/OfferLayout.astro';
 import OfferAnalytics from '@/components/offers/OfferAnalytics.astro';
+import OfferAssistantSection from '@/components/offers/OfferAssistantSection.astro';
+import OfferCheckoutDialog from '@/components/offers/OfferCheckoutDialog.astro';
+import OfferExamplesSection from '@/components/offers/OfferExamplesSection.astro';
+import OfferFitSection from '@/components/offers/OfferFitSection.astro';
+import OfferGatesSection from '@/components/offers/OfferGatesSection.astro';
+import OfferProductPreview from '@/components/offers/OfferProductPreview.astro';
+import OfferVideoSection from '@/components/offers/OfferVideoSection.astro';
 import type { Offer } from '@/data/offers';
 
 interface Props {
@@ -8,7 +15,10 @@ interface Props {
 }
 
 const { offer } = Astro.props;
-const checkoutTarget = offer.checkoutUrl.startsWith('http') ? '_blank' : undefined;
+const usesInlineCheckout = offer.checkout?.provider === 'dodo-inline' && offer.checkout.enabled;
+const checkoutHref = usesInlineCheckout ? '#get-it' : offer.checkoutUrl;
+const checkoutTarget =
+  !usesInlineCheckout && offer.checkoutUrl.startsWith('http') ? '_blank' : undefined;
 const checkoutRel = checkoutTarget ? 'noopener noreferrer' : undefined;
 
 const productSchema = {
@@ -51,11 +61,12 @@ const productSchema = {
         </a>
 
         <a
-          href={offer.checkoutUrl}
+          href={checkoutHref}
           target={checkoutTarget}
           rel={checkoutRel}
           data-offer-cta
           data-offer-checkout
+          data-offer-checkout-trigger={usesInlineCheckout ? '' : undefined}
           data-placement="header"
           class="offer-cta hidden min-h-11 items-center justify-center rounded-xl bg-brand px-5 py-3 text-sm font-bold text-brand-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 md:inline-flex"
         >
@@ -89,11 +100,12 @@ const productSchema = {
 
         <div class="mt-10 flex w-full max-w-2xl flex-col items-center gap-4">
           <a
-            href={offer.checkoutUrl}
+            href={checkoutHref}
             target={checkoutTarget}
             rel={checkoutRel}
             data-offer-cta
             data-offer-checkout
+            data-offer-checkout-trigger={usesInlineCheckout ? '' : undefined}
             data-placement="hero"
             class="offer-cta inline-flex min-h-20 w-full items-center justify-center rounded-xl bg-brand px-8 py-5 text-center text-xl font-bold text-brand-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 sm:text-2xl"
           >
@@ -276,11 +288,12 @@ const productSchema = {
 
         <div class="mx-auto mt-12 flex max-w-2xl flex-col items-center gap-4 text-center">
           <a
-            href={offer.checkoutUrl}
+            href={checkoutHref}
             target={checkoutTarget}
             rel={checkoutRel}
             data-offer-cta
             data-offer-checkout
+            data-offer-checkout-trigger={usesInlineCheckout ? '' : undefined}
             data-placement="outcomes"
             class="offer-cta inline-flex min-h-16 w-full items-center justify-center rounded-xl bg-brand px-8 py-4 text-lg font-bold text-brand-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 sm:text-xl"
           >
@@ -291,6 +304,10 @@ const productSchema = {
         </div>
       </div>
     </section>
+
+    {offer.video && <OfferVideoSection section={offer.video} demoUrl={offer.demoUrl} />}
+    {offer.productPreview && <OfferProductPreview section={offer.productPreview} />}
+    {offer.assistant && <OfferAssistantSection section={offer.assistant} />}
 
     <section class="bg-foreground px-6 py-20 text-background" aria-labelledby="included-title">
       <div class="mx-auto max-w-7xl">
@@ -325,6 +342,10 @@ const productSchema = {
         </div>
       </div>
     </section>
+
+    {offer.gates && <OfferGatesSection section={offer.gates} />}
+    {offer.fit && <OfferFitSection section={offer.fit} />}
+    {offer.examples && <OfferExamplesSection section={offer.examples} />}
 
     <section
       class="bg-highlight px-6 py-20 text-highlight-foreground"
@@ -492,11 +513,12 @@ const productSchema = {
           </ul>
 
           <a
-            href={offer.checkoutUrl}
+            href={checkoutHref}
             target={checkoutTarget}
             rel={checkoutRel}
             data-offer-cta
             data-offer-checkout
+            data-offer-checkout-trigger={usesInlineCheckout ? '' : undefined}
             data-placement="pricing"
             class="offer-cta mt-8 inline-flex min-h-20 w-full items-center justify-center rounded-xl bg-brand px-8 py-5 text-center text-xl font-bold text-brand-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 sm:text-2xl"
           >
@@ -558,11 +580,12 @@ const productSchema = {
         </p>
         <div class="mx-auto mt-10 flex max-w-2xl flex-col items-center gap-4">
           <a
-            href={offer.checkoutUrl}
+            href={checkoutHref}
             target={checkoutTarget}
             rel={checkoutRel}
             data-offer-cta
             data-offer-checkout
+            data-offer-checkout-trigger={usesInlineCheckout ? '' : undefined}
             data-placement="final"
             class="offer-cta inline-flex min-h-20 w-full items-center justify-center rounded-xl bg-brand px-8 py-5 text-center text-xl font-bold text-brand-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring sm:text-2xl"
           >
@@ -598,11 +621,12 @@ const productSchema = {
       aria-label="Quick purchase"
     >
       <a
-        href={offer.checkoutUrl}
+        href={checkoutHref}
         target={checkoutTarget}
         rel={checkoutRel}
         data-offer-cta
         data-offer-checkout
+        data-offer-checkout-trigger={usesInlineCheckout ? '' : undefined}
         data-placement="mobile-sticky"
         class="offer-cta inline-flex min-h-14 w-full items-center justify-center rounded-xl bg-brand px-5 py-4 text-center text-base font-bold text-brand-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
       >
@@ -612,5 +636,10 @@ const productSchema = {
     </aside>
   </div>
 
+  {
+    usesInlineCheckout && offer.checkout && (
+      <OfferCheckoutDialog offer={offer} checkout={offer.checkout} />
+    )
+  }
   <OfferAnalytics offerSlug={offer.slug} />
 </OfferLayout>

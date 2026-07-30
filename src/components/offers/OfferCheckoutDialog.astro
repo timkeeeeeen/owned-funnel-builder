@@ -1,0 +1,431 @@
+---
+import type { Offer, OfferCheckoutSection } from '@/data/offers';
+
+interface Props {
+  offer: Offer;
+  checkout: OfferCheckoutSection;
+}
+
+const { offer, checkout } = Astro.props;
+const dialogId = `offer-checkout-${offer.slug}`;
+const frameId = `dodo-inline-checkout-${offer.slug}`;
+---
+
+<dialog
+  id={dialogId}
+  data-offer-checkout-dialog
+  data-offer-slug={offer.slug}
+  data-consent-version={checkout.consentVersion}
+  data-frame-id={frameId}
+  class="fixed inset-0 z-[100] m-auto max-h-[calc(100dvh-1rem)] w-[calc(100%-1rem)] max-w-6xl overflow-y-auto rounded-xl border border-border bg-background p-0 text-foreground shadow-2xl backdrop:bg-foreground/75 backdrop:backdrop-blur-sm sm:max-h-[calc(100dvh-3rem)] sm:w-[calc(100%-3rem)]"
+  aria-labelledby={`${dialogId}-title`}
+>
+  <div class="relative">
+    <header
+      class="sticky top-0 z-10 flex items-center justify-between gap-4 border-b border-border bg-background/95 px-5 py-4 backdrop-blur sm:px-8"
+    >
+      <div>
+        <p class="font-mono text-xs font-bold uppercase tracking-[0.16em] text-brand">
+          {checkout.eyebrow}
+        </p>
+        <p class="mt-1 font-semibold">{offer.productName}</p>
+      </div>
+      <button
+        type="button"
+        data-checkout-close
+        class="grid size-11 shrink-0 place-items-center rounded-xl border border-border bg-card text-2xl font-medium hover:bg-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+        aria-label="Close checkout"
+      >
+        <span aria-hidden="true">×</span>
+      </button>
+    </header>
+
+    <section data-checkout-email-step class="px-5 py-10 sm:px-8 sm:py-14">
+      <div class="mx-auto max-w-2xl text-center">
+        <span
+          class="mx-auto grid size-14 place-items-center rounded-full bg-highlight font-mono text-lg font-bold text-highlight-foreground"
+          aria-hidden="true"
+        >
+          1
+        </span>
+        <h2
+          id={`${dialogId}-title`}
+          class="mt-6 text-balance text-3xl font-bold leading-tight tracking-tight sm:text-5xl"
+        >
+          {checkout.title}
+        </h2>
+        <p
+          class="mx-auto mt-5 max-w-xl text-pretty text-base leading-relaxed text-muted-foreground sm:text-lg"
+        >
+          {checkout.description}
+        </p>
+      </div>
+
+      <form data-checkout-form class="mx-auto mt-9 max-w-xl" novalidate>
+        <label for={`${dialogId}-email`} class="text-sm font-bold">{checkout.emailLabel}</label>
+        <input
+          id={`${dialogId}-email`}
+          name="email"
+          type="email"
+          inputmode="email"
+          autocomplete="email"
+          required
+          maxlength="254"
+          placeholder={checkout.emailPlaceholder}
+          class="mt-2 min-h-16 w-full rounded-xl border-2 border-border bg-background px-5 text-lg shadow-sm outline-none transition-colors placeholder:text-muted-foreground/60 focus:border-brand focus:ring-4 focus:ring-brand/15"
+        />
+
+        <div class="absolute -left-[10000px]" aria-hidden="true">
+          <label for={`${dialogId}-website`}>Website</label>
+          <input
+            id={`${dialogId}-website`}
+            name="website"
+            type="text"
+            tabindex="-1"
+            autocomplete="off"
+          />
+        </div>
+
+        <p
+          data-checkout-email-error
+          class="mt-3 hidden rounded-xl border border-destructive/30 bg-destructive/10 px-4 py-3 text-sm font-medium text-destructive"
+          role="alert"
+        >
+        </p>
+
+        <button
+          type="submit"
+          data-checkout-submit
+          class="offer-cta mt-4 inline-flex min-h-20 w-full items-center justify-center rounded-xl bg-brand px-6 py-5 text-center text-xl font-bold text-brand-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-wait disabled:opacity-70 sm:text-2xl"
+        >
+          <span data-checkout-submit-label data-default-label={checkout.buttonLabel}
+            >{checkout.buttonLabel}</span
+          >
+          <span class="ml-3" aria-hidden="true">→</span>
+        </button>
+
+        <p class="mt-4 text-center text-xs leading-relaxed text-muted-foreground sm:text-sm">
+          {checkout.consentCopy} Read the <a class="font-semibold underline" href="/privacy/"
+            >privacy policy</a
+          >.
+        </p>
+      </form>
+
+      <div
+        class="mx-auto mt-8 flex max-w-xl flex-wrap justify-center gap-x-5 gap-y-2 border-t border-border pt-6 text-sm font-medium text-muted-foreground"
+      >
+        <span>One payment</span>
+        <span>30-day guarantee</span>
+        <span>Payment secured by Dodo</span>
+      </div>
+    </section>
+
+    <section data-checkout-payment-step class="hidden px-5 py-8 sm:px-8 sm:py-10">
+      <div class="grid gap-8 lg:grid-cols-[0.72fr_1.28fr] lg:items-start">
+        <aside
+          class="rounded-xl border border-border bg-muted p-6 lg:sticky lg:top-24 sm:p-8"
+          aria-label="Order summary"
+        >
+          <p class="font-mono text-xs font-bold uppercase tracking-[0.16em] text-brand">
+            Your order
+          </p>
+          <h2 class="mt-3 text-2xl font-bold sm:text-3xl">{offer.productName}</h2>
+          <p class="mt-3 leading-relaxed text-muted-foreground">
+            Full source, coding-agent skills, generators, guides, gates, and lifetime access.
+          </p>
+
+          <dl class="mt-7 space-y-3 border-t border-border pt-6 text-sm">
+            <div class="flex items-center justify-between gap-4">
+              <dt class="text-muted-foreground">Subtotal</dt>
+              <dd data-checkout-subtotal class="font-semibold">{offer.currentPrice} USD</dd>
+            </div>
+            <div class="flex items-center justify-between gap-4">
+              <dt class="text-muted-foreground">Tax</dt>
+              <dd data-checkout-tax class="font-semibold">Calculated at checkout</dd>
+            </div>
+            <div
+              class="flex items-center justify-between gap-4 border-t border-border pt-3 text-lg"
+            >
+              <dt class="font-bold">Total</dt>
+              <dd data-checkout-total class="font-bold">{offer.currentPrice} USD</dd>
+            </div>
+          </dl>
+
+          <p class="mt-6 text-xs leading-relaxed text-muted-foreground">
+            One-time purchase. No subscription. Covered by the <a
+              class="font-semibold underline"
+              href="/terms/#refunds">30-day refund policy</a
+            >.
+          </p>
+        </aside>
+
+        <div>
+          <div
+            data-checkout-frame-loading
+            class="flex min-h-40 items-center justify-center rounded-xl border border-border bg-muted p-8 text-center"
+            role="status"
+          >
+            <div>
+              <span
+                class="mx-auto block size-8 animate-spin rounded-full border-4 border-brand/20 border-t-brand"
+                aria-hidden="true"></span>
+              <p class="mt-4 font-semibold">Opening secure checkout…</p>
+            </div>
+          </div>
+
+          <div id={frameId} class="min-h-[34rem] w-full"></div>
+
+          <p
+            data-checkout-payment-error
+            class="mt-4 hidden rounded-xl border border-destructive/30 bg-destructive/10 px-4 py-3 text-sm font-medium text-destructive"
+            role="alert"
+          >
+          </p>
+
+          <p class="mt-4 text-center text-sm text-muted-foreground">
+            Frame not loading? <a
+              data-checkout-fallback
+              href={offer.checkoutUrl}
+              class="font-semibold underline"
+              target={offer.checkoutUrl.startsWith('http') ? '_blank' : undefined}
+              rel={offer.checkoutUrl.startsWith('http') ? 'noopener noreferrer' : undefined}
+              >Open checkout directly</a
+            >.
+          </p>
+        </div>
+      </div>
+    </section>
+  </div>
+</dialog>
+
+<script>
+  import {
+    DodoPayments,
+    type CheckoutBreakdownData,
+    type CheckoutEvent,
+    type CheckoutMode,
+  } from 'dodopayments-checkout';
+
+  const attributionKeys = [
+    'utm_source',
+    'utm_medium',
+    'utm_campaign',
+    'utm_content',
+    'utm_term',
+    'gclid',
+    'fbclid',
+    'ttclid',
+    'msclkid',
+  ];
+
+  const checkoutDialog = document.querySelector<HTMLDialogElement>('[data-offer-checkout-dialog]');
+
+  if (checkoutDialog) {
+    const offerSlug = checkoutDialog.dataset.offerSlug ?? '';
+    const consentVersion = checkoutDialog.dataset.consentVersion ?? '';
+    const frameId = checkoutDialog.dataset.frameId ?? '';
+    const emailStep = checkoutDialog.querySelector<HTMLElement>('[data-checkout-email-step]');
+    const paymentStep = checkoutDialog.querySelector<HTMLElement>('[data-checkout-payment-step]');
+    const form = checkoutDialog.querySelector<HTMLFormElement>('[data-checkout-form]');
+    const emailInput = checkoutDialog.querySelector<HTMLInputElement>('input[name="email"]');
+    const submitButton = checkoutDialog.querySelector<HTMLButtonElement>('[data-checkout-submit]');
+    const submitLabel = checkoutDialog.querySelector<HTMLElement>('[data-checkout-submit-label]');
+    const emailError = checkoutDialog.querySelector<HTMLElement>('[data-checkout-email-error]');
+    const paymentError = checkoutDialog.querySelector<HTMLElement>('[data-checkout-payment-error]');
+    const frameLoading = checkoutDialog.querySelector<HTMLElement>('[data-checkout-frame-loading]');
+    const fallbackLink = checkoutDialog.querySelector<HTMLAnchorElement>(
+      '[data-checkout-fallback]'
+    );
+    const subtotal = checkoutDialog.querySelector<HTMLElement>('[data-checkout-subtotal]');
+    const tax = checkoutDialog.querySelector<HTMLElement>('[data-checkout-tax]');
+    const total = checkoutDialog.querySelector<HTMLElement>('[data-checkout-total]');
+    let placement = 'unknown';
+    let initializedMode: CheckoutMode | null = null;
+
+    const setError = (element: HTMLElement | null, message: string) => {
+      if (!element) return;
+      element.textContent = message;
+      element.classList.toggle('hidden', !message);
+    };
+
+    const setLoading = (loading: boolean) => {
+      if (submitButton) submitButton.disabled = loading;
+      if (submitLabel) {
+        submitLabel.textContent = loading
+          ? 'Preparing checkout…'
+          : (submitLabel.dataset.defaultLabel ?? 'Continue to secure checkout');
+      }
+    };
+
+    const showEmailStep = () => {
+      emailStep?.classList.remove('hidden');
+      paymentStep?.classList.add('hidden');
+      frameLoading?.classList.remove('hidden');
+      setError(paymentError, '');
+    };
+
+    const showPaymentStep = () => {
+      emailStep?.classList.add('hidden');
+      paymentStep?.classList.remove('hidden');
+      frameLoading?.classList.remove('hidden');
+    };
+
+    const formatMoney = (amount: number | undefined, currency: string | undefined) => {
+      if (amount == null || !currency) return null;
+      return new Intl.NumberFormat(undefined, {
+        style: 'currency',
+        currency,
+      }).format(amount / 100);
+    };
+
+    const updateBreakdown = (breakdown: CheckoutBreakdownData) => {
+      const currency = breakdown.finalTotalCurrency ?? breakdown.currency;
+      const formattedSubtotal = formatMoney(breakdown.subTotal, currency);
+      const formattedTax = formatMoney(breakdown.tax, currency);
+      const formattedTotal = formatMoney(
+        breakdown.finalTotal ?? breakdown.total,
+        breakdown.finalTotalCurrency ?? currency
+      );
+
+      if (formattedSubtotal && subtotal) subtotal.textContent = formattedSubtotal;
+      if (formattedTax && tax) tax.textContent = formattedTax;
+      if (formattedTotal && total) total.textContent = formattedTotal;
+    };
+
+    const handleCheckoutEvent = (event: CheckoutEvent) => {
+      if (event.event_type === 'checkout.opened' || event.event_type === 'checkout.form_ready') {
+        frameLoading?.classList.add('hidden');
+      }
+
+      if (event.event_type === 'checkout.breakdown') {
+        const breakdown = event.data?.message as CheckoutBreakdownData | undefined;
+        if (breakdown) updateBreakdown(breakdown);
+      }
+
+      if (event.event_type === 'checkout.error') {
+        frameLoading?.classList.add('hidden');
+        setError(
+          paymentError,
+          'The secure payment frame hit a problem. Try the direct checkout link below or close this window and retry.'
+        );
+      }
+
+      window.dispatchEvent(
+        new CustomEvent('offer:checkout-event', {
+          detail: { offer: offerSlug, placement, event: event.event_type },
+        })
+      );
+    };
+
+    document.querySelectorAll<HTMLElement>('[data-offer-checkout-trigger]').forEach((trigger) => {
+      trigger.addEventListener('click', (event) => {
+        event.preventDefault();
+        placement = trigger.dataset.placement ?? 'unknown';
+        setError(emailError, '');
+        showEmailStep();
+        checkoutDialog.showModal();
+        window.setTimeout(() => emailInput?.focus(), 0);
+      });
+    });
+
+    checkoutDialog.querySelector('[data-checkout-close]')?.addEventListener('click', () => {
+      checkoutDialog.close();
+    });
+
+    checkoutDialog.addEventListener('click', (event) => {
+      if (event.target === checkoutDialog) checkoutDialog.close();
+    });
+
+    checkoutDialog.addEventListener('close', () => {
+      if (DodoPayments.Checkout.isOpen()) DodoPayments.Checkout.close();
+      showEmailStep();
+      setLoading(false);
+    });
+
+    form?.addEventListener('submit', async (event) => {
+      event.preventDefault();
+      setError(emailError, '');
+
+      if (!form.reportValidity() || !emailInput) return;
+
+      const formData = new FormData(form);
+      const website = String(formData.get('website') ?? '');
+      const currentParams = new URLSearchParams(window.location.search);
+      const attribution = Object.fromEntries(
+        attributionKeys
+          .map((key) => [key, currentParams.get(key)] as const)
+          .filter((entry): entry is [string, string] => Boolean(entry[1]))
+      );
+
+      setLoading(true);
+
+      try {
+        const response = await fetch('/api/checkout', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            email: emailInput.value,
+            offerSlug,
+            placement,
+            consentVersion,
+            website,
+            attribution,
+            referrer: document.referrer,
+          }),
+        });
+        const result = (await response.json()) as {
+          checkoutUrl?: string;
+          mode?: CheckoutMode;
+          error?: string;
+        };
+
+        if (!response.ok || !result.checkoutUrl || !result.mode) {
+          throw new Error(result.error ?? 'Checkout is temporarily unavailable. Please try again.');
+        }
+
+        showPaymentStep();
+        if (fallbackLink) fallbackLink.href = result.checkoutUrl;
+
+        if (!initializedMode) {
+          DodoPayments.Initialize({
+            mode: result.mode,
+            displayType: 'inline',
+            onEvent: handleCheckoutEvent,
+          });
+          initializedMode = result.mode;
+        }
+
+        if (initializedMode !== result.mode) {
+          throw new Error('Checkout mode changed. Refresh the page and try again.');
+        }
+
+        DodoPayments.Checkout.open({
+          checkoutUrl: result.checkoutUrl,
+          elementId: frameId,
+          options: {
+            showSecurityBadge: true,
+            payButtonText: 'Pay securely',
+            fontSize: 'md',
+            fontWeight: 'medium',
+          },
+        });
+
+        window.dispatchEvent(
+          new CustomEvent('offer:checkout-session-created', {
+            detail: { offer: offerSlug, placement },
+          })
+        );
+      } catch (error) {
+        showEmailStep();
+        setError(
+          emailError,
+          error instanceof Error
+            ? error.message
+            : 'Checkout is temporarily unavailable. Please try again.'
+        );
+      } finally {
+        setLoading(false);
+      }
+    });
+  }
+</script>

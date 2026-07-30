@@ -1,6 +1,14 @@
 {
   "$schema": "./node_modules/wrangler/config-schema.json",
   "name": "maestro-offers",
-  "compatibility_date": "2026-07-30",
+  "compatibility_date": "2026-07-29",
   "pages_build_output_dir": "./dist/client",
+  "d1_databases": [
+    {
+      "binding": "LEADS",
+      "database_name": "maestro-offer-leads",
+      "database_id": "72f6866b-f271-4e37-8dd7-22ae8c8d3af9",
+      "migrations_dir": "migrations",
+    },
+  ],
 }
