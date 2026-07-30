@@ -1,4 +1,4 @@
-import { mkdir, readFile, readdir, realpath, rename, rm, writeFile } from 'node:fs/promises';
+import { link, mkdir, readFile, readdir, realpath, rename, rm, writeFile } from 'node:fs/promises';
 import { basename, dirname, extname, join, relative } from 'node:path';
 import { randomUUID } from 'node:crypto';
 import YAML from 'yaml';
@@ -600,9 +600,11 @@ export async function createFunnel(root: string, input: CreateFunnelInput) {
       mode: 0o600,
       flag: 'wx',
     });
-    await rename(offerTemp, offerPath);
+    await link(offerTemp, offerPath);
     offerCreated = true;
-    await rename(funnelTemp, funnelPath);
+    await rm(offerTemp, { force: true });
+    await link(funnelTemp, funnelPath);
+    await rm(funnelTemp, { force: true });
   } catch (error) {
     await Promise.all([
       rm(offerTemp, { force: true }),
