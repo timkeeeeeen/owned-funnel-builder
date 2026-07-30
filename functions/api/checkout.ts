@@ -106,7 +106,7 @@ function validateCustomerId(value: unknown): string {
 }
 
 async function resolveDodoCustomer(env: PagesContext['env'], email: string): Promise<string> {
-  const query = new URLSearchParams({ email, page_number: '1', page_size: '10' });
+  const query = new URLSearchParams({ email, page_size: '10' });
   const existing = await dodoRequest<DodoCustomerList>(env, `/customers?${query.toString()}`);
   const match = existing.items?.find(
     (customer) => cleanString(customer.email, 254).toLowerCase() === email

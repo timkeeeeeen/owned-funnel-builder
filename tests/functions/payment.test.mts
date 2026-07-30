@@ -96,6 +96,7 @@ test('checkout creates the configured cart, bump, steps, and first upsell return
   globalThis.fetch = async (input, init) => {
     const url = new URL(String(input));
     if (url.pathname === '/customers' && init?.method !== 'POST') {
+      assert.equal(url.searchParams.get('page_number'), null);
       return Response.json({
         items: [{ customer_id: 'cus_existing', email: 'owner@example.com' }],
       });
