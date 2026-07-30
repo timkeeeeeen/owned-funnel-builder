@@ -61,7 +61,8 @@ const ATTRIBUTION_KEYS = new Set([
 class RequestError extends Error {
   constructor(
     message: string,
-    readonly status: number
+    readonly status: number,
+    readonly code?: string
   ) {
     super(message);
   }
@@ -95,7 +96,7 @@ function parseEnvironment(value: string): {
     return { apiBaseUrl: 'https://live.dodopayments.com', checkoutMode: 'live' };
   }
 
-  throw new RequestError('Checkout is not configured yet.', 503);
+  throw new RequestError('Checkout is not configured yet.', 503, 'configuration_environment');
 }
 
 function sanitizeAttribution(value: unknown): Record<string, string> {
@@ -181,22 +182,27 @@ export async function onRequestPost(context: PagesContext): Promise<Response> {
         offerSlug,
         missingBinding: 'LEADS',
       });
-      throw new RequestError('Checkout is not configured yet.', 503);
+      throw new RequestError('Checkout is not configured yet.', 503, 'configuration_storage');
     }
 
     const apiKey = readEnvironmentValue(env, 'DODO_PAYMENTS_API_KEY');
     const dodoEnvironment = readEnvironmentValue(env, 'DODO_PAYMENTS_ENVIRONMENT');
     const productEnvironmentVariable = productEnvironmentKey(offerSlug);
     const productId = readEnvironmentValue(env, productEnvironmentVariable);
-    if (!apiKey || !PRODUCT_ID_PATTERN.test(productId)) {
+    if (!apiKey) {
       console.error('Checkout configuration is incomplete.', {
         offerSlug,
-        hasApiKey: Boolean(apiKey),
+        missingBinding: 'DODO_PAYMENTS_API_KEY',
+      });
+      throw new RequestError('Checkout is not configured yet.', 503, 'configuration_credentials');
+    }
+    if (!PRODUCT_ID_PATTERN.test(productId)) {
+      console.error('Checkout configuration is incomplete.', {
+        offerSlug,
         productEnvironmentVariable,
         hasProductId: Boolean(productId),
-        productIdValid: PRODUCT_ID_PATTERN.test(productId),
       });
-      throw new RequestError('Checkout is not configured yet.', 503);
+      throw new RequestError('Checkout is not configured yet.', 503, 'configuration_product');
     }
 
     const { apiBaseUrl, checkoutMode } = parseEnvironment(dodoEnvironment);
@@ -298,7 +304,9 @@ export async function onRequestPost(context: PagesContext): Promise<Response> {
            WHERE id = ?`
         )
           .bind(
-            error instanceof RequestError ? `http_${error.status}` : 'provider_error',
+            error instanceof RequestError
+              ? (error.code ?? `http_${error.status}`)
+              : 'provider_error',
             new Date().toISOString(),
             leadId
           )
@@ -309,7 +317,10 @@ export async function onRequestPost(context: PagesContext): Promise<Response> {
     }
 
     if (error instanceof RequestError) {
-      return json({ error: error.message }, error.status);
+      return json(
+        { error: error.message, code: error.code ?? `http_${error.status}` },
+        error.status
+      );
     }
 
     console.error('Checkout request failed.', { leadId, offerSlug });
