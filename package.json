@@ -1,13 +1,14 @@
 {
-  "name": "maestro-offers",
-  "description": "Reusable, conversion-focused landing pages for Maestro low-ticket offers.",
+  "name": "owned-funnel-builder",
+  "description": "An agent-ready, conversion-focused funnel builder you own forever.",
   "type": "module",
   "version": "0.1.0",
   "scripts": {
     "dev": "astro dev",
+    "editor": "astro dev --config astro.config.editor.mjs --open /keystatic",
     "start": "astro dev",
     "build": "node scripts/clean-dist.mjs && astro build",
-    "deploy": "npm run build && wrangler pages deploy dist/client --project-name maestro-offers --branch main",
+    "deploy": "npm run build && wrangler pages deploy dist/client --project-name owned-funnel-builder --branch main",
     "preview": "astro preview",
     "astro": "astro",
     "lint": "eslint .",
@@ -19,11 +20,17 @@
     "check:kpis": "node .claude/scripts/check-kpis.mjs"
   },
   "dependencies": {
+    "@astrojs/node": "^11.0.3",
+    "@astrojs/react": "^6.0.2",
     "@astrojs/sitemap": "^3.7.1",
+    "@keystatic/astro": "^5.2.0",
+    "@keystatic/core": "^0.6.3",
     "@tailwindcss/typography": "^0.5.19",
     "@tailwindcss/vite": "^4.3.0",
     "astro": "^7.1.6",
     "dodopayments-checkout": "^1.9.5",
+    "react": "^19.1.1",
+    "react-dom": "^19.1.1",
     "tailwindcss": "^4.3.0"
   },
   "devDependencies": {
