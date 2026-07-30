@@ -1,6 +1,5 @@
 import { readFile } from 'node:fs/promises';
 import { join } from 'node:path';
-import { parse as parseYaml } from 'yaml';
 import { pathExists } from './project.js';
 
 const SECRET_FILES = ['.dev.vars', '.env', '.env.local', '.env.production'];

@@ -1,4 +1,4 @@
-import { readFile } from 'node:fs/promises';
+import { isIP } from 'node:net';
 import { join } from 'node:path';
 import { integrationStatus } from './services.js';
 import { listOffers } from './offers.js';
@@ -84,11 +84,21 @@ export async function verifyRelease(root: string, url?: string) {
   let live: { url: string; ok: boolean; status?: number; note: string } | null = null;
   if (url) {
     const parsed = new URL(url);
-    if (parsed.protocol !== 'https:') throw new Error('Release verification requires an https:// URL.');
+    assertPublicReleaseUrl(parsed);
     const controller = new AbortController();
     const timeout = setTimeout(() => controller.abort(), 15_000);
     try {
-      const response = await fetch(parsed, { signal: controller.signal, redirect: 'follow' });
+      let target = parsed;
+      let response: Response | undefined;
+      for (let redirects = 0; redirects <= 5; redirects += 1) {
+        response = await fetch(target, { signal: controller.signal, redirect: 'manual' });
+        if (![301, 302, 303, 307, 308].includes(response.status)) break;
+        const location = response.headers.get('location');
+        if (!location) break;
+        target = new URL(location, target);
+        assertPublicReleaseUrl(target);
+      }
+      if (!response) throw new Error('The public URL did not return a response.');
       const body = (await response.text()).slice(0, 250_000);
       live = {
         url: parsed.toString(),
@@ -112,4 +122,37 @@ export async function verifyRelease(root: string, url?: string) {
       'A human or browser-capable agent must visually inspect the landing page, checkout, bump, upsells, and completion page.',
     ],
   };
+}
+
+function assertPublicReleaseUrl(url: URL): void {
+  if (url.protocol !== 'https:' || url.username || url.password) {
+    throw new Error('Release verification requires a public https:// URL without embedded credentials.');
+  }
+  const hostname = url.hostname.toLowerCase().replace(/^\[|\]$/g, '');
+  if (
+    hostname === 'localhost' ||
+    hostname.endsWith('.localhost') ||
+    hostname.endsWith('.local') ||
+    hostname.endsWith('.internal')
+  ) {
+    throw new Error('Release verification only connects to a public website.');
+  }
+  if (isIP(hostname) === 4) {
+    const octets = hostname.split('.').map(Number);
+    const [first = 0, second = 0] = octets;
+    if (
+      first === 0 ||
+      first === 10 ||
+      first === 127 ||
+      (first === 169 && second === 254) ||
+      (first === 172 && second >= 16 && second <= 31) ||
+      (first === 192 && second === 168) ||
+      first >= 224
+    ) {
+      throw new Error('Release verification only connects to a public website.');
+    }
+  }
+  if (isIP(hostname) === 6 && /^(?:::|::1$|f[cd]|fe[89ab])/i.test(hostname)) {
+    throw new Error('Release verification only connects to a public website.');
+  }
 }

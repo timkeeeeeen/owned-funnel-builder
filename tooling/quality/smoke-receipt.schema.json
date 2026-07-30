@@ -1,0 +1,83 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://owned-funnel.invalid/schemas/smoke-receipt.schema.json",
+  "title": "Browser quality receipt",
+  "type": "object",
+  "required": [
+    "schemaVersion",
+    "toolVersion",
+    "createdAt",
+    "buildFingerprint",
+    "configFingerprint",
+    "routes",
+    "passed"
+  ],
+  "properties": {
+    "schemaVersion": { "const": "1.0.0" },
+    "toolVersion": { "const": "1.0.0" },
+    "createdAt": { "type": "string", "format": "date-time" },
+    "buildFingerprint": { "type": "string", "pattern": "^[a-f0-9]{64}$" },
+    "configFingerprint": { "type": "string", "pattern": "^[a-f0-9]{64}$" },
+    "routes": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "route",
+          "profile",
+          "title",
+          "horizontalOverflow",
+          "pageErrors",
+          "consoleErrors",
+          "resourceErrors",
+          "accessibilityViolations",
+          "passed"
+        ],
+        "properties": {
+          "route": { "type": "string", "pattern": "^/" },
+          "profile": { "enum": ["desktop", "tablet", "mobile"] },
+          "title": { "type": "string" },
+          "horizontalOverflow": { "type": "number", "minimum": 0 },
+          "pageErrors": { "type": "array", "items": { "type": "string" } },
+          "consoleErrors": { "type": "array", "items": { "type": "string" } },
+          "resourceErrors": { "type": "array", "items": { "type": "string" } },
+          "accessibilityViolations": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": ["id", "impact", "description", "nodes"],
+              "properties": {
+                "id": { "type": "string" },
+                "impact": { "type": ["string", "null"] },
+                "description": { "type": "string" },
+                "nodes": { "type": "integer", "minimum": 1 }
+              }
+            }
+          },
+          "primaryCta": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["kind", "selector", "found", "passed", "errors"],
+            "properties": {
+              "kind": { "enum": ["internal", "external", "checkout"] },
+              "selector": { "type": "string" },
+              "found": { "type": "integer", "minimum": 0 },
+              "label": { "type": "string" },
+              "destination": { "type": "string" },
+              "keyboardFocusVisible": { "type": "boolean" },
+              "activated": { "type": "boolean" },
+              "readySelector": { "type": "string" },
+              "passed": { "type": "boolean" },
+              "errors": { "type": "array", "items": { "type": "string" } }
+            }
+          },
+          "passed": { "type": "boolean" }
+        }
+      }
+    },
+    "passed": { "type": "boolean" }
+  }
+}

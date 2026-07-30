@@ -1,0 +1,52 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://owned-funnel.invalid/schemas/quality-config.schema.json",
+  "title": "Funnel quality configuration",
+  "type": "object",
+  "additionalProperties": false,
+  "properties": {
+    "$schema": { "type": "string" },
+    "distDirectory": { "type": "string", "minLength": 1 },
+    "evidenceDirectory": { "type": "string", "minLength": 1 },
+    "excludeRoutes": { "type": "array", "items": { "type": "string" }, "uniqueItems": true },
+    "maxFullPageHeight": { "type": "integer", "minimum": 1 },
+    "maxImageBytes": { "type": "integer", "minimum": 1 },
+    "routes": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["route"],
+        "properties": {
+          "route": { "type": "string", "pattern": "^/" },
+          "name": { "type": "string" },
+          "profiles": {
+            "type": "array",
+            "items": { "enum": ["desktop", "tablet", "mobile"] },
+            "uniqueItems": true
+          },
+          "captures": {
+            "type": "array",
+            "items": { "enum": ["first-fold", "full-page"] },
+            "uniqueItems": true
+          },
+          "ignoreResourcePatterns": { "type": "array", "items": { "type": "string" } },
+          "primaryCta": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["kind"],
+            "properties": {
+              "kind": { "enum": ["internal", "external", "checkout"] },
+              "selector": { "type": "string" },
+              "expectedDestination": { "type": "string" },
+              "allowedOrigins": { "type": "array", "items": { "type": "string", "format": "uri" } },
+              "activate": { "type": "boolean" },
+              "readySelector": { "type": "string" }
+            }
+          }
+        }
+      }
+    }
+  }
+}
