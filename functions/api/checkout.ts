@@ -1,25 +1,14 @@
-interface D1RunResult {
-  success: boolean;
-}
-
-interface D1PreparedStatement {
-  bind(...values: Array<string | number | null>): D1PreparedStatement;
-  run(): Promise<D1RunResult>;
-}
-
-interface D1Database {
-  prepare(query: string): D1PreparedStatement;
-}
-
-interface Environment {
-  LEADS?: D1Database;
-  [key: string]: unknown;
-}
-
-interface PagesContext {
-  request: Request;
-  env: Environment;
-}
+import { getProductId, PRODUCT_KEYS } from '../_lib/products';
+import {
+  cleanString,
+  getDodoConfig,
+  hashFlowToken,
+  json,
+  randomFlowToken,
+  readEnvironmentValue,
+  RequestError,
+  type PagesContext,
+} from '../_lib/runtime';
 
 interface CheckoutRequest {
   email?: unknown;
@@ -29,6 +18,7 @@ interface CheckoutRequest {
   website?: unknown;
   attribution?: unknown;
   referrer?: unknown;
+  bumpAccepted?: unknown;
 }
 
 interface DodoCheckoutResponse {
@@ -36,11 +26,6 @@ interface DodoCheckoutResponse {
   session_id?: unknown;
 }
 
-const JSON_HEADERS = {
-  'Cache-Control': 'no-store',
-  'Content-Type': 'application/json; charset=utf-8',
-  'X-Content-Type-Options': 'nosniff',
-};
 const MAX_BODY_BYTES = 16 * 1024;
 const DODO_TIMEOUT_MS = 15_000;
 const OFFER_SLUG_PATTERN = /^[a-z][a-z0-9]*(?:-[a-z0-9]+)*$/;
@@ -58,45 +43,8 @@ const ATTRIBUTION_KEYS = new Set([
   'msclkid',
 ]);
 
-class RequestError extends Error {
-  constructor(
-    message: string,
-    readonly status: number,
-    readonly code?: string
-  ) {
-    super(message);
-  }
-}
-
-function json(payload: Record<string, unknown>, status = 200): Response {
-  return new Response(JSON.stringify(payload), { status, headers: JSON_HEADERS });
-}
-
-function cleanString(value: unknown, maximumLength: number): string {
-  return typeof value === 'string' ? value.trim().slice(0, maximumLength) : '';
-}
-
-function readEnvironmentValue(env: Environment, key: string): string {
-  return cleanString(env[key], 4096);
-}
-
 function productEnvironmentKey(offerSlug: string): string {
   return `DODO_PRODUCT_${offerSlug.toUpperCase().replaceAll('-', '_')}`;
-}
-
-function parseEnvironment(value: string): {
-  apiBaseUrl: string;
-  checkoutMode: 'test' | 'live';
-} {
-  if (['test', 'test_mode', 'sandbox'].includes(value)) {
-    return { apiBaseUrl: 'https://test.dodopayments.com', checkoutMode: 'test' };
-  }
-
-  if (['live', 'live_mode', 'production'].includes(value)) {
-    return { apiBaseUrl: 'https://live.dodopayments.com', checkoutMode: 'live' };
-  }
-
-  throw new RequestError('Checkout is not configured yet.', 503, 'configuration_environment');
 }
 
 function sanitizeAttribution(value: unknown): Record<string, string> {
@@ -166,6 +114,8 @@ export async function onRequestPost(context: PagesContext): Promise<Response> {
     const honeypot = cleanString(input.website, 200);
     const referrer = cleanString(input.referrer, 1024);
     const attribution = sanitizeAttribution(input.attribution);
+    const bumpAccepted = input.bumpAccepted === true;
+    const hasFunnel = offerSlug === 'vibe-code-anything';
 
     if (honeypot) return json({ error: 'Checkout request is invalid.' }, 400);
     if (!EMAIL_PATTERN.test(email) || email.length > 254) {
@@ -185,17 +135,9 @@ export async function onRequestPost(context: PagesContext): Promise<Response> {
       throw new RequestError('Checkout is not configured yet.', 503, 'configuration_storage');
     }
 
-    const apiKey = readEnvironmentValue(env, 'DODO_PAYMENTS_API_KEY');
-    const dodoEnvironment = readEnvironmentValue(env, 'DODO_PAYMENTS_ENVIRONMENT');
+    const { apiKey, apiBaseUrl, checkoutMode } = getDodoConfig(env);
     const productEnvironmentVariable = productEnvironmentKey(offerSlug);
     const productId = readEnvironmentValue(env, productEnvironmentVariable);
-    if (!apiKey) {
-      console.error('Checkout configuration is incomplete.', {
-        offerSlug,
-        missingBinding: 'DODO_PAYMENTS_API_KEY',
-      });
-      throw new RequestError('Checkout is not configured yet.', 503, 'configuration_credentials');
-    }
     if (!PRODUCT_ID_PATTERN.test(productId)) {
       console.error('Checkout configuration is incomplete.', {
         offerSlug,
@@ -205,8 +147,10 @@ export async function onRequestPost(context: PagesContext): Promise<Response> {
       throw new RequestError('Checkout is not configured yet.', 503, 'configuration_product');
     }
 
-    const { apiBaseUrl, checkoutMode } = parseEnvironment(dodoEnvironment);
     leadId = crypto.randomUUID();
+    const funnelId = crypto.randomUUID();
+    const flowToken = randomFlowToken();
+    const flowTokenHash = await hashFlowToken(flowToken);
     const now = new Date().toISOString();
     const country = cleanString(
       (request as Request & { cf?: { country?: unknown } }).cf?.country,
@@ -225,9 +169,10 @@ export async function onRequestPost(context: PagesContext): Promise<Response> {
         referrer,
         country,
         status,
+        bump_selected,
         created_at,
         updated_at
-      ) VALUES (?, ?, ?, ?, 1, ?, ?, ?, ?, 'captured', ?, ?)`
+      ) VALUES (?, ?, ?, ?, 1, ?, ?, ?, ?, 'captured', ?, ?, ?)`
     )
       .bind(
         leadId,
@@ -238,6 +183,7 @@ export async function onRequestPost(context: PagesContext): Promise<Response> {
         JSON.stringify(attribution),
         referrer || null,
         country || null,
+        bumpAccepted ? 1 : 0,
         now,
         now
       )
@@ -247,10 +193,32 @@ export async function onRequestPost(context: PagesContext): Promise<Response> {
       throw new Error('Lead capture failed.');
     }
 
+    if (hasFunnel) {
+      const funnelResult = await env.LEADS.prepare(
+        `INSERT INTO checkout_funnels (id, lead_id, token_hash, created_at, updated_at)
+         VALUES (?, ?, ?, ?, ?)`
+      )
+        .bind(funnelId, leadId, flowTokenHash, now, now)
+        .run();
+      if (!funnelResult.success) throw new Error('Checkout funnel initialization failed.');
+    }
+
     const configuredReturnUrl = readEnvironmentValue(env, 'DODO_PAYMENTS_RETURN_URL');
-    const returnUrl = new URL(configuredReturnUrl || '/checkout/success/', requestUrl.origin);
+    const returnUrl = new URL(
+      hasFunnel ? '/checkout/upsell/blueprints/' : configuredReturnUrl || '/checkout/success/',
+      requestUrl.origin
+    );
     returnUrl.searchParams.set('offer', offerSlug);
-    returnUrl.searchParams.set('lead', leadId);
+    if (hasFunnel) returnUrl.searchParams.set('flow', flowToken);
+    else returnUrl.searchParams.set('lead', leadId);
+
+    const productCart = [{ product_id: productId, quantity: 1 }];
+    if (hasFunnel && bumpAccepted) {
+      productCart.push({
+        product_id: await getProductId(env.LEADS, PRODUCT_KEYS.promptPack),
+        quantity: 1,
+      });
+    }
 
     const providerResponse = await fetch(`${apiBaseUrl}/checkouts`, {
       method: 'POST',
@@ -259,7 +227,7 @@ export async function onRequestPost(context: PagesContext): Promise<Response> {
         'Content-Type': 'application/json',
       },
       body: JSON.stringify({
-        product_cart: [{ product_id: productId, quantity: 1 }],
+        product_cart: productCart,
         customer: { email },
         return_url: returnUrl.toString(),
         customization: {
@@ -301,6 +269,7 @@ export async function onRequestPost(context: PagesContext): Promise<Response> {
           offer_slug: offerSlug,
           lead_id: leadId,
           placement,
+          bump_selected: bumpAccepted ? 'true' : 'false',
           source: 'maestro-offers',
         },
       }),

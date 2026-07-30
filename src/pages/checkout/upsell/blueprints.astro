@@ -1,0 +1,24 @@
+---
+import UpsellPage from '@/components/offers/UpsellPage.astro';
+---
+
+<UpsellPage
+  offerKey="blueprints"
+  step="Upgrade 1 of 2"
+  eyebrow="Five complete starting points"
+  title="Want five apps"
+  accent="already mapped for Maestro?"
+  description="Skip the product-planning blank page too. Each blueprint tells your coding agent exactly what to build, where it belongs, and how to prove it works."
+  price="$39"
+  value="$99"
+  items={[
+    'Client portal blueprint',
+    'Launch tracker blueprint',
+    'AI research workspace',
+    'Approval and operations app',
+    'Vertical SaaS starter',
+    'PRD, schema, screens, prompts, and gates',
+  ]}
+  acceptLabel="Yes — add all five blueprints for $39"
+  declineLabel="No thanks — I’ll start with my own idea"
+/>

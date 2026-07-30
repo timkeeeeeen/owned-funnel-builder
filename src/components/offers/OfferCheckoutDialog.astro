@@ -75,6 +75,40 @@ const frameId = `dodo-inline-checkout-${offer.slug}`;
           class="mt-2 min-h-16 w-full rounded-xl border-2 border-border bg-background px-5 text-lg shadow-sm outline-none transition-colors placeholder:text-muted-foreground/60 focus:border-brand focus:ring-4 focus:ring-brand/15"
         />
 
+        {
+          checkout.bump && (
+            <label class="mt-5 flex cursor-pointer gap-4 rounded-xl border-2 border-highlight-foreground/30 bg-highlight p-5 text-left shadow-sm transition-shadow hover:shadow-md">
+              <input
+                name="bumpAccepted"
+                type="checkbox"
+                class="mt-1 size-6 shrink-0 accent-current"
+                data-checkout-bump
+              />
+              <span class="min-w-0">
+                <span class="flex flex-wrap items-center justify-between gap-2">
+                  <span class="text-lg font-bold text-highlight-foreground">
+                    Yes — add it for {checkout.bump.price}
+                  </span>
+                  <span class="rounded-full bg-highlight-foreground px-3 py-1 font-mono text-xs font-bold uppercase text-highlight">
+                    Order bump
+                  </span>
+                </span>
+                <span class="mt-2 block font-semibold text-highlight-foreground">
+                  {checkout.bump.title}
+                </span>
+                <span class="mt-1 block text-sm leading-relaxed text-highlight-foreground/75">
+                  {checkout.bump.description}
+                </span>
+                <span class="mt-3 flex flex-wrap gap-x-4 gap-y-1 text-sm font-medium text-highlight-foreground/80">
+                  {checkout.bump.items.map((item) => (
+                    <span>✓ {item}</span>
+                  ))}
+                </span>
+              </span>
+            </label>
+          )
+        }
+
         <div class="absolute -left-[10000px]" aria-hidden="true">
           <label for={`${dialogId}-website`}>Website</label>
           <input
@@ -139,6 +173,14 @@ const frameId = `dodo-inline-checkout-${offer.slug}`;
               <dt class="text-muted-foreground">Subtotal</dt>
               <dd data-checkout-subtotal class="font-semibold">{offer.currentPrice} USD</dd>
             </div>
+            {
+              checkout.bump && (
+                <div class="hidden items-center justify-between gap-4" data-checkout-bump-summary>
+                  <dt class="text-muted-foreground">Prompt Pack</dt>
+                  <dd class="font-semibold">{checkout.bump.price} USD</dd>
+                </div>
+              )
+            }
             <div class="flex items-center justify-between gap-4">
               <dt class="text-muted-foreground">Tax</dt>
               <dd data-checkout-tax class="font-semibold">Calculated at checkout</dd>
@@ -233,6 +275,8 @@ const frameId = `dodo-inline-checkout-${offer.slug}`;
     const paymentStep = checkoutDialog.querySelector<HTMLElement>('[data-checkout-payment-step]');
     const form = checkoutDialog.querySelector<HTMLFormElement>('[data-checkout-form]');
     const emailInput = checkoutDialog.querySelector<HTMLInputElement>('input[name="email"]');
+    const bumpInput = checkoutDialog.querySelector<HTMLInputElement>('[data-checkout-bump]');
+    const bumpSummary = checkoutDialog.querySelector<HTMLElement>('[data-checkout-bump-summary]');
     const submitButton = checkoutDialog.querySelector<HTMLButtonElement>('[data-checkout-submit]');
     const submitLabel = checkoutDialog.querySelector<HTMLElement>('[data-checkout-submit-label]');
     const emailError = checkoutDialog.querySelector<HTMLElement>('[data-checkout-email-error]');
@@ -246,6 +290,13 @@ const frameId = `dodo-inline-checkout-${offer.slug}`;
     const total = checkoutDialog.querySelector<HTMLElement>('[data-checkout-total]');
     let placement = 'unknown';
     let initializedMode: CheckoutMode | null = null;
+
+    const updateBumpSummary = () => {
+      bumpSummary?.classList.toggle('hidden', !bumpInput?.checked);
+      bumpSummary?.classList.toggle('flex', Boolean(bumpInput?.checked));
+    };
+
+    bumpInput?.addEventListener('change', updateBumpSummary);
 
     const setError = (element: HTMLElement | null, message: string) => {
       if (!element) return;
@@ -376,6 +427,7 @@ const frameId = `dodo-inline-checkout-${offer.slug}`;
             website,
             attribution,
             referrer: document.referrer,
+            bumpAccepted: bumpInput?.checked === true,
           }),
         });
         const result = (await response.json()) as {

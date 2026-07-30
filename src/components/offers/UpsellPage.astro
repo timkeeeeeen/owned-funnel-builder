@@ -1,0 +1,254 @@
+---
+import OfferLayout from '@/layouts/OfferLayout.astro';
+
+interface Props {
+  offerKey: 'blueprints' | 'launch';
+  step: string;
+  eyebrow: string;
+  title: string;
+  accent: string;
+  description: string;
+  price: string;
+  value: string;
+  items: string[];
+  acceptLabel: string;
+  declineLabel: string;
+}
+
+const {
+  offerKey,
+  step,
+  eyebrow,
+  title,
+  accent,
+  description,
+  price,
+  value,
+  items,
+  acceptLabel,
+  declineLabel,
+} = Astro.props;
+---
+
+<OfferLayout title={`${title} — Maestro`} description={description} noindex>
+  <section
+    class="offer-grid grid min-h-screen place-items-center px-4 py-10 sm:px-6 sm:py-16"
+    data-upsell-page
+    data-offer-key={offerKey}
+  >
+    <div class="mx-auto w-full max-w-5xl">
+      <div class="text-center">
+        <p class="font-mono text-sm font-bold uppercase tracking-[0.18em] text-brand">
+          {step} · One-click upgrade
+        </p>
+        <h1
+          class="mx-auto mt-5 max-w-4xl text-balance text-4xl font-bold leading-tight tracking-tight sm:text-6xl lg:text-7xl"
+        >
+          {title}<br /><mark>{accent}</mark>
+        </h1>
+        <p
+          class="mx-auto mt-6 max-w-3xl text-pretty text-lg leading-relaxed text-muted-foreground sm:text-xl"
+        >
+          {description}
+        </p>
+      </div>
+
+      <article
+        class="mx-auto mt-10 max-w-4xl rounded-xl border border-border bg-card p-5 shadow-lg sm:p-9"
+      >
+        <div class="grid items-start gap-8 md:grid-cols-[1fr_auto]">
+          <div>
+            <p class="font-mono text-sm font-bold uppercase tracking-[0.16em] text-brand">
+              {eyebrow}
+            </p>
+            <ul class="mt-6 grid gap-4 sm:grid-cols-2">
+              {
+                items.map((item) => (
+                  <li class="flex gap-3 rounded-xl border border-border bg-muted p-4 font-semibold">
+                    <span class="font-bold text-success" aria-hidden="true">
+                      ✓
+                    </span>
+                    <span>{item}</span>
+                  </li>
+                ))
+              }
+            </ul>
+          </div>
+
+          <div
+            class="rounded-xl border border-highlight-foreground/20 bg-highlight p-6 text-center text-highlight-foreground md:min-w-52"
+          >
+            <p class="font-mono text-xs font-bold uppercase tracking-[0.14em]">Add it now</p>
+            <p class="mt-2 text-6xl font-bold tracking-tight">{price}</p>
+            <p class="mt-2 text-sm font-semibold opacity-70">Normally {value}</p>
+          </div>
+        </div>
+
+        <div class="mx-auto mt-8 max-w-2xl">
+          <div
+            class="rounded-xl border border-brand/25 bg-brand/10 px-4 py-3 text-center text-sm font-semibold text-brand"
+          >
+            When supported, Dodo securely reuses your payment method. If not, you’ll get a short,
+            secure checkout—never a dead end.
+          </div>
+
+          <button
+            type="button"
+            data-upsell-accept
+            class="offer-cta mt-5 inline-flex min-h-20 w-full items-center justify-center rounded-xl bg-brand px-6 py-5 text-center text-xl font-bold text-brand-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-wait disabled:opacity-70 sm:text-2xl"
+          >
+            {acceptLabel}<span class="ml-3" aria-hidden="true">→</span>
+          </button>
+          <button
+            type="button"
+            data-upsell-decline
+            class="mt-5 min-h-12 w-full px-4 py-3 text-sm font-semibold text-muted-foreground underline underline-offset-4 hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+          >
+            {declineLabel}
+          </button>
+
+          <p
+            data-upsell-status
+            class="mt-4 min-h-6 text-center text-sm font-medium text-muted-foreground"
+            role="status"
+            aria-live="polite"
+          >
+            Verifying your original purchase…
+          </p>
+          <p
+            data-upsell-error
+            class="mt-3 hidden rounded-xl border border-destructive/30 bg-destructive/10 px-4 py-3 text-center text-sm font-medium text-destructive"
+            role="alert"
+          >
+          </p>
+        </div>
+      </article>
+
+      <p class="mt-6 text-center text-sm text-muted-foreground">
+        One-time purchase · no subscription · your original order is already complete
+      </p>
+    </div>
+  </section>
+</OfferLayout>
+
+<script>
+  const page = document.querySelector<HTMLElement>('[data-upsell-page]');
+  if (page) {
+    const offer = page.dataset.offerKey === 'launch' ? 'launch' : 'blueprints';
+    const flow = new URLSearchParams(window.location.search).get('flow') ?? '';
+    const accept = page.querySelector<HTMLButtonElement>('[data-upsell-accept]');
+    const decline = page.querySelector<HTMLButtonElement>('[data-upsell-decline]');
+    const status = page.querySelector<HTMLElement>('[data-upsell-status]');
+    const error = page.querySelector<HTMLElement>('[data-upsell-error]');
+    let polling = false;
+
+    const setBusy = (busy: boolean) => {
+      if (accept) accept.disabled = busy;
+      if (decline) decline.disabled = busy;
+    };
+
+    const setError = (message: string) => {
+      if (!error) return;
+      error.textContent = message;
+      error.classList.toggle('hidden', !message);
+    };
+
+    const withFlow = (path: string) => {
+      const url = new URL(path, window.location.origin);
+      url.searchParams.set('flow', flow);
+      return url.toString();
+    };
+
+    const fetchStatus = async () => {
+      const response = await fetch(`/api/funnel/status?flow=${encodeURIComponent(flow)}`);
+      const result = (await response.json()) as {
+        baseStatus?: string;
+        blueprintsStatus?: string;
+        launchStatus?: string;
+        nextPath?: string | null;
+        error?: string;
+      };
+      if (!response.ok) throw new Error(result.error ?? 'Unable to verify your purchase.');
+      return result;
+    };
+
+    const waitForReady = async () => {
+      if (polling) return;
+      polling = true;
+      setBusy(true);
+      setError('');
+      try {
+        for (let attempt = 0; attempt < 20; attempt += 1) {
+          const result = await fetchStatus();
+          const current = offer === 'launch' ? result.launchStatus : result.blueprintsStatus;
+          if (result.baseStatus === 'failed')
+            throw new Error('The original payment did not complete.');
+          if (result.baseStatus !== 'succeeded') {
+            if (status) status.textContent = 'Confirming your original payment…';
+          } else if (current === 'accepted' || current === 'declined') {
+            window.location.assign(withFlow(result.nextPath ?? '/checkout/complete/'));
+            return;
+          } else if (current === 'charging') {
+            if (status) status.textContent = 'Adding this to your purchase…';
+          } else {
+            if (status) status.textContent = 'Verified. Choose yes or continue without it.';
+            setBusy(false);
+            return;
+          }
+          await new Promise((resolve) => window.setTimeout(resolve, 900));
+        }
+        throw new Error('Verification is taking longer than expected. Try again.');
+      } catch (caught) {
+        setError(caught instanceof Error ? caught.message : 'Unable to verify your purchase.');
+        setBusy(false);
+      } finally {
+        polling = false;
+      }
+    };
+
+    const decide = async (decision: 'accept' | 'decline') => {
+      setBusy(true);
+      setError('');
+      if (status) {
+        status.textContent = decision === 'accept' ? 'Adding it with one click…' : 'Continuing…';
+      }
+      try {
+        const response = await fetch('/api/funnel/decision', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ flow, offer, decision }),
+        });
+        const result = (await response.json()) as {
+          state?: string;
+          nextUrl?: string;
+          checkoutUrl?: string;
+          error?: string;
+        };
+        if (!response.ok) throw new Error(result.error ?? 'Unable to process this offer.');
+        if (result.state === 'redirect' && result.checkoutUrl) {
+          window.location.assign(result.checkoutUrl);
+          return;
+        }
+        if (decision === 'decline' && result.nextUrl) {
+          window.location.assign(result.nextUrl);
+          return;
+        }
+        setBusy(false);
+        await waitForReady();
+      } catch (caught) {
+        setError(caught instanceof Error ? caught.message : 'Unable to process this offer.');
+        setBusy(false);
+      }
+    };
+
+    accept?.addEventListener('click', () => void decide('accept'));
+    decline?.addEventListener('click', () => void decide('decline'));
+
+    if (!/^[A-Za-z0-9_-]{43}$/.test(flow)) {
+      setError('This purchase link is invalid. Return to the offer page and try again.');
+      setBusy(true);
+    } else {
+      void waitForReady();
+    }
+  }
+</script>

@@ -97,6 +97,12 @@ export interface OfferCheckoutSection {
   buttonLabel: string;
   consentCopy: string;
   consentVersion: string;
+  bump?: {
+    title: string;
+    description: string;
+    price: string;
+    items: string[];
+  };
 }
 
 export interface Offer {
@@ -177,6 +183,17 @@ const featuredOffers: Offer[] = [
       consentCopy:
         'By continuing, you agree to receive product access and occasional emails about this offer, including a reminder if you leave checkout unfinished. Unsubscribe anytime.',
       consentVersion: 'v1-2026-07-30',
+      bump: {
+        title: 'Add the Vibe Coding Prompt Pack',
+        description:
+          'Get 25 copy/paste prompts for planning, building, debugging, and proving your first production app.',
+        price: '$19',
+        items: [
+          'Start from a proven brief',
+          'Ask for safer changes',
+          'Finish with proof, not vibes',
+        ],
+      },
     },
     demoUrl: 'https://maestro-template.pages.dev/',
     currentPrice: '$29',

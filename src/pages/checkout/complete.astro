@@ -1,0 +1,111 @@
+---
+import OfferLayout from '@/layouts/OfferLayout.astro';
+---
+
+<OfferLayout
+  title="Purchase complete — Maestro Builder Bundle"
+  description="Your Maestro purchase is complete."
+  noindex
+>
+  <section
+    class="offer-grid grid min-h-screen place-items-center px-6 py-20 text-center"
+    data-complete-page
+  >
+    <div
+      class="mx-auto w-full max-w-3xl rounded-xl border border-border bg-card p-8 shadow-lg sm:p-14"
+    >
+      <span
+        class="mx-auto grid size-16 place-items-center rounded-full bg-success text-3xl font-bold text-background"
+        aria-hidden="true"
+      >
+        ✓
+      </span>
+      <p class="mt-7 font-mono text-sm font-bold uppercase tracking-[0.18em] text-brand">
+        Purchase complete
+      </p>
+      <h1 class="mt-4 text-balance text-4xl font-bold leading-tight tracking-tight sm:text-6xl">
+        You’re in. Everything is attached to your email.
+      </h1>
+      <p class="mx-auto mt-6 max-w-2xl text-lg leading-relaxed text-muted-foreground">
+        Dodo will send the receipts to the email used at checkout. Your Maestro access instructions
+        will follow there too.
+      </p>
+
+      <div class="mx-auto mt-8 max-w-xl rounded-xl border border-border bg-muted p-5 text-left">
+        <p class="font-mono text-xs font-bold uppercase tracking-[0.14em] text-brand">Your order</p>
+        <ul class="mt-4 space-y-3 font-semibold">
+          <li class="flex gap-3"><span class="text-success">✓</span> Maestro SaaS UI Template</li>
+          <li class="hidden gap-3" data-complete-bump>
+            <span class="text-success">✓</span> Vibe Coding Prompt Pack
+          </li>
+          <li class="hidden gap-3" data-complete-blueprints>
+            <span class="text-success">✓</span> Five-App Blueprint Pack
+          </li>
+          <li class="hidden gap-3" data-complete-launch>
+            <span class="text-success">✓</span> Production Launch Pack
+          </li>
+        </ul>
+      </div>
+
+      <p
+        class="mt-5 text-sm font-medium text-muted-foreground"
+        data-complete-status
+        role="status"
+        aria-live="polite"
+      >
+        Verifying the final order…
+      </p>
+      <p class="mt-5 text-sm text-muted-foreground">
+        Nothing after a few minutes? Email <a
+          class="font-semibold text-brand underline"
+          href="mailto:tim@keen.digital">tim@keen.digital</a
+        > from the address you used to buy.
+      </p>
+      <a
+        href="/vibe-code-anything/"
+        class="mt-9 inline-flex min-h-14 items-center justify-center rounded-xl border border-border bg-background px-6 py-4 font-bold shadow-sm hover:shadow-lg focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+      >
+        Back to Vibe Code Anything
+      </a>
+    </div>
+  </section>
+</OfferLayout>
+
+<script>
+  const completePage = document.querySelector<HTMLElement>('[data-complete-page]');
+  if (completePage) {
+    const flow = new URLSearchParams(window.location.search).get('flow') ?? '';
+    const status = completePage.querySelector<HTMLElement>('[data-complete-status]');
+    const bump = completePage.querySelector<HTMLElement>('[data-complete-bump]');
+    const blueprints = completePage.querySelector<HTMLElement>('[data-complete-blueprints]');
+    const launch = completePage.querySelector<HTMLElement>('[data-complete-launch]');
+
+    if (/^[A-Za-z0-9_-]{43}$/.test(flow)) {
+      fetch(`/api/funnel/status?flow=${encodeURIComponent(flow)}`)
+        .then((response) => response.json())
+        .then(
+          (result: {
+            bumpAccepted?: boolean;
+            blueprintsStatus?: string;
+            launchStatus?: string;
+            error?: string;
+          }) => {
+            if (result.error) throw new Error(result.error);
+            bump?.classList.toggle('hidden', result.bumpAccepted !== true);
+            bump?.classList.toggle('flex', result.bumpAccepted === true);
+            blueprints?.classList.toggle('hidden', result.blueprintsStatus !== 'accepted');
+            blueprints?.classList.toggle('flex', result.blueprintsStatus === 'accepted');
+            launch?.classList.toggle('hidden', result.launchStatus !== 'accepted');
+            launch?.classList.toggle('flex', result.launchStatus === 'accepted');
+            if (status) status.textContent = 'Order verified.';
+          }
+        )
+        .catch(() => {
+          if (status)
+            status.textContent = 'Your payment is complete. Receipt delivery may take a moment.';
+        });
+    } else if (status) {
+      status.textContent = 'Your payment is complete.';
+    }
+  }
+</script>
