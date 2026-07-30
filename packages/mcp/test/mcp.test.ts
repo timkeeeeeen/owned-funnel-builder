@@ -17,7 +17,21 @@ async function fixture(): Promise<string> {
   await writeFile(join(root, 'astro.config.mjs'), 'export default {};\n');
   await writeFile(
     join(root, 'content/offers/example.yaml'),
-    'slug: example\nheadline: Old words\ncheckout:\n  price: 29\n'
+    `slug: example
+headline: Old words
+withoutLabel: WITHOUT THIS
+withoutTitle: The slow way
+without: []
+withLabel: WITH THIS
+withTitle: The clear way
+with: []
+checkout:
+  enabled: false
+  price: 29
+  summaryDescription: Complete access
+  guaranteeLabel: 30-day guarantee
+  paymentTrustLabel: Secure payment
+`
   );
   return root;
 }
@@ -114,7 +128,15 @@ test('creates a complete unpublished funnel with safe defaults', async () => {
       upsells?: unknown[];
     };
     assert.equal(offer.published, false);
-    assert.equal((offer.checkout as { enabled: boolean }).enabled, false);
+    assert.equal(offer.withoutLabel, 'WITHOUT THIS');
+    assert.equal(offer.withoutTitle, 'The slow, frustrating way');
+    assert.equal(offer.withLabel, 'WITH THIS');
+    assert.equal(offer.withTitle, 'A clearer path to the result');
+    const checkout = offer.checkout as Record<string, unknown>;
+    assert.equal(checkout.enabled, false);
+    assert.equal(typeof checkout.summaryDescription, 'string');
+    assert.equal(checkout.guaranteeLabel, '30-day guarantee');
+    assert.equal(checkout.paymentTrustLabel, 'Secure payment');
     assert.ok(funnel.bump);
     assert.equal(funnel.upsells?.length, 2);
     await assert.rejects(

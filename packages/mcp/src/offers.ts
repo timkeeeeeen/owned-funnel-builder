@@ -247,12 +247,16 @@ function buildOfferDraft(input: CreateFunnelInput): Record<string, unknown> {
     painTitle: 'The result should not require weeks of setup.',
     painBody:
       'Most people lose momentum before the useful work starts. They collect advice, rebuild the basics, and make decisions with no clear sequence. This offer gives them a shorter path.',
+    withoutLabel: 'WITHOUT THIS',
+    withoutTitle: 'The slow, frustrating way',
     without: [
       'Start from a blank page',
       'Piece together disconnected advice',
       'Guess what comes next',
       'Spend time on work that does not change the outcome',
     ],
+    withLabel: 'WITH THIS',
+    withTitle: 'A clearer path to the result',
     with: [
       'Start from a proven structure',
       'Follow one clear sequence',
