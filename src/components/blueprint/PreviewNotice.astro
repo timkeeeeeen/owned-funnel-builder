@@ -1,0 +1,18 @@
+---
+import { blueprintProductContract } from '@/data/blueprint-offers';
+---
+
+<aside
+  class="border-b border-highlight-foreground/25 bg-highlight px-4 py-3 text-highlight-foreground sm:px-6"
+  aria-label="Private preview status"
+  data-acceptance-preview-notice
+>
+  <div class="mx-auto flex max-w-7xl items-start gap-3 text-sm leading-relaxed">
+    <span class="mt-1.5 size-2.5 shrink-0 rounded-full bg-highlight-foreground" aria-hidden="true"
+    ></span>
+    <p>
+      <strong>Private preview:</strong>{' '}
+      {blueprintProductContract.previewNotice}
+    </p>
+  </div>
+</aside>

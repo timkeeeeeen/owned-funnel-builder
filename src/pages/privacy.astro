@@ -1,5 +1,6 @@
 ---
 import OfferLayout from '@/layouts/OfferLayout.astro';
+import { blueprintProductContract } from '@/data/blueprint-offers';
 import { siteSettings } from '@/data/site';
 
 const title = `Privacy — ${siteSettings.siteName}`;
@@ -11,7 +12,7 @@ const description =
   <article class="mx-auto max-w-4xl px-6 py-20">
     <a class="font-semibold text-brand hover:underline" href="/">← Back to the offers</a>
     <h1 class="mt-8 text-5xl font-bold tracking-tight md:text-7xl">Privacy</h1>
-    <p class="mt-4 text-muted-foreground">Last updated July 30, 2026.</p>
+    <p class="mt-4 text-muted-foreground">Last updated July 31, 2026.</p>
 
     <div class="prose prose-lg mt-12 max-w-none dark:prose-invert">
       <h2>What this site collects</h2>
@@ -46,6 +47,21 @@ const description =
         card details. Dodo may also operate its configured abandoned-checkout recovery flow.
       </p>
 
+      <h2>Personalized AI products</h2>
+      <p>
+        When you request a personalized product such as an Authority Snapshot or CMO Game Plan, we
+        use the LinkedIn profile URL, email address, public profile and content evidence, and any
+        private business context you deliberately provide to create and save the result. The email
+        is used to deliver or recover access. Public campaign parameters and an opaque journey
+        identifier may be attached to the saved request so we can understand which page led to it.
+      </p>
+      <p>
+        Product generation is handled by Maestro and its configured AI and infrastructure providers.
+        The browser stores only an opaque, expiring session reference needed to resume the result;
+        email addresses are not placed in result URLs. Nothing is published to LinkedIn
+        automatically. Generated recommendations and drafts should be reviewed before use.
+      </p>
+
       <h2>Storage and retention</h2>
       <p>
         Checkout lead records are stored in a Cloudflare D1 database so we can attribute campaigns,
@@ -53,6 +69,7 @@ const description =
         We keep them only as long as reasonably needed for those purposes, legal obligations, fraud
         prevention, and accounting.
       </p>
+      <p>{blueprintProductContract.commercialTerms.retainedAccess}</p>
 
       <h2>Your choices</h2>
       <p>

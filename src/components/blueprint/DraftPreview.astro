@@ -1,0 +1,60 @@
+---
+import type { BlueprintAudienceCopy } from '@/data/blueprint-offers';
+
+interface Props {
+  audience: BlueprintAudienceCopy;
+  compact?: boolean;
+}
+
+const { audience, compact = false } = Astro.props;
+---
+
+<article
+  class="overflow-hidden rounded-xl border border-border bg-card text-card-foreground shadow-sm"
+  data-draft-preview
+  data-blueprint-draft
+>
+  <header
+    class="flex flex-wrap items-center justify-between gap-3 border-b border-border bg-muted p-5 sm:p-6"
+  >
+    <div>
+      <p
+        class="font-mono text-xs font-bold uppercase tracking-[0.14em] text-brand"
+        data-blueprint-draft-label
+      >
+        Synthetic draft 01
+      </p>
+      <h3 class="mt-2 text-xl font-semibold sm:text-2xl" data-blueprint-draft-title>
+        {audience.examplePostTitle}
+      </h3>
+    </div>
+    <span
+      class="rounded-full border border-highlight-foreground/25 bg-highlight px-3 py-2 text-sm font-bold text-highlight-foreground"
+      data-blueprint-draft-outcome
+    >
+      Strong starter
+    </span>
+  </header>
+  <div class="p-5 sm:p-6">
+    <div
+      class:list={[
+        'whitespace-pre-line leading-relaxed',
+        compact ? 'text-sm' : 'text-base sm:text-lg',
+      ]}
+      data-blueprint-draft-body
+    >
+      {audience.examplePostBody}
+    </div>
+    <aside
+      class="mt-7 rounded-xl border border-dashed border-border bg-muted p-5"
+      aria-label="Questions required before this draft is ready"
+    >
+      <p class="font-mono text-xs font-bold uppercase tracking-[0.14em] text-muted-foreground">
+        Source questions before “Ready”
+      </p>
+      <ul class="mt-3 space-y-2 text-sm leading-relaxed" data-blueprint-draft-questions>
+        {audience.exampleQuestions.map((question) => <li>• {question}</li>)}
+      </ul>
+    </aside>
+  </div>
+</article>

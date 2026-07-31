@@ -36,6 +36,7 @@
     "quality:capture": "tsx tooling/quality/cli.mts capture",
     "quality:verify": "tsx tooling/quality/cli.mts verify",
     "test:quality": "node --import tsx --test tests/quality/*.test.mts",
+    "test:blueprint": "node --import tsx --test tests/blueprint/*.test.mts",
     "test:functions": "node --import tsx --test tests/functions/*.test.mts",
     "mcp:build": "npm --prefix packages/mcp run build",
     "mcp:test": "npm --prefix packages/mcp test",
