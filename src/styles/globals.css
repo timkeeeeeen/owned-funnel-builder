@@ -126,7 +126,7 @@
 }
 
 /* Checkout stays deliberately light even when the offer page is dark. Dodo's
-   hosted frame is forced to the same mode when the session is created. */
+   embedded frame is forced to the same mode; Stripe opens its hosted checkout. */
 .checkout-light {
   --color-background: oklch(98.5% 0.006 255);
   --color-foreground: oklch(16% 0.018 265);

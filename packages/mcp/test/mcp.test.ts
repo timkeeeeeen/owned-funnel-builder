@@ -8,6 +8,7 @@ import { InMemoryTransport } from '@modelcontextprotocol/sdk/inMemory.js';
 import { createFunnel, listOffers, updateOffer } from '../src/offers.js';
 import { pathExists, redactOutput, safeProjectPath } from '../src/project.js';
 import { createServer } from '../src/server.js';
+import { publishPlan } from '../src/checks.js';
 import { integrationStatus } from '../src/services.js';
 
 async function fixture(): Promise<string> {
@@ -81,6 +82,48 @@ test('configuration status never returns secret values', async () => {
   }
 });
 
+test('configuration status and publish planning follow the selected Stripe provider', async () => {
+  const root = await fixture();
+  const previousProvider = process.env.PAYMENTS_PROVIDER;
+  delete process.env.PAYMENTS_PROVIDER;
+  try {
+    const secret = 'fixture-value-that-must-stay-private';
+    await writeFile(
+      join(root, '.dev.vars'),
+      `PAYMENTS_PROVIDER=stripe\nSTRIPE_SECRET_KEY=${secret}\nSTRIPE_PAYMENTS_ENVIRONMENT=test_mode\nSTRIPE_WEBHOOK_SECRET=${secret}\n`
+    );
+    await writeFile(
+      join(root, 'wrangler.jsonc'),
+      '{"name":"fixture","d1_databases":[{"binding":"DB"}]}\n'
+    );
+
+    const incomplete = await integrationStatus(root);
+    assert.equal(incomplete.payments.provider, 'stripe');
+    assert.equal(incomplete.stripe.ready, true);
+    assert.equal(incomplete.payments.ready, false);
+    assert.equal(JSON.stringify(incomplete).includes(secret), false);
+
+    const blockedPlan = await publishPlan(root, false);
+    assert.equal(blockedPlan.readyToAttempt, false);
+    assert.deepEqual(blockedPlan.blockers, [
+      'Stripe requires complete Resend access-email settings.',
+    ]);
+
+    await writeFile(
+      join(root, '.dev.vars'),
+      `PAYMENTS_PROVIDER=stripe\nSTRIPE_SECRET_KEY=${secret}\nSTRIPE_PAYMENTS_ENVIRONMENT=test_mode\nSTRIPE_WEBHOOK_SECRET=${secret}\nRESEND_API_KEY=${secret}\nRESEND_FROM_EMAIL=access@example.com\n`
+    );
+    const readyPlan = await publishPlan(root, false);
+    assert.equal(readyPlan.readyToAttempt, true);
+    assert.deepEqual(readyPlan.blockers, []);
+    assert.match(readyPlan.steps.join(' '), /Confirm Stripe/);
+  } finally {
+    if (previousProvider === undefined) delete process.env.PAYMENTS_PROVIDER;
+    else process.env.PAYMENTS_PROVIDER = previousProvider;
+    await rm(root, { recursive: true, force: true });
+  }
+});
+
 test('redacts credentials from command diagnostics', () => {
   const result = redactOutput(
     'token=super-secret-value api_key: abcdefghijklmnopqrstuvwxyz Bearer a.b.c'
@@ -134,6 +177,7 @@ test('creates a complete unpublished funnel with safe defaults', async () => {
     assert.equal(offer.withTitle, 'A clearer path to the result');
     const checkout = offer.checkout as Record<string, unknown>;
     assert.equal(checkout.enabled, false);
+    assert.equal(checkout.provider, 'provider-checkout');
     assert.equal(typeof checkout.summaryDescription, 'string');
     assert.equal(checkout.guaranteeLabel, '30-day guarantee');
     assert.equal(checkout.paymentTrustLabel, 'Secure payment');

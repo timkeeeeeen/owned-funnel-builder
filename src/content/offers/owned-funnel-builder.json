@@ -7,22 +7,22 @@
   "headlineAccent": "again.",
   "subheadline": "Tell your coding agent what you sell. It builds the page, connects the checkout, checks every screen size, and publishes it to your Cloudflare account. When you want to change a sentence yourself, open the simple visual editor.",
   "metaTitle": "Owned Funnel Builder — Build and Own Every Funnel",
-  "metaDescription": "Own a polished Astro funnel builder with visual copy editing, Dodo checkout and delivery, a $19 order bump, two one-click upsells, Cloudflare publishing, and agent skills that handle the technical work.",
+  "metaDescription": "Own a polished Astro funnel builder with visual copy editing, Dodo or Stripe checkout, a $19 order bump, two one-click upsells, Cloudflare publishing, and agent skills that handle the technical work.",
   "ogImage": "/og-owned-funnel-builder.png",
   "audience": "For creators, consultants, agencies, and small businesses who want high-converting offer pages without another monthly funnel-software bill or a pile of technical setup.",
   "checkoutUrl": "/owned-funnel-builder/#checkout",
   "checkout": {
-    "provider": "dodo-inline",
+    "provider": "provider-checkout",
     "enabled": true,
-    "eyebrow": "Secure inline checkout",
+    "eyebrow": "Secure checkout",
     "title": "First, where should we send your builder?",
-    "description": "Enter your best email. We will prefill the secure Dodo checkout, keep you on this page, and send your access and setup instructions there after purchase.",
+    "description": "Enter your best email. We will open secure checkout and send your access and setup instructions there after purchase.",
     "emailLabel": "Email address",
     "emailPlaceholder": "you@company.com",
     "buttonLabel": "Continue to secure checkout",
     "summaryDescription": "The complete builder, visual copy editor, checkout funnel, publishing workflow, agent skills, and lifetime access.",
     "guaranteeLabel": "30-day guarantee",
-    "paymentTrustLabel": "Payment secured by Dodo",
+    "paymentTrustLabel": "Secure payment processing",
     "consentCopy": "By continuing, you agree to receive product access and occasional emails about this offer, including a reminder if you leave checkout unfinished. Unsubscribe anytime.",
     "consentVersion": "v1-2026-07-30",
     "bump": {
@@ -77,7 +77,7 @@
     "bonusesTitle": "The instructions that let your agent do the technical work for you.",
     "proofEyebrow": "Dogfooded end to end",
     "proofTitle": "The checkout you are using is the checkout you receive.",
-    "proofDescription": "This sales page, its inline payment flow, order bump, two upsells, fulfillment path, and release checks are built with the same system inside the product.",
+    "proofDescription": "This sales page, its payment flow, order bump, two upsells, fulfillment path, and release checks are built with the same system inside the product.",
     "proofLinkLabel": "Open the working funnel",
     "guaranteeBadge": "30",
     "guaranteeEyebrow": "The own-it-for-real guarantee",
@@ -89,9 +89,9 @@
     "priceIncludes": [
       "Complete Astro funnel-builder source",
       "Visual Keystatic copy editor",
-      "Dodo checkout, bump, and two upsells",
+      "Dodo or Stripe checkout, bump, and two upsells",
       "Agent skills and local launch assistant",
-      "Cloudflare and Dodo delivery setup workflow",
+      "Cloudflare and verified delivery setup workflow",
       "30-day money-back guarantee"
     ],
     "faqEyebrow": "Questions, answered",
@@ -194,11 +194,11 @@
       },
       {
         "title": "Configure payments",
-        "description": "Connects Dodo in test mode, maps products, configures the webhook, and verifies the funnel without exposing your secret key."
+        "description": "Connects Dodo or Stripe in test mode, maps products, configures the signed webhook, and verifies the funnel without exposing your secret key."
       },
       {
         "title": "Configure delivery",
-        "description": "Attaches files and access instructions in Dodo, with an optional branded Resend email that stays separate from payment."
+        "description": "Configures Dodo-native access or required Stripe delivery through Resend, with idempotent email that stays separate from payment receipts."
       },
       {
         "title": "Publish and audit",
@@ -234,12 +234,12 @@
       "description": "A friendly local editor for landing-page copy, offers, prices, checkout products, bump copy, upsells, delivery links, and site settings."
     },
     {
-      "title": "The polished Dodo checkout funnel",
-      "description": "Email capture before inline checkout, a clear order summary, a $19 bump, up to two one-click upsells, fallback payments, and an order-complete page."
+      "title": "The polished Dodo-or-Stripe payment funnel",
+      "description": "Email capture before secure checkout, a clear order summary, a $19 bump, up to two saved-card upsells, hosted fallback payments, and an order-complete page."
     },
     {
-      "title": "Dodo-native access delivery",
-      "description": "Every product carries its own Dodo entitlement, customer email, and portal download. Add Resend only when you want a second branded message."
+      "title": "Verified access delivery",
+      "description": "Use Dodo-native entitlements and customer-portal downloads, or choose Stripe with required branded access delivery through Resend."
     },
     {
       "title": "Cloudflare Pages and D1 setup",
@@ -247,7 +247,7 @@
     },
     {
       "title": "Agent skills and local launch tools",
-      "description": "Focused context for copy, design, editing, Dodo, Resend, Cloudflare, and auditing—plus safe tools for creating, previewing, publishing, and rolling back funnels."
+      "description": "Focused context for copy, design, editing, Dodo, Stripe, Resend, Cloudflare, and auditing—plus safe tools for creating, previewing, publishing, and rolling back funnels."
     }
   ],
   "gates": {
@@ -384,7 +384,7 @@
     },
     {
       "question": "What accounts do I need?",
-      "answer": "You need GitHub for safe source backup, Cloudflare for hosting and the small D1 database, Dodo Payments for checkout and file delivery, and a coding agent that can work with a repository. Resend is optional for an extra branded email. Your agent walks you through each connection."
+      "answer": "You need GitHub for safe source backup, Cloudflare for hosting and the small D1 database, either Dodo Payments or Stripe for checkout, and a coding agent that can work with a repository. Resend is optional with Dodo and required with Stripe so buyers receive access. Your agent walks you through each connection."
     },
     {
       "question": "Does it include order bumps and upsells?",
@@ -392,7 +392,7 @@
     },
     {
       "question": "Can I use Stripe instead of Dodo?",
-      "answer": "The payment layer is intentionally contained and can be replaced by a capable developer or agent. Dodo is the supported out-of-the-box path today because inline checkout, product setup, and the post-purchase flow are already implemented. Stripe parity is not included yet."
+      "answer": "Yes. Dodo remains the default, but Stripe is included as a first-class option. The setup connects hosted Stripe Checkout, saves the first card for one-click upsells, falls back to hosted checkout when authentication is required, verifies signed webhooks, and delivers access through Resend."
     },
     {
       "question": "Will every page look the same?",

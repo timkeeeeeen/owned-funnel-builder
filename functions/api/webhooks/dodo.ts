@@ -113,12 +113,17 @@ async function markPaymentSucceeded(
   }
 
   if (!getProductDefinition(productKey)) throw new Error('Purchased product is not configured.');
-  await deliverPurchase(env, database, { paymentId, productKey, leadId });
+  await deliverPurchase(env, database, { paymentId, productKey, leadId, provider: 'dodo' });
 
   const bumpProductKey = metadata.bump_product_key;
   if (bumpProductKey) {
     if (!getProductDefinition(bumpProductKey)) throw new Error('Order bump is not configured.');
-    await deliverPurchase(env, database, { paymentId, productKey: bumpProductKey, leadId });
+    await deliverPurchase(env, database, {
+      paymentId,
+      productKey: bumpProductKey,
+      leadId,
+      provider: 'dodo',
+    });
   }
 
   await recordAdmaxxerPayment(env, {

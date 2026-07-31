@@ -1,0 +1,4 @@
+interface:
+  display_name: 'Configure Stripe'
+  short_description: 'Connect Stripe checkout and saved-card upsells'
+  default_prompt: 'Use $configure-stripe to connect Stripe checkout, webhooks, fulfillment, and safe one-click upsells.'

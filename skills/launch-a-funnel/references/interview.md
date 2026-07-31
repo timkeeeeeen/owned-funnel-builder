@@ -26,6 +26,6 @@ Gather only missing decisions. Infer implementation details yourself.
 
 - What name, logo, colors, images, video, and tone already exist?
 - Which domain and support email should be used?
-- Do Dodo, Resend, Cloudflare, and GitHub accounts already exist?
+- Which payment account should be connected: Dodo or Stripe? Do the required Resend, Cloudflare, and GitHub accounts already exist?
 
 Offer simple recommendations when the user is unsure. Mark unresolved facts as unresolved; never replace them with plausible fiction.

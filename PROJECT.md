@@ -13,7 +13,7 @@ The owner can:
 1. describe an offer in plain language;
 2. preview a polished landing page;
 3. hand-edit routine copy in Keystatic;
-4. connect Dodo and Cloudflare, with optional Resend branding, through guided browser authorization;
+4. connect Dodo or Stripe and Cloudflare through guided browser authorization;
 5. publish a tested funnel with a main checkout, order bump, and up to two one-click upsells;
 6. own the repository and hosting permanently.
 
@@ -55,9 +55,9 @@ Routine edits belong in content. Add or revise explicit Astro when the offer ben
 
 ## Payment invariants
 
-Dodo is the supported default.
+Dodo is the supported default. Stripe is an optional first-class provider.
 
-- Capture email before opening inline checkout.
+- Capture email before opening secure provider checkout.
 - Never expose provider secrets to the browser.
 - Record consent and campaign attribution in D1.
 - Resolve every product through the server-side product registry.
@@ -66,10 +66,13 @@ Dodo is the supported default.
 - Lock and idempotently process each upsell decision.
 - Reuse a saved method when eligible; otherwise offer secure checkout.
 - Always show a readable decline path.
-- Treat signed Dodo webhooks as fulfillment truth.
+- Treat signed provider payment webhooks as fulfillment truth.
 - Deliver access through Dodo-native entitlements; when Resend is configured, send one additional idempotent branded access email.
 - Never let an email retry create or repeat a payment.
 - Keep the original known-good funnel tag recoverable.
+- Record the selected provider on each lead and funnel so changing a site setting never changes an in-progress order.
+- With Stripe, save the first card for off-session use, charge eligible upsells through PaymentIntents, and use hosted Checkout whenever the saved method needs customer action.
+- With Stripe, require Resend and a real product access URL because Stripe does not provide Dodo-style digital entitlements.
 
 ## Release definition
 
@@ -85,8 +88,8 @@ Before calling a funnel ready:
 - check serious and critical Axe findings;
 - activate the checkout CTA without submitting a payment;
 - capture fresh screenshots tied to the current build;
-- verify Dodo entitlement delivery and, when configured, test Resend to an address the owner controls;
-- perform a Dodo test-mode purchase before live traffic;
+- verify Dodo entitlement delivery or Stripe's Resend access delivery to an address the owner controls;
+- perform a test-mode purchase with the selected provider before live traffic;
 - verify the exact public HTTPS URL after deployment.
 
 A Git push is backup. It is not proof that a public deployment or payment flow works.

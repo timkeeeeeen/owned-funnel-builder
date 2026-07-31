@@ -6,9 +6,9 @@ It includes:
 
 - polished Astro landing pages with large, unmistakable calls to action;
 - a visual Keystatic editor for changing copy without touching code;
-- email-first Dodo checkout;
+- email-first Dodo or Stripe checkout, with Dodo as the default;
 - one order bump and up to two one-click upsells;
-- Dodo-native file delivery after verified payment, with optional branded Resend email;
+- verified file delivery: Dodo-native access or required branded Resend delivery with Stripe;
 - Cloudflare Pages, Functions, and D1 setup;
 - bundled agent skills and a safe local MCP;
 - desktop, tablet, mobile, accessibility, and checkout release checks.
@@ -25,7 +25,7 @@ You do not need to learn Git, a terminal, YAML, environment variables, or Cloudf
 
 The agent will ask normal business questions: what you sell, who it is for, the price, what buyers receive, and what proof you have. It can open the visual editor when you want to change words yourself.
 
-When the agent asks you to connect services, it opens a private setup screen on your computer. Paste your Dodo key there and, if you want a second branded access email, your optional Resend key. The file is excluded from GitHub and the setup screen never prints the values.
+When the agent asks you to connect services, it opens a private setup screen on your computer. Choose Dodo or Stripe and paste the requested keys there. Dodo can deliver files itself; Stripe also asks for Resend so buyers receive their access link. The file is excluded from GitHub and the setup screen never prints the values.
 
 When you are ready, say:
 
@@ -40,7 +40,8 @@ The agent should return the real public URL only after the build, payment config
 - “Add a $19 order bump that is an obvious yes.”
 - “Write two one-click upsells that naturally follow the purchase.”
 - “Show me the mobile version.”
-- “Connect Dodo delivery and, if I need it, Resend.”
+- “Connect Dodo for payments.”
+- “Connect Stripe and customer access email.”
 - “Run every release check.”
 - “Publish this and give me the URL.”
 - “Roll back to the last known-good version.”
@@ -77,7 +78,7 @@ The private service setup workflow is:
 ```bash
 npm run setup
 npm run setup:cloudflare
-npm run setup:dodo
+npm run setup:dodo # or: npm run setup:stripe
 npm run setup:resend:test
 npm run publish
 ```
@@ -92,7 +93,7 @@ See [packages/mcp/README.md](./packages/mcp/README.md) for client configuration 
 
 ## Payment and fulfillment contract
 
-Dodo Payments is the supported default. Every configured funnel has:
+Dodo Payments is the supported default, and Stripe is a first-class option. Every configured funnel has:
 
 - one main product;
 - one optional checkout bump;
@@ -101,11 +102,12 @@ Dodo Payments is the supported default. Every configured funnel has:
 - saved-payment-method one-click charging when available;
 - a secure checkout fallback when one-click charging is unavailable;
 - idempotent server-side payment verification;
-- one Dodo entitlement per purchased product, plus at most one optional Resend email;
+- signed provider webhooks that drive fulfillment and Admaxxer revenue attribution;
+- one Dodo entitlement per purchased product, or one required Resend access email per Stripe purchase;
 
-Dodo webhooks are the fulfillment source of truth. Dodo sends fresh download links by email and through its customer portal. If Resend is connected, failures never create a second charge and retry keys prevent duplicate branded access emails.
+Provider webhooks are the fulfillment source of truth. Dodo sends fresh download links by email and through its customer portal. Stripe sends each configured access link through Resend. In both modes, email failures never create a second charge and retry keys prevent duplicate access emails.
 
-Stripe is a future adapter seam, not a supported claim. Do not advertise Stripe parity until the same checkout, upsell, webhook, and fulfillment tests exist for it.
+Stripe Checkout saves the first card for off-session reuse. An eligible upsell charges that saved method server-side; authentication, a declined saved method, or a missing method opens secure hosted Stripe Checkout instead.
 
 ## GitHub safety
 

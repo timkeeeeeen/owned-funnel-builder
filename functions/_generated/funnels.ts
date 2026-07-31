@@ -224,7 +224,7 @@ export const FUNNELS = [
         currency: 'USD',
         items: [
           'Auth provider setup recipes',
-          'Dodo billing implementation',
+          'Dodo or Stripe billing implementation',
           'Transactional email wiring',
           'Analytics and error monitoring',
           'Storage and deployment checklist',

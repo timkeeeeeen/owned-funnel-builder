@@ -24,6 +24,8 @@ export interface PagesContext {
   env: Environment;
 }
 
+export type PaymentProvider = 'dodo' | 'stripe';
+
 export const JSON_HEADERS = {
   'Cache-Control': 'no-store',
   'Content-Type': 'application/json; charset=utf-8',
@@ -50,6 +52,13 @@ export function cleanString(value: unknown, maximumLength: number): string {
 
 export function readEnvironmentValue(env: Environment, key: string): string {
   return cleanString(env[key], 4096);
+}
+
+export function getPaymentProvider(env: Environment): PaymentProvider {
+  const configured = readEnvironmentValue(env, 'PAYMENTS_PROVIDER').toLowerCase();
+  if (!configured || configured === 'dodo') return 'dodo';
+  if (configured === 'stripe') return 'stripe';
+  throw new RequestError('Checkout is not configured yet.', 503, 'configuration_provider');
 }
 
 export function parseDodoEnvironment(value: string): {

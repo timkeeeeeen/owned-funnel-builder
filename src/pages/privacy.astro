@@ -34,16 +34,19 @@ const description =
       </p>
       <p>
         When a valid checkout session is created, we identify the visitor to Admaxxer using the
-        submitted email and record a Lead event. Successful payments are sent from Dodo Payments to
-        Admaxxer through a signed server-to-server webhook for revenue attribution and advertising
-        conversion reporting. We do not send card details to Admaxxer.
+        submitted email and record a Lead event. Successful payments are sent to Admaxxer only after
+        a signed server-to-server webhook from the selected payment provider is verified, for
+        revenue attribution and advertising conversion reporting. We do not send card details to
+        Admaxxer.
       </p>
 
       <h2>Checkout providers</h2>
       <p>
-        Payment and billing data is handled by Dodo Payments under its own privacy terms. The full
-        secure checkout frame is provided by Dodo Payments; this site never receives or stores your
-        card details. Dodo may also operate its configured abandoned-checkout recovery flow.
+        Payment and billing data is handled by the selected processor, Dodo Payments or Stripe,
+        under that provider’s privacy terms. Secure card collection is provided by the processor;
+        this site never receives or stores your full card details. The processor may retain a
+        payment method for an upsell you explicitly accept, and Dodo may operate its configured
+        abandoned-checkout recovery flow.
       </p>
 
       <h2>Storage and retention</h2>

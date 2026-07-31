@@ -2,10 +2,11 @@
 
 ## Purchase truth
 
-- Trust a verified Dodo webhook or server-side payment lookup.
+- Trust a verified Dodo or Stripe webhook, or a server-side payment lookup tied to the provider recorded on the funnel.
 - Verify webhook authenticity before parsing entitlements.
 - Ignore duplicate events through a durable unique event or payment key.
 - Never grant access merely because a visitor reached a success URL.
+- Require Resend before enabling Stripe because Stripe has no native digital-file entitlement.
 
 ## Email contents
 

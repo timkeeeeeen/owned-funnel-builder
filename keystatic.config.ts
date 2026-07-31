@@ -89,9 +89,9 @@ export default config({
         checkout: fields.object(
           {
             provider: fields.select({
-              label: 'Payment provider',
-              options: [{ label: 'Dodo Payments inline checkout', value: 'dodo-inline' }],
-              defaultValue: 'dodo-inline',
+              label: 'Checkout flow',
+              options: [{ label: 'Managed Dodo or Stripe checkout', value: 'provider-checkout' }],
+              defaultValue: 'provider-checkout',
             }),
             enabled: fields.checkbox({ label: 'Enable checkout', defaultValue: true }),
             eyebrow: requiredText('Small checkout label'),

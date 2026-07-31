@@ -8,7 +8,7 @@ It can:
 - list, read, and safely update structured offer content;
 - explain how to open a preview;
 - run the project’s validation commands;
-- report whether Dodo, Resend, and Cloudflare settings are present without returning their values;
+- report whether the selected Dodo or Stripe, Resend, and Cloudflare settings are present without returning their values;
 - prepare a dry-run publishing plan; and
 - verify local release checks and a public HTTPS page.
 
@@ -23,7 +23,7 @@ These are the recommended tools for ordinary use. Their names follow the same or
 | `funnel_create`             | Creates an unpublished landing page, disabled checkout, unselected order bump, two upsells, completion page, and delivery placeholders. |
 | `funnel_preview`            | Explains how to open the page and the Keystatic editor.                                                                                 |
 | `funnel_validate`           | Runs the project quality checks.                                                                                                        |
-| `funnel_configure_payments` | Reports Dodo setup status and gives safe next steps without accepting or displaying a key.                                              |
+| `funnel_configure_payments` | Reports selected Dodo or Stripe setup status and gives safe next steps without accepting or displaying a key.                          |
 | `funnel_configure_email`    | Reports Resend setup status and gives safe next steps without accepting or displaying a key.                                            |
 | `funnel_publish`            | Produces an explicit Cloudflare dry-run plan and reports blockers.                                                                      |
 | `funnel_status`             | Summarizes pages, integrations, editing, and publishing capabilities.                                                                   |

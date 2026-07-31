@@ -12,17 +12,17 @@
   "audience": "For founders, marketers, consultants, and small teams who already have Codex or Claude Code and want their own local, inspectable talking-head editing workflow.",
   "checkoutUrl": "/talking-head-ad-machine/#get-it",
   "checkout": {
-    "provider": "dodo-inline",
+    "provider": "provider-checkout",
     "enabled": false,
-    "eyebrow": "Secure inline checkout",
+    "eyebrow": "Secure checkout",
     "title": "Where should we send your Ad Machine?",
-    "description": "Enter your best email. We will prefill the secure Dodo checkout and deliver the core ZIP plus any purchased modules through your customer account.",
+    "description": "Enter your best email. We will open secure checkout and deliver the core ZIP plus any purchased modules after purchase.",
     "emailLabel": "Email address",
     "emailPlaceholder": "you@company.com",
     "buttonLabel": "Continue to secure checkout",
     "summaryDescription": "Talking-Head Ad Machine for Apple Silicon Mac, including the setup workflow, Fast/Designed/Studio guidance, local editing pipeline, review page, QA, receipts, and agent skill.",
     "guaranteeLabel": "14-day compatibility guarantee",
-    "paymentTrustLabel": "Payment secured by Dodo",
+    "paymentTrustLabel": "Secure payment processing",
     "consentCopy": "By continuing, you agree to receive product access and occasional emails about this offer, including a reminder if you leave checkout unfinished. Unsubscribe anytime.",
     "consentVersion": "v1-2026-07-30",
     "bump": {
@@ -50,7 +50,12 @@
     ]
   },
   "sections": {
-    "highlights": ["Local media processing", "Never overwrites originals", "Review before approval", "Resolve handoff optional"],
+    "highlights": [
+      "Local media processing",
+      "Never overwrites originals",
+      "Review before approval",
+      "Resolve handoff optional"
+    ],
     "problemEyebrow": "The editing bottleneck",
     "outcomesEyebrow": "The buyer journey",
     "outcomesTitle": "Give it a clip. Answer three questions. Review the ad.",
@@ -108,39 +113,112 @@
     "Review QA, receipts, uncertainty, and output before approval"
   ],
   "outcomes": [
-    { "title": "Start in plain language", "description": "Drag in the recording and tell the agent the offer, audience, and desired action. It asks only for missing business facts and approved evidence." },
-    { "title": "See what the agent changed", "description": "The transcript, exact source ranges, reasons, confidence, captions, and graphics stay inspectable instead of disappearing inside a black-box export." },
-    { "title": "Revise without starting over", "description": "A caption or CTA change can reuse the transcript and clean cut. A changed edit invalidates the downstream timing layers that truly need rebuilding." }
+    {
+      "title": "Start in plain language",
+      "description": "Drag in the recording and tell the agent the offer, audience, and desired action. It asks only for missing business facts and approved evidence."
+    },
+    {
+      "title": "See what the agent changed",
+      "description": "The transcript, exact source ranges, reasons, confidence, captions, and graphics stay inspectable instead of disappearing inside a black-box export."
+    },
+    {
+      "title": "Revise without starting over",
+      "description": "A caption or CTA change can reuse the transcript and clean cut. A changed edit invalidates the downstream timing layers that truly need rebuilding."
+    }
   ],
   "included": [
-    { "title": "Agent-owned Mac setup", "description": "Pinned dependencies, local environments, browser preparation, a product-specific doctor, and a deterministic demo." },
-    { "title": "Truthful editorial planning", "description": "Local transcription, source-backed hooks and beats, validated cut ranges, confidence markers, and prohibited-claim guardrails." },
-    { "title": "Guarded clean-cut rendering", "description": "Kinocut where reliable, expected-duration verification, and an automatic timestamp-reset FFmpeg fallback when the render drifts." },
-    { "title": "Reusable HyperFrames finishing", "description": "Social framing, output-timed captions, restrained hook and CTA graphics, motion assertions, contrast checks, and sampled-frame review." },
-    { "title": "Dialogue and delivery QA", "description": "Approximately −14 LUFS dialogue normalization, H.264/AAC yuv420p checks, duration checks, and human-review limits stated plainly." },
-    { "title": "Review, resume, and handoff", "description": "A local review page, hashed artifacts, one brand profile, SRT, receipts, support bundle, flattened master, and optional simple FCPXML." }
+    {
+      "title": "Agent-owned Mac setup",
+      "description": "Pinned dependencies, local environments, browser preparation, a product-specific doctor, and a deterministic demo."
+    },
+    {
+      "title": "Truthful editorial planning",
+      "description": "Local transcription, source-backed hooks and beats, validated cut ranges, confidence markers, and prohibited-claim guardrails."
+    },
+    {
+      "title": "Guarded clean-cut rendering",
+      "description": "Kinocut where reliable, expected-duration verification, and an automatic timestamp-reset FFmpeg fallback when the render drifts."
+    },
+    {
+      "title": "Reusable HyperFrames finishing",
+      "description": "Social framing, output-timed captions, restrained hook and CTA graphics, motion assertions, contrast checks, and sampled-frame review."
+    },
+    {
+      "title": "Dialogue and delivery QA",
+      "description": "Approximately −14 LUFS dialogue normalization, H.264/AAC yuv420p checks, duration checks, and human-review limits stated plainly."
+    },
+    {
+      "title": "Review, resume, and handoff",
+      "description": "A local review page, hashed artifacts, one brand profile, SRT, receipts, support bundle, flattened master, and optional simple FCPXML."
+    }
   ],
   "bonuses": [
-    { "title": "Deterministic first-run demo", "description": "Prove the setup, timestamp fallback, audio normalization, QA, and review path before putting your own footage through it." },
-    { "title": "Resolve-friendly delivery package", "description": "Use the flattened master, captions, edit plan, and receipts in any editor. Try the narrow FCPXML bonus only when the cut is simple." }
+    {
+      "title": "Deterministic first-run demo",
+      "description": "Prove the setup, timestamp fallback, audio normalization, QA, and review path before putting your own footage through it."
+    },
+    {
+      "title": "Resolve-friendly delivery package",
+      "description": "Use the flattened master, captions, edit plan, and receipts in any editor. Try the narrow FCPXML bonus only when the cut is simple."
+    }
   ],
   "proof": [
-    { "value": "8/8", "label": "Required doctor checks", "detail": "Passed from a fresh extracted buyer ZIP on the tested Apple Silicon Mac." },
-    { "value": "24", "label": "Automated checks", "detail": "Unit and integration coverage plus a real opt-in HyperFrames render gate." },
-    { "value": "−14.39", "label": "Demo dialogue LUFS", "detail": "Measured from the distributable finished proof, not an ad-performance metric." },
-    { "value": "0", "label": "HyperFrames warnings", "detail": "Strict runtime, layout, motion, and contrast checks passed on the finished proof." }
+    {
+      "value": "8/8",
+      "label": "Required doctor checks",
+      "detail": "Passed from a fresh extracted buyer ZIP on the tested Apple Silicon Mac."
+    },
+    {
+      "value": "24",
+      "label": "Automated checks",
+      "detail": "Unit and integration coverage plus a real opt-in HyperFrames render gate."
+    },
+    {
+      "value": "−14.39",
+      "label": "Demo dialogue LUFS",
+      "detail": "Measured from the distributable finished proof, not an ad-performance metric."
+    },
+    {
+      "value": "0",
+      "label": "HyperFrames warnings",
+      "detail": "Strict runtime, layout, motion, and contrast checks passed on the finished proof."
+    }
   ],
   "guaranteeTitle": "If the included demo will not render on a Mac we list as supported, you should not be stuck with it.",
   "guaranteeBody": "Send the generated doctor report within 14 days. If the included setup and demo cannot be made to work on the listed configuration, request a refund. Support covers the included setup, doctor, and demo—not custom editing, operating-system repair, ad strategy, or publishing.",
   "faqs": [
-    { "question": "Does this replace DaVinci Resolve?", "answer": "No. The core path is agent-operated Kinocut, HyperFrames, and FFmpeg. The reliable handoff is a flattened master, SRT, edit plan, and receipts. Simple FCPXML is a best-effort bonus." },
-    { "question": "What computer does version 0.1 support?", "answer": "Apple Silicon Mac is the launch target. Codex or Claude Code is also required. Windows, Intel Mac, and Linux are not advertised until they pass clean-environment acceptance." },
-    { "question": "Is all processing offline?", "answer": "Transcription and rendering are local by default. Your coding agent may inspect prompts, filenames, transcripts, or project files under that provider’s terms. Optional cloud services require separate approval." },
-    { "question": "Will it publish my ads?", "answer": "No. It may prepare and render previews, but it never publishes an ad and never approves the preview for you." },
-    { "question": "Can it invent a stronger claim?", "answer": "It must not. The product preserves source meaning, checks prohibited and unsupported quantitative overlay claims, and shows uncertainty for review." },
-    { "question": "What is the Hook & Recording Pack?", "answer": "A $9 optional order bump for recording the next source clip more effectively. It is not required to make the first ad." },
-    { "question": "What is Ad Test Lab?", "answer": "A $37 optional post-purchase module for organized hook, CTA, style, and format variants after one standalone ad already works." },
-    { "question": "Is the person in the demo a customer?", "answer": "No. The presenter image and voice are synthetic demonstration media. The workflow artifacts and measured technical checks are real; no testimonial or ad-performance claim is implied." }
+    {
+      "question": "Does this replace DaVinci Resolve?",
+      "answer": "No. The core path is agent-operated Kinocut, HyperFrames, and FFmpeg. The reliable handoff is a flattened master, SRT, edit plan, and receipts. Simple FCPXML is a best-effort bonus."
+    },
+    {
+      "question": "What computer does version 0.1 support?",
+      "answer": "Apple Silicon Mac is the launch target. Codex or Claude Code is also required. Windows, Intel Mac, and Linux are not advertised until they pass clean-environment acceptance."
+    },
+    {
+      "question": "Is all processing offline?",
+      "answer": "Transcription and rendering are local by default. Your coding agent may inspect prompts, filenames, transcripts, or project files under that provider’s terms. Optional cloud services require separate approval."
+    },
+    {
+      "question": "Will it publish my ads?",
+      "answer": "No. It may prepare and render previews, but it never publishes an ad and never approves the preview for you."
+    },
+    {
+      "question": "Can it invent a stronger claim?",
+      "answer": "It must not. The product preserves source meaning, checks prohibited and unsupported quantitative overlay claims, and shows uncertainty for review."
+    },
+    {
+      "question": "What is the Hook & Recording Pack?",
+      "answer": "A $9 optional order bump for recording the next source clip more effectively. It is not required to make the first ad."
+    },
+    {
+      "question": "What is Ad Test Lab?",
+      "answer": "A $37 optional post-purchase module for organized hook, CTA, style, and format variants after one standalone ad already works."
+    },
+    {
+      "question": "Is the person in the demo a customer?",
+      "answer": "No. The presenter image and voice are synthetic demonstration media. The workflow artifacts and measured technical checks are real; no testimonial or ad-performance claim is implied."
+    }
   ],
   "finalTitle": "Your next talking-head ad can start with the clip you already recorded.",
   "finalBody": "Give your agent the footage, the commercial facts, and the instruction not to invent claims. Review what comes back before anything is final."

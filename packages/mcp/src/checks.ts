@@ -67,10 +67,11 @@ export async function projectStatus(root: string) {
 export async function publishPlan(root: string, production: boolean) {
   const scripts = await readPackageScripts(root);
   const integrations = await integrationStatus(root);
+  const providerName = integrations.payments.provider === 'stripe' ? 'Stripe' : 'Dodo';
   const steps = [
     'Review the landing page and every checkout step on a phone-sized screen.',
     'Run the full validation suite.',
-    'Confirm Dodo is in the intended test or live environment without displaying the key.',
+    `Confirm ${providerName} is in the intended test or live environment without displaying the key.`,
     'Confirm the order bump starts unselected and both decline links remain visible.',
     'Publish to Cloudflare, then verify the exact public URL and checkout CTA.',
   ];
@@ -78,12 +79,18 @@ export async function publishPlan(root: string, production: boolean) {
     dryRun: true,
     production,
     readyToAttempt:
-      integrations.cloudflare.ready && integrations.dodo.ready && Boolean(scripts.build),
+      integrations.cloudflare.ready && integrations.payments.ready && Boolean(scripts.build),
     blockers: [
       ...(!integrations.cloudflare.ready
         ? ['Cloudflare project or D1 settings are incomplete.']
         : []),
-      ...(!integrations.dodo.ready ? ['Dodo checkout settings are incomplete.'] : []),
+      ...(!integrations.payments.ready
+        ? [
+            integrations.payments.provider === 'stripe' && !integrations.resend.ready
+              ? 'Stripe requires complete Resend access-email settings.'
+              : `${providerName} checkout settings are incomplete.`,
+          ]
+        : []),
       ...(!scripts.build ? ['The project has no build command.'] : []),
     ],
     steps,
