@@ -94,6 +94,68 @@ export const FUNNELS = [
     },
   },
   {
+    offerSlug: 'talking-head-ad-machine',
+    supportEmail: 'tim@modernagencysales.com',
+    base: {
+      productKey: 'talking-head-ad-machine',
+      name: 'Talking-Head Ad Machine',
+      priceAmount: 27,
+      currency: 'USD',
+      deliverySubject: 'Your Talking-Head Ad Machine access',
+      deliveryBody:
+        'Download the core ZIP, open START-HERE.md, double-click the Codex or Claude launcher, and run the included demo before choosing your first video.',
+      accessUrl: 'https://customer.dodopayments.com',
+    },
+    bump: {
+      key: 'hook-recording-pack',
+      productKey: 'talking-head-hook-recording-pack',
+      name: 'Hook & Recording Pack',
+      priceAmount: 9,
+      currency: 'USD',
+      deliverySubject: 'Your Hook & Recording Pack access',
+      deliveryBody:
+        'Your recording brief, hook prompts, proof-shot checklist, and claim guardrails are ready in your customer account.',
+      accessUrl: 'https://customer.dodopayments.com',
+    },
+    upsells: [
+      {
+        key: 'ad-test-lab',
+        productKey: 'talking-head-ad-test-lab',
+        name: 'Ad Test Lab',
+        stepLabel: 'Optional upgrade',
+        eyebrow: 'One good ad first. Then test the variables.',
+        title: 'Want the variant system',
+        accent: 'already organized?',
+        description:
+          'Keep the approved body and generate structured hook, CTA, style, and format variants with clear hypotheses and provenance.',
+        price: '$37',
+        regularPrice: '$37',
+        priceAmount: 37,
+        currency: 'USD',
+        items: [
+          'Shared-body alternate-hook workflow',
+          'CTA and opening-frame variants',
+          '4:5, 9:16, and 1:1 batch manifests',
+          'Experiment matrix and hypothesis field',
+          'Consistent filenames and duplicate prevention',
+          'Side-by-side comparison guidance',
+        ],
+        acceptLabel: 'Yes — add Ad Test Lab for $37',
+        declineLabel: 'No thanks — one finished ad is enough for now',
+        deliverySubject: 'Your Ad Test Lab access',
+        deliveryBody: 'Your tested Ad Test Lab module ZIP is ready in your customer account.',
+        accessUrl: 'https://customer.dodopayments.com',
+        ordinal: 0,
+      },
+    ],
+    completion: {
+      title: 'Download the ZIP. Open START-HERE. Run the demo.',
+      description:
+        'Your receipt and purchased files are attached to your customer account. Start with the included demo before choosing your own recording.',
+      backLabel: 'Back to Talking-Head Ad Machine',
+    },
+  },
+  {
     offerSlug: 'vibe-code-anything',
     supportEmail: 'tim@modernagencysales.com',
     base: {

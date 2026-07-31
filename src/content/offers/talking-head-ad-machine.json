@@ -1,0 +1,147 @@
+{
+  "published": false,
+  "slug": "talking-head-ad-machine",
+  "productName": "Talking-Head Ad Machine",
+  "eyebrow": "A local-first editing workspace for Codex and Claude Code",
+  "headline": "Turn one raw talking-head clip into",
+  "headlineAccent": "a finished Meta ad.",
+  "subheadline": "Give your coding agent the video. It finds the clean take, conforms the captions, adds restrained hook and CTA graphics, checks the render, and opens a reviewable MP4 before anything is final.",
+  "metaTitle": "Talking-Head Ad Machine — One Raw Clip to a Reviewable Meta Ad",
+  "metaDescription": "A tested Apple Silicon Mac workspace for Codex and Claude Code that turns a talking-head recording into a captioned, checked, reviewable Facebook or Instagram ad.",
+  "ogImage": "/og-talking-head-ad-machine.jpg",
+  "audience": "For founders, marketers, consultants, and small teams who already have Codex or Claude Code and want their own local, inspectable talking-head editing workflow.",
+  "checkoutUrl": "/talking-head-ad-machine/#get-it",
+  "checkout": {
+    "provider": "dodo-inline",
+    "enabled": false,
+    "eyebrow": "Secure inline checkout",
+    "title": "Where should we send your Ad Machine?",
+    "description": "Enter your best email. We will prefill the secure Dodo checkout and deliver the core ZIP plus any purchased modules through your customer account.",
+    "emailLabel": "Email address",
+    "emailPlaceholder": "you@company.com",
+    "buttonLabel": "Continue to secure checkout",
+    "summaryDescription": "Talking-Head Ad Machine for Apple Silicon Mac, including the setup workflow, Fast/Designed/Studio guidance, local editing pipeline, review page, QA, receipts, and agent skill.",
+    "guaranteeLabel": "14-day compatibility guarantee",
+    "paymentTrustLabel": "Payment secured by Dodo",
+    "consentCopy": "By continuing, you agree to receive product access and occasional emails about this offer, including a reminder if you leave checkout unfinished. Unsubscribe anytime.",
+    "consentVersion": "v1-2026-07-30",
+    "bump": {
+      "title": "Hook & Recording Pack",
+      "description": "Record stronger source material next time with a plain-language brief, hook prompts, shot checklist, proof guardrails, and a practical recording checklist.",
+      "price": "$9",
+      "items": [
+        "Hook and brief builder",
+        "Recording and proof-shot checklist",
+        "Claim and evidence guardrails"
+      ]
+    }
+  },
+  "heroPreview": {
+    "ariaLabel": "One prompt becoming a transcript, cut plan, captioned preview, quality report, and review page",
+    "windowLabel": "first-ad / awaiting-review",
+    "promptLabel": "tell your agent",
+    "prompt": "Turn this video into a 4:5 Facebook ad. Preserve my meaning, do not invent claims, and open a preview before finalizing it.",
+    "description": "You supply the commercial facts. The agent handles the local tools and stops for your approval.",
+    "steps": [
+      { "label": "01 / LISTEN", "title": "Transcribe the recording" },
+      { "label": "02 / CUT", "title": "Build an inspectable edit plan" },
+      { "label": "03 / DESIGN", "title": "Add captions, hook, and CTA" },
+      { "label": "04 / REVIEW", "title": "Check the output and wait" }
+    ]
+  },
+  "sections": {
+    "highlights": ["Local media processing", "Never overwrites originals", "Review before approval", "Resolve handoff optional"],
+    "problemEyebrow": "The editing bottleneck",
+    "outcomesEyebrow": "The buyer journey",
+    "outcomesTitle": "Give it a clip. Answer three questions. Review the ad.",
+    "includedEyebrow": "Inside the core",
+    "includedTitle": "The working editing system—not a prompt PDF.",
+    "bonusesEyebrow": "Useful handoffs",
+    "bonusesTitle": "Keep the MP4, captions, plan, receipts, and optional simple FCPXML.",
+    "proofEyebrow": "Rendered from the shipped workflow",
+    "proofTitle": "See the raw clip and finished ad side by side.",
+    "proofDescription": "The demo uses a clearly disclosed synthetic presenter and system voice so the complete proof package can ship without exposing customer media.",
+    "proofLinkLabel": "Compare the demo",
+    "guaranteeBadge": "14",
+    "guaranteeEyebrow": "Compatibility guarantee",
+    "pricingEyebrow": "Core product",
+    "pricingTitle": "Make the first reviewable ad for $27.",
+    "pricingDescription": "The core is useful by itself. Setup, review, resume, caching, QA, captions, receipts, and one brand profile are not held back for an upsell.",
+    "priceLabel": "One-time price",
+    "priceNote": "Instant ZIP delivery after checkout. No subscription.",
+    "priceIncludes": [
+      "Apple Silicon Mac setup and product doctor",
+      "Codex and Claude Code launchers and agent skill",
+      "Kinocut, HyperFrames, FFmpeg, and whisper.cpp workflow",
+      "Fast, Designed, and Studio production guidance",
+      "Review page, resume, one brand profile, QA, and receipts",
+      "Flattened MP4, SRT, edit plan, and optional simple FCPXML"
+    ],
+    "faqEyebrow": "Before you buy",
+    "faqTitle": "Clear requirements. No editing mystery box."
+  },
+  "demoUrl": "/talking-head-ad-machine/finished-demo.mp4",
+  "currentPrice": "$27",
+  "regularPrice": "$27",
+  "priceAmount": 27,
+  "currency": "USD",
+  "ctaLabel": "Get the Ad Machine — $27",
+  "ctaNote": "Apple Silicon Mac · Codex or Claude Code required · local preview before approval",
+  "painTitle": "A simple talking-head ad should not require a new editing career.",
+  "painBody": "The hard part is not adding more effects. It is deciding which take is true and useful, keeping every cut natural, timing captions to the new edit, checking the output, and making revision work reusable. This packages that entire path for an agent you already use.",
+  "withoutLabel": "The manual loop",
+  "withoutTitle": "Transcribe, hunt cuts, rebuild captions, export, and inspect—again.",
+  "withLabel": "The Ad Machine loop",
+  "withTitle": "Inspect the plan, review the preview, and revise only what changed.",
+  "without": [
+    "Risk changing the speaker’s meaning for pacing",
+    "Lose time rebuilding captions after every cut",
+    "Discover bad timestamps after a long render",
+    "Mix customer footage, jobs, and brand assets together",
+    "Treat a finished file as proof that the edit is actually sound"
+  ],
+  "with": [
+    "Keep semantic choices in a validated source-backed plan",
+    "Conform captions to output time automatically",
+    "Reject duration gaps and use a deterministic fallback",
+    "Keep every job and original isolated",
+    "Review QA, receipts, uncertainty, and output before approval"
+  ],
+  "outcomes": [
+    { "title": "Start in plain language", "description": "Drag in the recording and tell the agent the offer, audience, and desired action. It asks only for missing business facts and approved evidence." },
+    { "title": "See what the agent changed", "description": "The transcript, exact source ranges, reasons, confidence, captions, and graphics stay inspectable instead of disappearing inside a black-box export." },
+    { "title": "Revise without starting over", "description": "A caption or CTA change can reuse the transcript and clean cut. A changed edit invalidates the downstream timing layers that truly need rebuilding." }
+  ],
+  "included": [
+    { "title": "Agent-owned Mac setup", "description": "Pinned dependencies, local environments, browser preparation, a product-specific doctor, and a deterministic demo." },
+    { "title": "Truthful editorial planning", "description": "Local transcription, source-backed hooks and beats, validated cut ranges, confidence markers, and prohibited-claim guardrails." },
+    { "title": "Guarded clean-cut rendering", "description": "Kinocut where reliable, expected-duration verification, and an automatic timestamp-reset FFmpeg fallback when the render drifts." },
+    { "title": "Reusable HyperFrames finishing", "description": "Social framing, output-timed captions, restrained hook and CTA graphics, motion assertions, contrast checks, and sampled-frame review." },
+    { "title": "Dialogue and delivery QA", "description": "Approximately −14 LUFS dialogue normalization, H.264/AAC yuv420p checks, duration checks, and human-review limits stated plainly." },
+    { "title": "Review, resume, and handoff", "description": "A local review page, hashed artifacts, one brand profile, SRT, receipts, support bundle, flattened master, and optional simple FCPXML." }
+  ],
+  "bonuses": [
+    { "title": "Deterministic first-run demo", "description": "Prove the setup, timestamp fallback, audio normalization, QA, and review path before putting your own footage through it." },
+    { "title": "Resolve-friendly delivery package", "description": "Use the flattened master, captions, edit plan, and receipts in any editor. Try the narrow FCPXML bonus only when the cut is simple." }
+  ],
+  "proof": [
+    { "value": "8/8", "label": "Required doctor checks", "detail": "Passed from a fresh extracted buyer ZIP on the tested Apple Silicon Mac." },
+    { "value": "24", "label": "Automated checks", "detail": "Unit and integration coverage plus a real opt-in HyperFrames render gate." },
+    { "value": "−14.39", "label": "Demo dialogue LUFS", "detail": "Measured from the distributable finished proof, not an ad-performance metric." },
+    { "value": "0", "label": "HyperFrames warnings", "detail": "Strict runtime, layout, motion, and contrast checks passed on the finished proof." }
+  ],
+  "guaranteeTitle": "If the included demo will not render on a Mac we list as supported, you should not be stuck with it.",
+  "guaranteeBody": "Send the generated doctor report within 14 days. If the included setup and demo cannot be made to work on the listed configuration, request a refund. Support covers the included setup, doctor, and demo—not custom editing, operating-system repair, ad strategy, or publishing.",
+  "faqs": [
+    { "question": "Does this replace DaVinci Resolve?", "answer": "No. The core path is agent-operated Kinocut, HyperFrames, and FFmpeg. The reliable handoff is a flattened master, SRT, edit plan, and receipts. Simple FCPXML is a best-effort bonus." },
+    { "question": "What computer does version 0.1 support?", "answer": "Apple Silicon Mac is the launch target. Codex or Claude Code is also required. Windows, Intel Mac, and Linux are not advertised until they pass clean-environment acceptance." },
+    { "question": "Is all processing offline?", "answer": "Transcription and rendering are local by default. Your coding agent may inspect prompts, filenames, transcripts, or project files under that provider’s terms. Optional cloud services require separate approval." },
+    { "question": "Will it publish my ads?", "answer": "No. It may prepare and render previews, but it never publishes an ad and never approves the preview for you." },
+    { "question": "Can it invent a stronger claim?", "answer": "It must not. The product preserves source meaning, checks prohibited and unsupported quantitative overlay claims, and shows uncertainty for review." },
+    { "question": "What is the Hook & Recording Pack?", "answer": "A $9 optional order bump for recording the next source clip more effectively. It is not required to make the first ad." },
+    { "question": "What is Ad Test Lab?", "answer": "A $37 optional post-purchase module for organized hook, CTA, style, and format variants after one standalone ad already works." },
+    { "question": "Is the person in the demo a customer?", "answer": "No. The presenter image and voice are synthetic demonstration media. The workflow artifacts and measured technical checks are real; no testimonial or ad-performance claim is implied." }
+  ],
+  "finalTitle": "Your next talking-head ad can start with the clip you already recorded.",
+  "finalBody": "Give your agent the footage, the commercial facts, and the instruction not to invent claims. Review what comes back before anything is final."
+}

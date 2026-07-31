@@ -1,0 +1,411 @@
+---
+import OfferAnalytics from '@/components/offers/OfferAnalytics.astro';
+import OfferCheckoutDialog from '@/components/offers/OfferCheckoutDialog.astro';
+import TalkingHeadComparison from '@/components/offers/TalkingHeadComparison.astro';
+import OfferLayout from '@/layouts/OfferLayout.astro';
+import { getOffer } from '@/data/offers';
+
+export const prerender = true;
+
+const offer = getOffer('talking-head-ad-machine');
+if (!offer) throw new Error('Talking-Head Ad Machine offer content is missing');
+
+const checkoutReady = Boolean(offer.checkout?.enabled);
+const checkoutHref = '#get-it';
+const productSchema = {
+  '@context': 'https://schema.org',
+  '@type': 'Product',
+  name: offer.productName,
+  description: offer.metaDescription,
+  brand: { '@type': 'Brand', name: offer.productName },
+  offers: {
+    '@type': 'Offer',
+    price: offer.priceAmount.toString(),
+    priceCurrency: offer.currency,
+    availability: checkoutReady ? 'https://schema.org/InStock' : 'https://schema.org/PreOrder',
+    url: new URL('/talking-head-ad-machine/', Astro.site ?? Astro.url).toString(),
+  },
+};
+
+const modes = [
+  {
+    name: 'Fast',
+    label: 'Default first preview',
+    description: 'Clean cuts, social framing, accurate captions, dialogue normalization, and restrained hook and CTA treatment.',
+  },
+  {
+    name: 'Designed',
+    label: 'When evidence needs explaining',
+    description: 'Adds supplied screenshots, comparison cards, useful callouts, and proof annotations that trace to real evidence.',
+  },
+  {
+    name: 'Studio',
+    label: 'Opt-in, slower compositing',
+    description: 'Adds cached subject matting or a virtual environment only when the footage and extra render time justify it.',
+  },
+];
+
+const firstRun = [
+  ['01', 'Choose the clip', 'Drag in a video you own. The original is hashed and never overwritten.'],
+  ['02', 'Answer three business questions', 'Tell the agent the offer, audience, and desired action. Add permitted evidence and claims to avoid.'],
+  ['03', 'Review before approval', 'Inspect the preview, transcript, cuts, captions, graphics, QA, and uncertainty. Revise or approve it yourself.'],
+];
+---
+
+<OfferLayout title={offer.metaTitle} description={offer.metaDescription} image={offer.ogImage} noindex={!offer.published}>
+  <script is:inline type="application/ld+json" set:html={JSON.stringify(productSchema)} />
+
+  <div class="tham-page min-h-screen overflow-x-clip bg-background pb-24 text-foreground md:pb-0">
+    <header class="border-b border-border bg-background/95 px-4 py-3 backdrop-blur sm:px-6">
+      <div class="mx-auto flex max-w-7xl items-center justify-between gap-4">
+        <a
+          href="/talking-head-ad-machine/"
+          aria-label="Talking-Head Ad Machine home"
+          class="flex min-h-11 items-center gap-3 rounded-xl focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+        >
+          <span class="grid size-10 place-items-center rounded-xl bg-foreground font-mono text-sm font-bold text-background" aria-hidden="true">TH</span>
+          <span class="text-sm font-bold uppercase tracking-[0.12em] sm:text-base">Talking-Head Ad Machine</span>
+        </a>
+        <a
+          href={checkoutHref}
+          data-offer-cta
+          data-offer-checkout={checkoutReady ? '' : undefined}
+          data-offer-checkout-trigger={checkoutReady ? '' : undefined}
+          data-placement="header"
+          class="offer-cta hidden min-h-11 items-center justify-center rounded-xl bg-brand px-5 py-3 text-sm font-bold text-brand-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 md:inline-flex"
+        >
+          Get it — $27
+        </a>
+      </div>
+    </header>
+
+    <section class="hero-noise border-b border-border px-4 py-14 sm:px-6 sm:py-20 lg:py-24" aria-labelledby="offer-title">
+      <div class="mx-auto grid max-w-7xl items-center gap-12 lg:grid-cols-[1.04fr_.96fr]">
+        <div>
+          <p class="inline-flex items-center gap-2 rounded-full border border-border bg-card px-4 py-2 text-sm font-semibold shadow-sm">
+            <span class="size-2.5 rounded-full bg-success" aria-hidden="true"></span>
+            {offer.eyebrow}
+          </p>
+          <h1 id="offer-title" class="mt-7 max-w-4xl text-balance text-5xl font-bold leading-[.95] tracking-[-.055em] sm:text-6xl md:text-7xl">
+            {offer.headline} <mark>{offer.headlineAccent}</mark>
+          </h1>
+          <p class="mt-7 max-w-3xl text-pretty text-lg leading-relaxed text-muted-foreground sm:text-xl">
+            {offer.subheadline}
+          </p>
+          <div class="mt-9 flex max-w-2xl flex-col gap-4 sm:flex-row sm:items-center">
+            <a
+              href={checkoutHref}
+              data-offer-cta
+              data-offer-checkout={checkoutReady ? '' : undefined}
+              data-offer-checkout-trigger={checkoutReady ? '' : undefined}
+              data-placement="hero"
+              class="offer-cta inline-flex min-h-16 flex-1 items-center justify-center rounded-xl bg-brand px-7 py-4 text-center text-lg font-bold text-brand-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 sm:text-xl"
+            >
+              {offer.ctaLabel}<span class="ml-3" aria-hidden="true">→</span>
+            </a>
+            <a href="#proof" class="inline-flex min-h-14 items-center justify-center rounded-xl border border-border bg-card px-6 py-4 font-bold shadow-sm hover:shadow-lg focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring">
+              Watch raw vs. finished
+            </a>
+          </div>
+          <p class="mt-4 text-sm font-medium text-muted-foreground">{offer.ctaNote}</p>
+        </div>
+
+        <div class="relative mx-auto w-full max-w-xl" data-animate="scale">
+          <div class="absolute -inset-4 -rotate-2 rounded-xl bg-highlight" aria-hidden="true"></div>
+          <div class="relative overflow-hidden rounded-xl border-2 border-foreground bg-foreground p-2 shadow-lg">
+            <video class="aspect-[4/5] w-full rounded-xl object-cover" autoplay muted loop playsinline preload="metadata" poster="/talking-head-ad-machine/synthetic-presenter.jpg" aria-label="Finished synthetic talking-head ad preview">
+              <source src="/talking-head-ad-machine/finished-demo.mp4" type="video/mp4" />
+              <track kind="captions" src="/talking-head-ad-machine/captions.vtt" srclang="en" label="English" />
+            </video>
+          </div>
+          <div class="absolute -bottom-6 left-4 right-4 rounded-xl border border-border bg-card p-4 shadow-lg sm:left-10 sm:right-10">
+            <div class="flex flex-wrap items-center justify-between gap-2">
+              <span class="font-mono text-xs font-bold uppercase tracking-[.14em] text-brand">Awaiting your review</span>
+              <span class="font-mono text-xs text-muted-foreground">1080×1350 · H.264/AAC</span>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <section class="border-b border-border bg-foreground px-4 py-6 text-background sm:px-6" aria-label="Product highlights">
+      <div class="mx-auto grid max-w-7xl gap-4 text-center font-mono text-sm font-bold uppercase tracking-[.1em] sm:grid-cols-2 lg:grid-cols-4">
+        {offer.sections.highlights.map((item) => <span>{item}</span>)}
+      </div>
+    </section>
+
+    <section id="proof" class="scroll-mt-8 px-4 py-20 sm:px-6" aria-labelledby="proof-title">
+      <div class="mx-auto max-w-7xl">
+        <div class="mx-auto max-w-4xl text-center">
+          <p class="font-mono text-sm font-bold uppercase tracking-[.16em] text-brand">{offer.sections.proofEyebrow}</p>
+          <h2 id="proof-title" class="mt-4 text-balance text-4xl font-bold leading-tight tracking-tight md:text-6xl">{offer.sections.proofTitle}</h2>
+          <p class="mt-6 text-lg leading-relaxed text-muted-foreground md:text-xl">{offer.sections.proofDescription}</p>
+        </div>
+        <div class="mt-12">
+          <TalkingHeadComparison
+            rawSrc="/talking-head-ad-machine/raw-demo.mp4"
+            finishedSrc="/talking-head-ad-machine/finished-demo.mp4"
+            poster="/talking-head-ad-machine/synthetic-presenter.jpg"
+            captionsSrc="/talking-head-ad-machine/captions.vtt"
+          />
+        </div>
+        <div class="mt-10 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+          {offer.proof.map((item) => (
+            <article class="rounded-xl border border-border bg-card p-5 shadow-sm">
+              <p class="text-4xl font-bold tracking-tight text-brand">{item.value}</p>
+              <h3 class="mt-2 text-lg font-semibold">{item.label}</h3>
+              <p class="mt-2 text-sm leading-relaxed text-muted-foreground">{item.detail}</p>
+            </article>
+          ))}
+        </div>
+      </div>
+    </section>
+
+    <section class="bg-muted px-4 py-20 sm:px-6" aria-labelledby="prompt-title">
+      <div class="mx-auto grid max-w-7xl gap-10 lg:grid-cols-[.88fr_1.12fr] lg:items-center">
+        <div>
+          <p class="font-mono text-sm font-bold uppercase tracking-[.16em] text-brand">One plain-language prompt</p>
+          <h2 id="prompt-title" class="mt-4 text-balance text-4xl font-bold leading-tight tracking-tight md:text-6xl">Tell the agent what “done” means.</h2>
+          <p class="mt-6 text-lg leading-relaxed text-muted-foreground">You do not configure an MCP server or hand-edit a timeline to get the first result. The included skill owns the technical sequence and asks for the commercial facts it cannot know.</p>
+        </div>
+        <div class="rounded-xl border border-border bg-foreground p-2 text-background shadow-lg">
+          <div class="rounded-xl border border-background/20 bg-panel-dark p-6 sm:p-8">
+            <p class="font-mono text-xs font-bold uppercase tracking-[.16em] text-brand-soft">Your first prompt</p>
+            <blockquote class="mt-5 text-2xl font-semibold leading-snug sm:text-3xl">“{offer.heroPreview.prompt}”</blockquote>
+            <div class="mt-8 grid gap-3 sm:grid-cols-2">
+              {offer.heroPreview.steps.map((step) => (
+                <div class="rounded-xl border border-background/20 bg-background/5 p-4">
+                  <p class="font-mono text-xs text-brand-soft">{step.label}</p>
+                  <p class="mt-2 font-semibold">{step.title}</p>
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <section class="px-4 py-20 sm:px-6" aria-labelledby="journey-title">
+      <div class="mx-auto max-w-7xl">
+        <div class="mx-auto max-w-4xl text-center">
+          <p class="font-mono text-sm font-bold uppercase tracking-[.16em] text-brand">Three steps to the first preview</p>
+          <h2 id="journey-title" class="mt-4 text-balance text-4xl font-bold leading-tight tracking-tight md:text-6xl">No timeline apprenticeship required.</h2>
+        </div>
+        <ol class="mt-12 grid gap-6 md:grid-cols-3">
+          {firstRun.map(([number, title, description]) => (
+            <li class="rounded-xl border border-border bg-card p-6 shadow-sm">
+              <span class="grid size-12 place-items-center rounded-xl bg-highlight font-mono font-bold text-highlight-foreground">{number}</span>
+              <h3 class="mt-6 text-2xl font-semibold">{title}</h3>
+              <p class="mt-3 leading-relaxed text-muted-foreground">{description}</p>
+            </li>
+          ))}
+        </ol>
+      </div>
+    </section>
+
+    <section class="bg-foreground px-4 py-20 text-background sm:px-6" aria-labelledby="inside-title">
+      <div class="mx-auto max-w-7xl">
+        <div class="mx-auto max-w-4xl text-center">
+          <p class="font-mono text-sm font-bold uppercase tracking-[.16em] text-brand-soft">{offer.sections.includedEyebrow}</p>
+          <h2 id="inside-title" class="mt-4 text-balance text-4xl font-bold leading-tight tracking-tight md:text-6xl">{offer.sections.includedTitle}</h2>
+          <p class="mt-6 text-lg leading-relaxed text-background/70">{offer.audience}</p>
+        </div>
+        <div class="mt-12 grid gap-5 md:grid-cols-2 lg:grid-cols-3">
+          {offer.included.map((item, index) => (
+            <article class="rounded-xl border border-background/20 bg-background/5 p-6">
+              <p class="font-mono text-xs font-bold text-brand-soft">CORE / {String(index + 1).padStart(2, '0')}</p>
+              <h3 class="mt-4 text-2xl font-semibold">{item.title}</h3>
+              <p class="mt-3 leading-relaxed text-background/65">{item.description}</p>
+            </article>
+          ))}
+        </div>
+      </div>
+    </section>
+
+    <section class="px-4 py-20 sm:px-6" aria-labelledby="review-title">
+      <div class="mx-auto grid max-w-7xl gap-10 lg:grid-cols-[1.08fr_.92fr] lg:items-center">
+        <div class="rounded-xl border border-border bg-card p-6 shadow-lg sm:p-8">
+          <div class="flex flex-wrap items-center justify-between gap-3 border-b border-border pb-5">
+            <div>
+              <p class="font-mono text-xs font-bold uppercase tracking-[.16em] text-brand">Review receipt / proof-4x5</p>
+              <h3 class="mt-2 text-2xl font-semibold">Human review: pending</h3>
+            </div>
+            <span class="rounded-full bg-highlight px-3 py-2 font-mono text-xs font-bold text-highlight-foreground">NOT PUBLISHED</span>
+          </div>
+          <dl class="mt-6 grid gap-4 sm:grid-cols-2">
+            <div class="rounded-xl border border-border bg-muted p-4"><dt class="text-sm text-muted-foreground">Expected / actual</dt><dd class="mt-1 text-xl font-semibold">17.3s / 17.3s</dd></div>
+            <div class="rounded-xl border border-border bg-muted p-4"><dt class="text-sm text-muted-foreground">Dialogue loudness</dt><dd class="mt-1 text-xl font-semibold">−14.39 LUFS</dd></div>
+            <div class="rounded-xl border border-border bg-muted p-4"><dt class="text-sm text-muted-foreground">Delivery</dt><dd class="mt-1 text-xl font-semibold">H.264 / AAC</dd></div>
+            <div class="rounded-xl border border-border bg-muted p-4"><dt class="text-sm text-muted-foreground">HyperFrames gate</dt><dd class="mt-1 text-xl font-semibold">0 warnings</dd></div>
+          </dl>
+          <p class="mt-5 text-sm leading-relaxed text-muted-foreground">Automated QA does not pretend to prove semantic accuracy, caption taste, safe crops, or ad performance. Those stay visible for human review.</p>
+        </div>
+        <div>
+          <p class="font-mono text-sm font-bold uppercase tracking-[.16em] text-brand">Inspect, then decide</p>
+          <h2 id="review-title" class="mt-4 text-balance text-4xl font-bold leading-tight tracking-tight md:text-6xl">A finished file is not the same as an approved ad.</h2>
+          <p class="mt-6 text-lg leading-relaxed text-muted-foreground">The local review page shows what was cut, low-confidence decisions, captions, graphics, evidence, duration, codecs, loudness, and output files. The agent can prepare the preview. Only you can approve it.</p>
+        </div>
+      </div>
+    </section>
+
+    <section class="bg-muted px-4 py-20 sm:px-6" aria-labelledby="modes-title">
+      <div class="mx-auto max-w-7xl">
+        <div class="mx-auto max-w-4xl text-center">
+          <p class="font-mono text-sm font-bold uppercase tracking-[.16em] text-brand">Three production modes</p>
+          <h2 id="modes-title" class="mt-4 text-balance text-4xl font-bold leading-tight tracking-tight md:text-6xl">Start fast. Add complexity only when it earns its keep.</h2>
+        </div>
+        <div class="mt-12 grid gap-6 md:grid-cols-3">
+          {modes.map((mode, index) => (
+            <article class:list={['rounded-xl border bg-card p-6 shadow-sm', index === 0 ? 'border-brand' : 'border-border']}>
+              <p class="font-mono text-xs font-bold uppercase tracking-[.14em] text-brand">{mode.label}</p>
+              <h3 class="mt-3 text-3xl font-semibold">{mode.name}</h3>
+              <p class="mt-4 leading-relaxed text-muted-foreground">{mode.description}</p>
+            </article>
+          ))}
+        </div>
+      </div>
+    </section>
+
+    <section class="px-4 py-20 sm:px-6" aria-labelledby="privacy-title">
+      <div class="mx-auto grid max-w-7xl gap-10 lg:grid-cols-2">
+        <div>
+          <p class="font-mono text-sm font-bold uppercase tracking-[.16em] text-brand">Local media by default</p>
+          <h2 id="privacy-title" class="mt-4 text-balance text-4xl font-bold leading-tight tracking-tight md:text-6xl">Your footage is not an excuse for vague privacy copy.</h2>
+          <p class="mt-6 text-lg leading-relaxed text-muted-foreground">Transcription and rendering run locally. The product never uploads or publishes media by itself. Codex or Claude may still inspect project context under that provider’s terms, so the documentation says that plainly.</p>
+        </div>
+        <div class="grid gap-4 sm:grid-cols-2">
+          <article class="rounded-xl border border-border bg-card p-6 shadow-sm"><h3 class="text-xl font-semibold">The original stays immutable</h3><p class="mt-3 leading-relaxed text-muted-foreground">Every job records the source path and hash, then writes new artifacts into an isolated job directory.</p></article>
+          <article class="rounded-xl border border-border bg-card p-6 shadow-sm"><h3 class="text-xl font-semibold">Support bundles stay narrow</h3><p class="mt-3 leading-relaxed text-muted-foreground">The generated report excludes footage, transcripts, credentials, and unnecessary personal paths by default.</p></article>
+          <article class="rounded-xl border border-border bg-card p-6 shadow-sm"><h3 class="text-xl font-semibold">No invented claims</h3><p class="mt-3 leading-relaxed text-muted-foreground">Source meaning, qualifiers, prohibited claims, and unsupported quantitative overlay claims remain guarded.</p></article>
+          <article class="rounded-xl border border-border bg-card p-6 shadow-sm"><h3 class="text-xl font-semibold">No silent publishing</h3><p class="mt-3 leading-relaxed text-muted-foreground">Rendering a preview is allowed. Approval and ad-platform publishing remain human decisions.</p></article>
+        </div>
+      </div>
+    </section>
+
+    <section class="bg-foreground px-4 py-20 text-background sm:px-6" aria-labelledby="fit-title">
+      <div class="mx-auto max-w-7xl">
+        <div class="mx-auto max-w-4xl text-center">
+          <p class="font-mono text-sm font-bold uppercase tracking-[.16em] text-brand-soft">Compatibility and fit</p>
+          <h2 id="fit-title" class="mt-4 text-balance text-4xl font-bold leading-tight tracking-tight md:text-6xl">Buy it for the machine and workflow it actually supports.</h2>
+        </div>
+        <div class="mt-12 grid gap-6 lg:grid-cols-2">
+          <article class="rounded-xl border border-success-bright/40 bg-background/5 p-6 sm:p-8">
+            <p class="font-mono text-sm font-bold uppercase tracking-[.14em] text-success-bright">Good fit</p>
+            <ul class="mt-6 space-y-4 text-lg">
+              <li>✓ You have an Apple Silicon Mac.</li><li>✓ You already use Codex or Claude Code.</li><li>✓ You own or can legally edit the footage.</li><li>✓ You want inspectable local files and a human review gate.</li><li>✓ You are comfortable letting the agent manage local dependencies.</li>
+            </ul>
+          </article>
+          <article class="rounded-xl border border-destructive/50 bg-background/5 p-6 sm:p-8">
+            <p class="font-mono text-sm font-bold uppercase tracking-[.14em] text-brand-soft">Not the launch version for you</p>
+            <ul class="mt-6 space-y-4 text-lg text-background/75">
+              <li>× You need Windows, Intel Mac, Linux, or a phone app.</li><li>× You need an automatic ad publisher.</li><li>× You expect the tool to invent proof or performance claims.</li><li>× You need custom editing or creative strategy included.</li><li>× You want a notarized desktop GUI instead of an agent workspace.</li>
+            </ul>
+          </article>
+        </div>
+      </div>
+    </section>
+
+    <section id="get-it" class="scroll-mt-6 bg-highlight px-4 py-20 text-highlight-foreground sm:px-6" aria-labelledby="pricing-title">
+      <div class="mx-auto grid max-w-7xl gap-10 lg:grid-cols-[.88fr_1.12fr] lg:items-start">
+        <div>
+          <p class="font-mono text-sm font-bold uppercase tracking-[.16em]">{offer.sections.pricingEyebrow}</p>
+          <h2 id="pricing-title" class="mt-4 text-balance text-4xl font-bold leading-tight tracking-tight md:text-6xl">{offer.sections.pricingTitle}</h2>
+          <p class="mt-6 text-lg leading-relaxed text-highlight-foreground/75">{offer.sections.pricingDescription}</p>
+          <div class="mt-8 rounded-xl border border-highlight-foreground/20 bg-background p-6 text-foreground shadow-lg">
+            <p class="font-mono text-xs font-bold uppercase tracking-[.14em] text-brand">{offer.sections.guaranteeEyebrow}</p>
+            <h3 class="mt-3 text-2xl font-semibold">{offer.guaranteeTitle}</h3>
+            <p class="mt-3 leading-relaxed text-muted-foreground">{offer.guaranteeBody}</p>
+          </div>
+        </div>
+        <div class="rounded-xl border-2 border-highlight-foreground bg-background p-6 text-foreground shadow-lg sm:p-8">
+          <p class="font-mono text-sm font-bold uppercase tracking-[.14em] text-brand">{offer.sections.priceLabel}</p>
+          <div class="mt-3 flex items-end gap-3"><span class="text-7xl font-bold tracking-[-.06em]">$27</span><span class="pb-2 text-muted-foreground">USD · one time</span></div>
+          <ul class="mt-7 space-y-3">
+            {offer.sections.priceIncludes.map((item) => <li class="flex gap-3"><span class="font-bold text-success">✓</span><span>{item}</span></li>)}
+          </ul>
+          <a
+            href={checkoutHref}
+            aria-disabled={!checkoutReady ? 'true' : undefined}
+            data-offer-cta
+            data-offer-checkout={checkoutReady ? '' : undefined}
+            data-offer-checkout-trigger={checkoutReady ? '' : undefined}
+            data-placement="pricing"
+            class:list={['offer-cta mt-8 inline-flex min-h-20 w-full items-center justify-center rounded-xl px-7 py-5 text-center text-xl font-bold focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2', checkoutReady ? 'bg-brand text-brand-foreground' : 'cursor-not-allowed bg-muted text-muted-foreground']}
+          >
+            {checkoutReady ? offer.ctaLabel : 'Checkout held for final test-mode fulfillment'}
+          </a>
+          <p class="mt-4 text-center text-sm text-muted-foreground">{checkoutReady ? offer.sections.priceNote : 'The deliverables are built. Checkout stays disabled until Dodo test products and entitlement downloads pass end to end.'}</p>
+          <div class="mt-6 border-t border-border pt-6">
+            <p class="font-semibold">Optional after checkout</p>
+            <p class="mt-2 text-sm leading-relaxed text-muted-foreground">$9 Hook & Recording Pack order bump · $37 Ad Test Lab upsell · neither is required for the first finished ad.</p>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <section class="px-4 py-20 sm:px-6" aria-labelledby="faq-title">
+      <div class="mx-auto max-w-5xl">
+        <div class="text-center">
+          <p class="font-mono text-sm font-bold uppercase tracking-[.16em] text-brand">{offer.sections.faqEyebrow}</p>
+          <h2 id="faq-title" class="mt-4 text-balance text-4xl font-bold leading-tight tracking-tight md:text-6xl">{offer.sections.faqTitle}</h2>
+        </div>
+        <div class="mt-12 space-y-4">
+          {offer.faqs.map((faq) => (
+            <details class="group rounded-xl border border-border bg-card p-5 shadow-sm open:shadow-lg sm:p-6">
+              <summary class="flex min-h-11 cursor-pointer list-none items-center justify-between gap-4 text-lg font-semibold focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring">
+                {faq.question}<span class="font-mono text-brand group-open:rotate-45" aria-hidden="true">+</span>
+              </summary>
+              <p class="mt-4 max-w-4xl leading-relaxed text-muted-foreground">{faq.answer}</p>
+            </details>
+          ))}
+        </div>
+      </div>
+    </section>
+
+    <section class="hero-noise border-t border-border px-4 py-20 text-center sm:px-6" aria-labelledby="final-title">
+      <div class="mx-auto max-w-5xl">
+        <h2 id="final-title" class="text-balance text-4xl font-bold leading-tight tracking-tight md:text-6xl">{offer.finalTitle}</h2>
+        <p class="mx-auto mt-6 max-w-3xl text-lg leading-relaxed text-muted-foreground md:text-xl">{offer.finalBody}</p>
+        <a href={checkoutHref} data-offer-cta data-placement="final" class="offer-cta mx-auto mt-9 inline-flex min-h-16 w-full max-w-2xl items-center justify-center rounded-xl bg-brand px-8 py-4 text-center text-xl font-bold text-brand-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2">
+          {offer.ctaLabel}<span class="ml-3" aria-hidden="true">→</span>
+        </a>
+        <p class="mt-4 text-sm font-medium text-muted-foreground">{offer.ctaNote}</p>
+      </div>
+    </section>
+  </div>
+
+  {checkoutReady && offer.checkout && <OfferCheckoutDialog offer={offer} checkout={offer.checkout} />}
+  <OfferAnalytics offerSlug={offer.slug} />
+</OfferLayout>
+
+<style>
+  .tham-page {
+    --color-brand: oklch(64% 0.21 37);
+    --color-brand-soft: oklch(80% 0.12 50);
+    --color-brand-foreground: oklch(16% 0.025 35);
+    --color-brand-shadow: oklch(43% 0.14 32);
+    --color-highlight: oklch(93% 0.055 75);
+    --color-highlight-foreground: oklch(22% 0.035 45);
+    --color-panel-dark: oklch(17% 0.018 35);
+  }
+
+  .hero-noise {
+    background-color: var(--color-background);
+    background-image:
+      radial-gradient(circle at 85% 12%, oklch(64% 0.21 37 / 0.14), transparent 30%),
+      radial-gradient(circle at 10% 80%, oklch(93% 0.055 75 / 0.72), transparent 36%);
+  }
+
+  mark {
+    background: var(--color-highlight);
+    color: var(--color-highlight-foreground);
+    padding: 0.02em 0.16em 0.08em;
+    border-radius: 0.2em;
+  }
+
+  summary::-webkit-details-marker { display: none; }
+
+  @media (prefers-reduced-motion: reduce) {
+    .group-open\:rotate-45 { transition: none; }
+  }
+</style>
