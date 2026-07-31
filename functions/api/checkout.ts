@@ -2,6 +2,7 @@ import { assertFunnelDefinition } from '../_lib/funnel';
 import { getProductId } from '../_lib/products';
 import {
   cleanString,
+  dodoRequest,
   getDodoConfig,
   hashFlowToken,
   json,
@@ -26,6 +27,15 @@ interface CheckoutRequest {
 interface DodoCheckoutResponse {
   checkout_url?: unknown;
   session_id?: unknown;
+}
+
+interface DodoCustomer {
+  customer_id?: unknown;
+  email?: unknown;
+}
+
+interface DodoCustomerListResponse {
+  items?: DodoCustomer[];
 }
 
 const MAX_BODY_BYTES = 16 * 1024;
@@ -92,6 +102,35 @@ function validateCheckoutUrl(value: unknown): string {
     throw new Error('Dodo returned an unexpected checkout URL.');
   }
   return checkoutUrl.toString();
+}
+
+async function getOrCreateDodoCustomer(
+  env: PagesContext['env'],
+  email: string
+): Promise<string> {
+  const customers = await dodoRequest<DodoCustomerListResponse>(
+    env,
+    `/customers?email=${encodeURIComponent(email)}&page_size=100&page_number=0`
+  );
+  const existingCustomer = customers.items?.find(
+    (customer) =>
+      cleanString(customer.email, 254).toLowerCase() === email &&
+      Boolean(cleanString(customer.customer_id, 160))
+  );
+  const existingCustomerId = cleanString(existingCustomer?.customer_id, 160);
+  if (existingCustomerId) return existingCustomerId;
+
+  const createdCustomer = await dodoRequest<DodoCustomer>(env, '/customers', {
+    method: 'POST',
+    body: JSON.stringify({
+      email,
+      name: 'Customer',
+      metadata: { source: 'owned-funnel-builder' },
+    }),
+  });
+  const createdCustomerId = cleanString(createdCustomer.customer_id, 160);
+  if (!createdCustomerId) throw new Error('Dodo did not return a customer ID.');
+  return createdCustomerId;
 }
 
 export async function onRequestPost(context: PagesContext): Promise<Response> {
@@ -208,6 +247,16 @@ export async function onRequestPost(context: PagesContext): Promise<Response> {
       });
     }
 
+    // Dodo's saved-card flow is documented against an explicitly attached
+    // customer. Resolve that customer before checkout so the first card can be
+    // associated with the same customer used by the post-purchase upsells.
+    const dodoCustomerId = await getOrCreateDodoCustomer(env, email);
+    await env.LEADS.prepare(
+      `UPDATE funnel_runs SET dodo_customer_id = ?, updated_at = ? WHERE id = ?`
+    )
+      .bind(dodoCustomerId, new Date().toISOString(), funnelId)
+      .run();
+
     const providerResponse = await fetch(`${apiBaseUrl}/checkouts`, {
       method: 'POST',
       headers: {
@@ -216,7 +265,7 @@ export async function onRequestPost(context: PagesContext): Promise<Response> {
       },
       body: JSON.stringify({
         product_cart: productCart,
-        customer: { email },
+        customer: { customer_id: dodoCustomerId },
         show_saved_payment_methods: true,
         return_url: returnUrl.toString(),
         customization: {
@@ -253,6 +302,7 @@ export async function onRequestPost(context: PagesContext): Promise<Response> {
           allow_discount_code: false,
           allow_phone_number_collection: false,
           allow_tax_id: false,
+          always_create_new_customer: false,
           redirect_immediately: true,
         },
         metadata: {

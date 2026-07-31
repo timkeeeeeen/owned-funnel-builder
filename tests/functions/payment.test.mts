@@ -159,7 +159,14 @@ test('checkout creates the configured cart, bump, steps, and first upsell return
     'owned-funnel-conversion-copy-swipe-file': 'prod_bump',
   });
   let providerBody: Record<string, unknown> | undefined;
-  globalThis.fetch = async (_input, init) => {
+  globalThis.fetch = async (input, init) => {
+    const url = new URL(String(input));
+    if (url.pathname === '/customers') {
+      return Response.json({
+        items: [{ customer_id: 'customer_owner', email: 'owner@example.com' }],
+      });
+    }
+    assert.equal(url.pathname, '/checkouts');
     providerBody = JSON.parse(String(init?.body)) as Record<string, unknown>;
     return Response.json({
       checkout_url: 'https://checkout.dodopayments.com/session/test',
@@ -186,8 +193,12 @@ test('checkout creates the configured cart, bump, steps, and first upsell return
 
   assert.equal(response.status, 200);
   assert.deepEqual((providerBody?.product_cart as unknown[]).length, 2);
-  assert.deepEqual(providerBody?.customer, { email: 'owner@example.com' });
+  assert.deepEqual(providerBody?.customer, { customer_id: 'customer_owner' });
   assert.equal(providerBody?.show_saved_payment_methods, true);
+  assert.equal(
+    (providerBody?.feature_flags as Record<string, unknown>).always_create_new_customer,
+    false
+  );
   assert.equal((providerBody?.feature_flags as Record<string, unknown>).redirect_immediately, true);
   const returnUrl = new URL(String(providerBody?.return_url));
   assert.equal(returnUrl.pathname, '/checkout/upsell/funnel-blueprints/');
@@ -230,10 +241,74 @@ test('checkout fails closed when a configured product has no Dodo mapping', asyn
   assert.equal((await response.json()).code, 'configuration_product');
 });
 
+test('checkout creates and attaches a Dodo customer before the first payment', async () => {
+  const database = checkoutDatabase({ 'owned-funnel-builder': 'prod_main' });
+  const providerCalls: Array<{ method: string; path: string }> = [];
+  let checkoutBody: Record<string, unknown> | undefined;
+  globalThis.fetch = async (input, init) => {
+    const url = new URL(String(input));
+    const method = init?.method ?? 'GET';
+    providerCalls.push({ method, path: url.pathname });
+    if (url.pathname === '/customers' && method === 'GET') {
+      return Response.json({ items: [] });
+    }
+    if (url.pathname === '/customers' && method === 'POST') {
+      const body = JSON.parse(String(init?.body)) as Record<string, unknown>;
+      assert.equal(body.email, 'new-buyer@example.com');
+      return Response.json({
+        customer_id: 'customer_new',
+        email: 'new-buyer@example.com',
+      });
+    }
+    assert.equal(url.pathname, '/checkouts');
+    checkoutBody = JSON.parse(String(init?.body)) as Record<string, unknown>;
+    return Response.json({
+      checkout_url: 'https://checkout.dodopayments.com/session/test',
+      session_id: 'session_123',
+    });
+  };
+
+  const response = await createCheckout({
+    request: checkoutRequest({
+      email: 'new-buyer@example.com',
+      offerSlug: 'owned-funnel-builder',
+      consentVersion: 'v1',
+    }),
+    env: {
+      LEADS: database,
+      DODO_PAYMENTS_API_KEY: 'test_key',
+      DODO_PAYMENTS_ENVIRONMENT: 'test_mode',
+    },
+  });
+
+  assert.equal(response.status, 200);
+  assert.deepEqual(providerCalls, [
+    { method: 'GET', path: '/customers' },
+    { method: 'POST', path: '/customers' },
+    { method: 'POST', path: '/checkouts' },
+  ]);
+  assert.deepEqual(checkoutBody?.customer, { customer_id: 'customer_new' });
+  assert.equal(
+    database.calls.some(
+      (call) =>
+        call.query.includes('UPDATE funnel_runs SET dodo_customer_id') &&
+        call.values.includes('customer_new')
+    ),
+    true
+  );
+});
+
 test('checkout ignores an invalid Admaxxer visitor id instead of forwarding it', async () => {
   const database = checkoutDatabase({ 'owned-funnel-builder': 'prod_main' });
   let providerBody: Record<string, unknown> | undefined;
-  globalThis.fetch = async (_input, init) => {
+  globalThis.fetch = async (input, init) => {
+    const url = new URL(String(input));
+    if (url.pathname === '/customers') {
+      return Response.json({
+        items: [{ customer_id: 'customer_owner', email: 'owner@example.com' }],
+      });
+    }
+    assert.equal(url.pathname, '/checkouts');
     providerBody = JSON.parse(String(init?.body)) as Record<string, unknown>;
     return Response.json({
       checkout_url: 'https://checkout.dodopayments.com/session/test',
