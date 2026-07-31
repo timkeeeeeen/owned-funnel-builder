@@ -26,8 +26,10 @@ const deliveryFiles = {
   'vibe-code-prompt-pack': 'deliverables/vibe-code-anything/vibe-coding-prompt-pack.md',
   'vibe-code-five-app-blueprints': 'deliverables/vibe-code-anything/five-app-blueprints.md',
   'vibe-code-production-launch-pack': 'deliverables/vibe-code-anything/production-launch-pack.md',
-  'talking-head-ad-machine':
-    '.funnel-state/deliverables/talking-head-ad-machine-macos-arm64-v0.1.0.zip',
+  'talking-head-ad-machine': [
+    '.funnel-state/deliverables/talking-head-ad-machine-macos-v0.2.0.zip',
+    '.funnel-state/deliverables/talking-head-ad-machine-windows-x64-v0.2.0.zip',
+  ],
   'talking-head-hook-recording-pack': '.funnel-state/deliverables/hook-recording-pack-v0.1.0.zip',
   'talking-head-ad-test-lab': '.funnel-state/deliverables/ad-test-lab-v0.1.0.zip',
 };
@@ -70,10 +72,16 @@ for await (const entitlement of client.entitlements.list({ integration_type: 'di
 
 const results = [];
 for (const product of configuredProducts) {
-  const deliveryPath = deliveryFiles[product.productKey];
-  if (!deliveryPath) throw new Error(`No delivery file is configured for ${product.productKey}.`);
-  const deliveryBytes = await readFile(deliveryPath);
-  const deliveryFilename = deliveryPath.split('/').at(-1);
+  const deliveryEntry = deliveryFiles[product.productKey];
+  if (!deliveryEntry) throw new Error(`No delivery file is configured for ${product.productKey}.`);
+  const deliveryPaths = Array.isArray(deliveryEntry) ? deliveryEntry : [deliveryEntry];
+  const deliveryPayloads = await Promise.all(
+    deliveryPaths.map(async (deliveryPath) => ({
+      deliveryPath,
+      deliveryBytes: await readFile(deliveryPath),
+      deliveryFilename: deliveryPath.split('/').at(-1),
+    }))
+  );
 
   let entitlement = existingEntitlements.find(
     (item) => item.metadata?.owned_funnel_product_key === product.productKey
@@ -98,13 +106,15 @@ for (const product of configuredProducts) {
 
   const currentEntitlement = await client.entitlements.retrieve(entitlement.id);
   const currentFiles = currentEntitlement.integration_config?.digital_files?.files ?? [];
-  if (!currentFiles.some((file) => file.filename === deliveryFilename)) {
-    const form = new FormData();
-    form.append('file', new File([deliveryBytes], deliveryFilename));
-    await client.entitlements.files.upload(entitlement.id, { body: form });
-    console.log(`Uploaded customer file: ${deliveryFilename}.`);
-  } else {
-    console.log(`Customer file already present: ${deliveryFilename}.`);
+  for (const { deliveryBytes, deliveryFilename } of deliveryPayloads) {
+    if (!currentFiles.some((file) => file.filename === deliveryFilename)) {
+      const form = new FormData();
+      form.append('file', new File([deliveryBytes], deliveryFilename));
+      await client.entitlements.files.upload(entitlement.id, { body: form });
+      console.log(`Uploaded customer file: ${deliveryFilename}.`);
+    } else {
+      console.log(`Customer file already present: ${deliveryFilename}.`);
+    }
   }
 
   let remote = existingProducts.find(

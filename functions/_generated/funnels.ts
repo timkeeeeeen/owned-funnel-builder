@@ -103,7 +103,7 @@ export const FUNNELS = [
       currency: 'USD',
       deliverySubject: 'Your Talking-Head Ad Machine access',
       deliveryBody:
-        'Download the core ZIP, open START-HERE.md, double-click the Codex or Claude launcher, and run the included demo before choosing your first video.',
+        'Download the ZIP for your Windows or Mac computer, open START-HERE.md, launch it with Codex or Claude Code, and run the included demo before choosing your first video.',
       accessUrl: 'https://customer.dodopayments.com',
     },
     bump: {
