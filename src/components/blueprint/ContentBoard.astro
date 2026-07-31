@@ -1,0 +1,89 @@
+---
+import type { BlueprintAudienceCopy } from '@/data/blueprint-offers';
+
+interface Props {
+  audience: BlueprintAudienceCopy;
+}
+
+const { audience } = Astro.props;
+const weeks = [
+  { label: 'Week 1', purpose: 'Clarify the public claim' },
+  { label: 'Week 2', purpose: 'Make evidence visible' },
+  { label: 'Week 3', purpose: 'Demonstrate judgment' },
+  { label: 'Week 4', purpose: 'Create the right conversation' },
+] as const;
+const slotJobs = ['Point of view', 'Proof', 'Diagnostic', 'Mechanism', 'Invitation'] as const;
+const slotSources = [
+  'Profile and positioning evidence',
+  'Permitted client or project proof',
+  'Expert operating judgment',
+  'Sales and pipeline intake',
+  'Offer and next-step intake',
+] as const;
+const slotReasons = [
+  'Clarify what the market should remember',
+  'Turn an allowed result into credible evidence',
+  'Show how the expert sees the problem',
+  'Explain why the costly pattern persists',
+  'Connect the week to one relevant next step',
+] as const;
+---
+
+<div class="space-y-8" data-content-board data-slot-count={audience.exampleSlots.length}>
+  {
+    weeks.map((week, weekIndex) => {
+      const slots = audience.exampleSlots.slice(weekIndex * 5, weekIndex * 5 + 5);
+      return (
+        <section
+          class="rounded-xl border border-border bg-card p-5 shadow-sm sm:p-7"
+          aria-labelledby={`week-${weekIndex + 1}-title`}
+        >
+          <header class="flex flex-col gap-2 border-b border-border pb-5 sm:flex-row sm:items-end sm:justify-between">
+            <h3 id={`week-${weekIndex + 1}-title`} class="text-2xl font-semibold">
+              {week.label}
+            </h3>
+            <p class="text-sm font-semibold text-brand">{week.purpose}</p>
+          </header>
+          <div class="mt-5 grid gap-4 lg:grid-cols-5">
+            {slots.map((slot, slotIndex) => {
+              const number = weekIndex * 5 + slotIndex + 1;
+              return (
+                <article class="min-w-0 rounded-xl border border-border bg-background p-4">
+                  <div class="flex items-center justify-between gap-3">
+                    <span class="font-mono text-xs font-bold uppercase tracking-[0.12em] text-brand">
+                      Slot {number.toString().padStart(2, '0')}
+                    </span>
+                    <span class="rounded-full bg-muted px-2 py-1 text-xs font-semibold">
+                      {slotJobs[slotIndex]}
+                    </span>
+                  </div>
+                  <p class="mt-4 font-semibold leading-snug">{slot}</p>
+                  <dl class="mt-5 space-y-3 border-t border-border pt-4 text-xs leading-relaxed">
+                    <div>
+                      <dt class="font-bold uppercase tracking-[0.08em] text-muted-foreground">
+                        Buyer
+                      </dt>
+                      <dd class="mt-1">Best-fit buyer named in paid intake</dd>
+                    </div>
+                    <div>
+                      <dt class="font-bold uppercase tracking-[0.08em] text-muted-foreground">
+                        Source
+                      </dt>
+                      <dd class="mt-1">{slotSources[slotIndex]}</dd>
+                    </div>
+                    <div>
+                      <dt class="font-bold uppercase tracking-[0.08em] text-muted-foreground">
+                        Why now
+                      </dt>
+                      <dd class="mt-1">{slotReasons[slotIndex]}</dd>
+                    </div>
+                  </dl>
+                </article>
+              );
+            })}
+          </div>
+        </section>
+      );
+    })
+  }
+</div>

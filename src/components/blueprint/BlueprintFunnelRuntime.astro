@@ -1,0 +1,79 @@
+---
+import { blueprintProductContract, type BlueprintAudienceSlug } from '@/data/blueprint-offers';
+
+interface Props {
+  audience?: BlueprintAudienceSlug;
+  mode: 'snapshot' | 'direct' | 'thank-you' | 'asset' | 'checkout-return';
+  thankYouPath?: string;
+}
+
+const { audience = '', mode, thankYouPath = '' } = Astro.props;
+const convexUrl = import.meta.env.PUBLIC_MAESTRO_CONVEX_URL?.trim() ?? '';
+const appUrl = import.meta.env.PUBLIC_MAESTRO_APP_URL?.trim() ?? '';
+const turnstileSiteKey = import.meta.env.PUBLIC_TURNSTILE_SITE_KEY?.trim() ?? '';
+const workspaceSlug =
+  import.meta.env.PUBLIC_MAESTRO_BLUEPRINT_WORKSPACE_SLUG?.trim() ?? 'modern-agency-sales';
+const leadMagnetSlug =
+  import.meta.env.PUBLIC_MAESTRO_BLUEPRINT_LEAD_MAGNET_SLUG?.trim() ?? 'mas-blueprint';
+const liveFlag = import.meta.env.PUBLIC_BLUEPRINT_FUNNEL_ENABLED === 'true';
+const contractReady = String(blueprintProductContract.status) === 'ready';
+const validConvexUrl = /^https:\/\/[a-z0-9-]+\.convex\.cloud$/i.test(convexUrl);
+const validAppUrl = (() => {
+  try {
+    const url = new URL(appUrl);
+    return (
+      url.protocol === 'https:' &&
+      url.username === '' &&
+      url.password === '' &&
+      (url.hostname === 'maestrogtm.com' || url.hostname.endsWith('.maestrogtm.com')) &&
+      url.pathname === '/' &&
+      url.search === '' &&
+      url.hash === ''
+    );
+  } catch {
+    return false;
+  }
+})();
+const requiresTurnstile = mode !== 'checkout-return';
+const enabled =
+  liveFlag &&
+  contractReady &&
+  validConvexUrl &&
+  validAppUrl &&
+  (!requiresTurnstile || turnstileSiteKey.length > 0);
+---
+
+<div
+  data-blueprint-runtime
+  data-enabled={String(enabled)}
+  data-mode={mode}
+  data-audience={audience}
+  data-convex-url={enabled ? convexUrl : ''}
+  data-app-url={enabled ? appUrl : ''}
+  data-turnstile-site-key={enabled ? turnstileSiteKey : ''}
+  data-workspace-slug={workspaceSlug}
+  data-lead-magnet-slug={leadMagnetSlug}
+  data-thank-you-path={thankYouPath}
+>
+  <div
+    data-blueprint-turnstile
+    class:list={['mt-4 min-h-[65px]', (!enabled || !requiresTurnstile) && 'hidden']}
+    aria-label="Security check"
+  >
+  </div>
+</div>
+
+{
+  enabled && requiresTurnstile && (
+    <script
+      is:inline
+      src="https://challenges.cloudflare.com/turnstile/v0/api.js?render=explicit"
+      async
+      defer
+    />
+  )
+}
+
+<script>
+  import '@/scripts/blueprint-funnel-client';
+</script>

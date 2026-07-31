@@ -1,0 +1,160 @@
+---
+import { blueprintProductContract, type BlueprintAudienceCopy } from '@/data/blueprint-offers';
+
+interface Props {
+  audience: BlueprintAudienceCopy;
+  kind: 'snapshot' | 'game-plan';
+  showEvidence?: boolean;
+}
+
+const { audience, kind, showEvidence = false } = Astro.props;
+const isSnapshot = kind === 'snapshot';
+const score = isSnapshot
+  ? blueprintProductContract.illustrativeSample.snapshotScore
+  : blueprintProductContract.illustrativeSample.paidScore;
+const maximum = isSnapshot
+  ? blueprintProductContract.authoritySnapshot.scoreMaximum
+  : blueprintProductContract.gamePlan.scoreMaximum;
+const dimensions = isSnapshot
+  ? blueprintProductContract.illustrativeSample.snapshotDimensions
+  : blueprintProductContract.illustrativeSample.paidDimensions;
+const scoreName = isSnapshot
+  ? blueprintProductContract.authoritySnapshot.scoreName
+  : blueprintProductContract.gamePlan.scoreName;
+const evidenceSources = [
+  'LinkedIn headline and About section',
+  'Most recent 12 public posts',
+  'Paid CMO audit: outreach reality',
+  'Paid CMO audit: lead-capture path',
+  'Paid CMO audit: permitted proof',
+] as const;
+---
+
+<article
+  class="overflow-hidden rounded-xl border border-border bg-card shadow-sm"
+  data-product-sample={kind}
+  data-blueprint-scorecard={kind}
+>
+  <header
+    class="flex flex-wrap items-start justify-between gap-4 border-b border-border bg-muted p-5 sm:p-6"
+  >
+    <div>
+      <p
+        class="font-mono text-xs font-bold uppercase tracking-[0.16em] text-brand"
+        data-blueprint-scorecard-label
+      >
+        Synthetic example
+      </p>
+      <p class="mt-2 text-lg font-bold">
+        {scoreName}
+      </p>
+      <p class="mt-1 max-w-lg text-sm leading-relaxed text-muted-foreground">
+        {audience.exampleContext}
+      </p>
+    </div>
+    <div class="text-right" aria-label={`Example score ${score} out of ${maximum}`}>
+      <span class="text-4xl font-bold tracking-tight sm:text-5xl" data-blueprint-score>{score}</span
+      >
+      <span class="text-lg text-muted-foreground"
+        >/<span data-blueprint-score-maximum>{maximum}</span></span
+      >
+    </div>
+  </header>
+
+  <div class="p-5 sm:p-6">
+    {
+      !isSnapshot && (
+        <div class="mb-6 rounded-xl border border-dashed border-border bg-muted p-4">
+          <div class="flex flex-wrap items-center justify-between gap-3">
+            <div>
+              <p class="font-mono text-xs font-bold uppercase tracking-[0.12em] text-muted-foreground">
+                Preserved public result
+              </p>
+              <p class="mt-1 font-semibold">
+                {blueprintProductContract.authoritySnapshot.scoreName}
+              </p>
+            </div>
+            <p class="font-mono text-xl font-bold">
+              {blueprintProductContract.illustrativeSample.snapshotScore}/
+              {blueprintProductContract.authoritySnapshot.scoreMaximum}
+            </p>
+          </div>
+          <p class="mt-3 text-sm leading-relaxed text-muted-foreground">
+            Separate public-only instrument. It stays visible for context and is not added to the{' '}
+            {score}/{maximum} system score.
+          </p>
+        </div>
+      )
+    }
+
+    <div class="space-y-5">
+      {
+        dimensions.map((dimension, index) => {
+          const percent = Math.round((dimension.score / dimension.maximum) * 100);
+          return (
+            <div data-blueprint-dimension={index}>
+              <div class="flex items-end justify-between gap-4 text-sm">
+                <span class="font-semibold" data-blueprint-dimension-label>
+                  {dimension.label}
+                </span>
+                <span class="font-mono text-muted-foreground" data-blueprint-dimension-score>
+                  {dimension.score}/{dimension.maximum}
+                </span>
+              </div>
+              <div
+                class="mt-2 h-2.5 overflow-hidden rounded-full bg-muted"
+                role="progressbar"
+                aria-label={dimension.label}
+                aria-valuenow={dimension.score}
+                aria-valuemin="0"
+                aria-valuemax={dimension.maximum}
+                data-blueprint-dimension-progress
+              >
+                <span
+                  class="block h-full rounded-full bg-brand"
+                  style={`width: ${percent}%`}
+                  data-blueprint-dimension-progress-bar
+                />
+              </div>
+              {showEvidence && (
+                <div class="mt-3 rounded-xl border border-border bg-background p-4">
+                  <p
+                    class="font-mono text-xs font-bold uppercase tracking-[0.12em] text-muted-foreground"
+                    data-blueprint-evidence-label
+                  >
+                    Source · {evidenceSources[index]}
+                  </p>
+                  <p class="mt-2 text-sm leading-relaxed" data-blueprint-evidence-body>
+                    {audience.exampleEvidence[index]}
+                  </p>
+                </div>
+              )}
+            </div>
+          );
+        })
+      }
+    </div>
+
+    {
+      isSnapshot && (
+        <div class="mt-7 border-t border-border pt-6">
+          <p class="rounded-xl bg-muted p-4 text-sm font-semibold leading-relaxed">
+            {blueprintProductContract.authoritySnapshot.instrumentBoundary}
+          </p>
+          <p class="font-mono text-xs font-bold uppercase tracking-[0.14em] text-muted-foreground">
+            System context not assessed
+          </p>
+          <ul class="mt-3 flex flex-wrap gap-2" data-blueprint-unassessed-list>
+            {blueprintProductContract.authoritySnapshot.unassessedSystemDimensions.map(
+              (dimension) => (
+                <li class="rounded-full border border-dashed border-border bg-muted px-3 py-2 text-sm text-muted-foreground">
+                  ? · Not assessed yet · {dimension}
+                </li>
+              )
+            )}
+          </ul>
+        </div>
+      )
+    }
+  </div>
+</article>

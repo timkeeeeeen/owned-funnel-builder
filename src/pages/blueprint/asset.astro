@@ -1,0 +1,171 @@
+---
+import BlueprintFunnelRuntime from '@/components/blueprint/BlueprintFunnelRuntime.astro';
+import PreviewNotice from '@/components/blueprint/PreviewNotice.astro';
+import { blueprintProductContract } from '@/data/blueprint-offers';
+import OfferLayout from '@/layouts/OfferLayout.astro';
+
+const title = 'Your saved Authority Snapshot';
+const description =
+  'Securely reopen your saved Authority Snapshot, evidence-linked findings, and starter post.';
+---
+
+<OfferLayout title={title} description={description} noindex={true}>
+  <div
+    data-blueprint-page
+    data-page-kind="blueprint-asset"
+    data-preview-status={blueprintProductContract.status}
+    class="min-h-screen bg-background px-4 py-10 sm:px-6 sm:py-16"
+  >
+    <div class="mx-auto max-w-5xl">
+      <PreviewNotice />
+      <p class="mt-8 font-mono text-sm font-bold uppercase tracking-[0.16em] text-brand">
+        Secure saved result
+      </p>
+      <h1 class="mt-3 text-balance text-4xl font-bold tracking-tight sm:text-6xl">
+        Your Authority Snapshot
+      </h1>
+      <p class="mt-5 max-w-3xl text-lg leading-relaxed text-muted-foreground">
+        This page reads the exact saved result behind the private link in your email. The link
+        contains no email address, and nothing is published automatically.
+      </p>
+
+      <section class="mt-10 rounded-xl border border-border bg-card p-6 shadow-sm sm:p-8">
+        <p data-blueprint-scorecard-label class="text-sm font-bold text-muted-foreground">
+          Opening your saved result
+        </p>
+        <div class="mt-4 flex items-end gap-2">
+          <span data-blueprint-score class="text-6xl font-bold tracking-tight">—</span>
+          <span class="pb-2 text-xl text-muted-foreground"
+            >/ <span data-blueprint-score-maximum>40</span></span
+          >
+          <span data-blueprint-score-copy class="sr-only">Score unavailable</span>
+        </div>
+
+        <div class="mt-8 grid gap-4 sm:grid-cols-2">
+          {
+            [0, 1].map((index) => (
+              <article data-blueprint-dimension={String(index)} class="rounded-xl bg-muted p-5">
+                <div class="flex items-center justify-between gap-4">
+                  <h2 data-blueprint-dimension-label class="font-semibold">
+                    Loading dimension
+                  </h2>
+                  <span data-blueprint-dimension-score class="font-mono text-sm font-bold">
+                    —/20
+                  </span>
+                </div>
+                <div
+                  data-blueprint-dimension-progress
+                  class="mt-4 h-2 overflow-hidden rounded-full bg-border"
+                  role="progressbar"
+                  aria-valuemin="0"
+                  aria-valuemax="20"
+                  aria-valuenow="0"
+                  aria-label="Authority dimension score"
+                >
+                  <div
+                    data-blueprint-dimension-progress-bar
+                    class="h-full bg-brand"
+                    style="width: 0%"
+                  />
+                </div>
+                <p
+                  data-blueprint-evidence-label
+                  class="mt-4 text-xs font-bold uppercase text-brand"
+                >
+                  Evidence loading
+                </p>
+                <p
+                  data-blueprint-evidence-body
+                  class="mt-2 text-sm leading-relaxed text-muted-foreground"
+                >
+                  Your governed public evidence will appear here.
+                </p>
+              </article>
+            ))
+          }
+        </div>
+
+        <h2 class="mt-8 text-lg font-semibold">Not assessed by the free Snapshot</h2>
+        <ul data-blueprint-unassessed-list class="mt-3 space-y-2 text-sm text-muted-foreground">
+          <li>Private system dimensions will remain visibly unassessed.</li>
+        </ul>
+      </section>
+
+      <section class="mt-6 grid gap-6 lg:grid-cols-2">
+        <article class="rounded-xl border border-border bg-card p-6 shadow-sm">
+          <p data-blueprint-findings-label class="text-sm font-bold uppercase text-brand">
+            Evidence-linked findings
+          </p>
+          <ul data-blueprint-findings class="mt-5 space-y-4 leading-relaxed text-muted-foreground">
+            <li>Your findings will appear after this secure result is verified.</li>
+          </ul>
+        </article>
+
+        <article
+          class="rounded-xl border border-border bg-foreground p-6 text-background shadow-sm"
+        >
+          <div class="flex flex-wrap items-center justify-between gap-3">
+            <p
+              data-blueprint-draft-label
+              class="font-mono text-xs font-bold uppercase tracking-wide"
+            >
+              Saved draft 01
+            </p>
+            <span
+              data-blueprint-draft-outcome
+              class="rounded-full border border-background/25 px-3 py-1 text-xs font-bold"
+            >
+              Loading
+            </span>
+          </div>
+          <h2 data-blueprint-draft-title class="mt-5 text-2xl font-semibold">
+            Opening your retained starter post
+          </h2>
+          <p
+            data-blueprint-draft-body
+            class="mt-4 whitespace-pre-line text-sm leading-relaxed text-background/80"
+          >
+            The exact saved draft will appear here.
+          </p>
+          <h3 class="mt-6 text-sm font-bold">Questions still needed</h3>
+          <ul data-blueprint-draft-questions class="mt-3 space-y-2 text-sm text-background/75">
+            <li>Any unresolved source questions will remain visible.</li>
+          </ul>
+        </article>
+      </section>
+
+      <section class="mt-8 rounded-xl border-2 border-brand bg-card p-6 text-center sm:p-8">
+        <h2 class="text-2xl font-bold">Turn this Snapshot into your 30-day CMO Game Plan.</h2>
+        <p class="mx-auto mt-3 max-w-2xl leading-relaxed text-muted-foreground">
+          One $5 payment unlocks the separate /100 audit, three ranked priorities, twenty planned
+          slots, five retained drafts, and the included Content Working Session.
+        </p>
+        <BlueprintFunnelRuntime mode="asset" />
+        <button
+          type="button"
+          disabled
+          data-blueprint-asset-checkout
+          data-acceptance-cta="asset-checkout"
+          class="mt-4 inline-flex min-h-16 w-full cursor-not-allowed items-center justify-center rounded-xl bg-brand px-6 py-4 text-lg font-bold text-brand-foreground opacity-60 sm:w-auto sm:min-w-96"
+        >
+          {blueprintProductContract.gamePlan.ctaLabel}
+        </button>
+        <p
+          data-blueprint-runtime-status
+          aria-live="polite"
+          class="mt-4 text-sm text-muted-foreground"
+        >
+          Private preview: secure saved-result recovery is not live yet.
+        </p>
+      </section>
+
+      <footer class="mt-10 border-t border-border pt-8 text-sm text-muted-foreground">
+        Need help? Email <a
+          class="font-semibold underline"
+          href={`mailto:${blueprintProductContract.supportEmail}`}
+          >{blueprintProductContract.supportEmail}</a
+        >.
+      </footer>
+    </div>
+  </div>
+</OfferLayout>

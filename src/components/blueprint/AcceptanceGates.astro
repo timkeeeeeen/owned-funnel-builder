@@ -1,0 +1,36 @@
+---
+import { blueprintProductContract } from '@/data/blueprint-offers';
+---
+
+<section
+  class="border-y border-border bg-muted px-4 py-12 sm:px-6"
+  aria-labelledby="acceptance-gates-title"
+>
+  <div class="mx-auto max-w-5xl">
+    <p class="font-mono text-sm font-bold uppercase tracking-[0.16em] text-brand">
+      Release boundary
+    </p>
+    <h2 id="acceptance-gates-title" class="mt-3 text-3xl font-bold tracking-tight sm:text-4xl">
+      What must be proven before either button turns on
+    </h2>
+    <p class="mt-4 max-w-3xl text-base leading-relaxed text-muted-foreground sm:text-lg">
+      The page is the promise. These are the minimum product, evidence, and fulfillment checks
+      required before paid traffic can reach an enabled action.
+    </p>
+    <ol class="mt-8 grid gap-4 md:grid-cols-2">
+      {
+        blueprintProductContract.launchGates.map((gate, index) => (
+          <li class="flex gap-4 rounded-xl border border-border bg-card p-5 shadow-sm">
+            <span
+              class="grid size-9 shrink-0 place-items-center rounded-full bg-foreground font-mono text-sm font-bold text-background"
+              aria-hidden="true"
+            >
+              {index + 1}
+            </span>
+            <span class="pt-1 text-sm leading-relaxed sm:text-base">{gate}</span>
+          </li>
+        ))
+      }
+    </ol>
+  </div>
+</section>

@@ -1,5 +1,6 @@
 ---
 import OfferLayout from '@/layouts/OfferLayout.astro';
+import { blueprintProductContract } from '@/data/blueprint-offers';
 import { siteSettings } from '@/data/site';
 
 const title = `Terms — ${siteSettings.siteName}`;
@@ -11,41 +12,54 @@ const description =
   <article class="mx-auto max-w-4xl px-6 py-20">
     <a class="font-semibold text-brand hover:underline" href="/">← Back to the offers</a>
     <h1 class="mt-8 text-5xl font-bold tracking-tight md:text-7xl">Terms</h1>
-    <p class="mt-4 text-muted-foreground">Last updated July 30, 2026.</p>
+    <p class="mt-4 text-muted-foreground">Last updated July 31, 2026.</p>
 
     <div class="prose prose-lg mt-12 max-w-none dark:prose-invert">
-      <h2>Digital product</h2>
+      <h2>Digital products and personalized outputs</h2>
       <p>
-        These offers are digital products. Your purchase grants you access to the materials
-        described on the offer page for your own personal or commercial product work.
+        These offers may include downloadable products, software, personalized reports, plans,
+        drafts, or access to an interactive working session. The specific offer page controls what
+        is included, the price, and whether access is one-time or recurring.
       </p>
 
-      <h2>License</h2>
+      <h2>Use and ownership</h2>
       <p>
-        You may use and modify your purchased copy to build products for yourself or your clients.
-        You may not resell, publish, sublicense, or redistribute the original template or a
-        substantially similar starter as a competing template product.
+        You may use, edit, and publish personalized outputs created for you, subject to your own
+        review and any rights belonging to third parties. Downloadable templates and software use
+        the license stated on their offer page or in the delivered materials. You may not resell or
+        redistribute an original template or software product as a competing starter product unless
+        its license expressly allows that use.
       </p>
 
       <h2>Payments and delivery</h2>
       <p>
-        Prices are shown in US dollars unless the checkout says otherwise. Access instructions are
-        delivered through the purchase flow or directly by email. You are responsible for using a
-        valid email address.
+        Prices are shown in US dollars unless checkout says otherwise. Access instructions or saved
+        result links are delivered through the product flow or by email. Generation and delivery can
+        take time after submission or payment. You are responsible for supplying a valid email and
+        accurate source material.
       </p>
 
       <h2 id="refunds">Refunds</h2>
       <p>
-        If the offer page includes a money-back guarantee, contact <a
+        The refund or guarantee terms shown on the offer page apply to that purchase. If delivery
+        fails or you believe the delivered product does not match the offer, contact <a
           href={`mailto:${siteSettings.supportEmail}`}>{siteSettings.supportEmail}</a
-        > within the stated period and include the email used to buy the product.
+        > with the email used to buy it. This does not limit any rights that cannot legally be excluded.
       </p>
+
+      <h2>Authority Snapshot and $5 CMO Game Plan</h2>
+      <p>{blueprintProductContract.commercialTerms.delivery}</p>
+      <p>{blueprintProductContract.commercialTerms.includedRevision}</p>
+      <p>{blueprintProductContract.commercialTerms.support}</p>
+      <p>{blueprintProductContract.commercialTerms.refund}</p>
+      <p>{blueprintProductContract.commercialTerms.retainedAccess}</p>
 
       <h2>No guaranteed business outcome</h2>
       <p>
-        The template is a software starting point, not a guarantee of revenue, launch timing,
-        security certification, or production fitness for a particular use. You remain responsible
-        for reviewing, configuring, testing, and operating the product you build.
+        No offer guarantees revenue, leads, audience growth, publication performance, or a similar
+        business outcome. Scores, recommendations, and AI-assisted drafts depend on the evidence and
+        context available. You remain responsible for checking facts, permissions, claims, and final
+        copy before acting on or publishing an output.
       </p>
 
       <h2>Questions</h2>
