@@ -19,7 +19,6 @@ interface DecisionRequest {
 interface PaymentMethodsResponse {
   items?: Array<{
     payment_method_id?: string;
-    recurring_enabled?: boolean | null;
   }>;
 }
 
@@ -29,24 +28,26 @@ interface CheckoutResponse {
   payment_id?: string | null;
 }
 
-const SAVED_METHOD_ATTEMPTS = 3;
-const SAVED_METHOD_RETRY_MS = 250;
+const SAVED_METHOD_ATTEMPTS = 5;
+const SAVED_METHOD_RETRY_MS = 300;
 
 async function findReusablePaymentMethod(
   env: PagesContext['env'],
   customerId: string,
   storedPaymentMethodId: string | null
 ): Promise<string | null> {
-  if (storedPaymentMethodId) return storedPaymentMethodId;
-
   for (let attempt = 0; attempt < SAVED_METHOD_ATTEMPTS; attempt += 1) {
     const methods = await dodoRequest<PaymentMethodsResponse>(
       env,
       `/customers/${encodeURIComponent(customerId)}/payment-methods`
     );
-    const paymentMethod = methods.items?.find(
-      (method) => method.payment_method_id && method.recurring_enabled !== false
-    );
+    const availableMethods =
+      methods.items?.filter(
+        (method): method is { payment_method_id: string } => Boolean(method.payment_method_id)
+      ) ?? [];
+    const paymentMethod =
+      availableMethods.find((method) => method.payment_method_id === storedPaymentMethodId) ??
+      availableMethods[0];
     if (paymentMethod?.payment_method_id) return paymentMethod.payment_method_id;
     if (attempt < SAVED_METHOD_ATTEMPTS - 1) {
       await new Promise((resolve) => setTimeout(resolve, SAVED_METHOD_RETRY_MS));

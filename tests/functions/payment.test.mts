@@ -341,7 +341,7 @@ test('upsells enforce ordering and declines are idempotent', async () => {
   );
 });
 
-test('upsell prefers the original payment method for a true one-click charge', async () => {
+test('upsell validates the payment method against the customer list for one-click charge', async () => {
   const database = stateDatabase(funnelState(['offered', 'offered']));
   const providerBodies: Array<Record<string, unknown>> = [];
   let paymentMethodQueries = 0;
@@ -349,7 +349,9 @@ test('upsell prefers the original payment method for a true one-click charge', a
     const path = new URL(String(input)).pathname;
     if (path.endsWith('/payment-methods')) {
       paymentMethodQueries += 1;
-      return Response.json({ items: [] });
+      return Response.json({
+        items: [{ payment_method_id: 'saved_customer_method', recurring_enabled: false }],
+      });
     }
     providerBodies.push(JSON.parse(String(init?.body)) as Record<string, unknown>);
     return Response.json({ session_id: 'session_upsell', payment_id: 'payment_upsell' });
@@ -366,8 +368,8 @@ test('upsell prefers the original payment method for a true one-click charge', a
   const payload = (await response.json()) as Record<string, unknown>;
   assert.equal(response.status, 200);
   assert.equal(payload.state, 'processing');
-  assert.equal(paymentMethodQueries, 0);
-  assert.equal(providerBodies[0]?.payment_method_id, 'method_from_payment');
+  assert.equal(paymentMethodQueries, 1);
+  assert.equal(providerBodies[0]?.payment_method_id, 'saved_customer_method');
   assert.equal(providerBodies[0]?.confirm, true);
   assert.equal(
     (providerBodies[0]?.metadata as Record<string, string>).admx_visitor_id,
