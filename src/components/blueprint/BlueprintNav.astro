@@ -1,0 +1,37 @@
+---
+import PreserveAttribution from '@/components/blueprint/PreserveAttribution.astro';
+import { blueprintAudiences, type BlueprintAudienceSlug } from '@/data/blueprint-offers';
+
+interface Props {
+  family: 'authority-snapshot' | 'cmo-game-plan';
+  activeAudience?: BlueprintAudienceSlug;
+}
+
+const { family, activeAudience } = Astro.props;
+const audienceLabel = activeAudience ? blueprintAudiences[activeAudience].switchLabel : '';
+const offerLabel = family === 'authority-snapshot' ? 'Free Authority Snapshot' : '$5 CMO Game Plan';
+---
+
+<header class="border-b border-border/70 bg-background px-4 sm:px-6">
+  <div class="mx-auto flex min-h-16 max-w-6xl items-center justify-between gap-4 py-3">
+    <a
+      href={`/${family}/`}
+      data-preserve-attribution
+      class="inline-flex min-h-11 items-center gap-3 rounded-lg focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+      aria-label={`${offerLabel} home`}
+    >
+      <span
+        class="grid size-9 place-items-center rounded-lg bg-foreground text-xs font-bold text-background"
+        >TK</span
+      >
+      <span class="text-sm font-bold">{offerLabel}</span>
+    </a>
+    {
+      audienceLabel && (
+        <span class="text-sm font-semibold text-muted-foreground">For {audienceLabel}</span>
+      )
+    }
+  </div>
+</header>
+
+<PreserveAttribution />

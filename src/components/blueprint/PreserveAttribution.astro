@@ -1,0 +1,35 @@
+<script>
+  const preservedKeys = [
+    'utm_source',
+    'utm_medium',
+    'utm_campaign',
+    'utm_content',
+    'utm_term',
+    'gclid',
+    'fbclid',
+    'ttclid',
+    'msclkid',
+    'journey_id',
+  ];
+
+  function preserveAttribution() {
+    const current = new URLSearchParams(window.location.search);
+
+    document.querySelectorAll<HTMLAnchorElement>('a[data-preserve-attribution]').forEach((link) => {
+      const destination = new URL(link.href, window.location.href);
+      if (destination.origin !== window.location.origin) return;
+
+      for (const key of preservedKeys) {
+        const value = current.get(key);
+        if (value && !destination.searchParams.has(key)) {
+          destination.searchParams.set(key, value);
+        }
+      }
+
+      link.href = destination.toString();
+    });
+  }
+
+  preserveAttribution();
+  document.addEventListener('astro:after-swap', preserveAttribution);
+</script>

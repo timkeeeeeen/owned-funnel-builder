@@ -1,0 +1,26 @@
+---
+import GamePlanPage from '@/components/blueprint/GamePlanPage.astro';
+import {
+  BLUEPRINT_AUDIENCE_SLUGS,
+  blueprintAudiences,
+  type BlueprintAudienceCopy,
+} from '@/data/blueprint-offers';
+
+export const prerender = true;
+
+export function getStaticPaths() {
+  return BLUEPRINT_AUDIENCE_SLUGS.map((slug) => ({
+    params: { audience: slug },
+    props: { audience: blueprintAudiences[slug] },
+  }));
+}
+
+interface Props {
+  audience: BlueprintAudienceCopy;
+}
+
+const { audience } = Astro.props;
+const description = `${audience.gamePlanHeadline} Inspect the exact score, evidence, priorities, 20-slot month, and retained draft contract required before checkout opens.`;
+---
+
+<GamePlanPage audience={audience} description={description} />

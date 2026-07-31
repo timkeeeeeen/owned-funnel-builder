@@ -1,0 +1,81 @@
+---
+import BlueprintFunnelRuntime from '@/components/blueprint/BlueprintFunnelRuntime.astro';
+import PreviewNotice from '@/components/blueprint/PreviewNotice.astro';
+import { blueprintProductContract } from '@/data/blueprint-offers';
+import OfferLayout from '@/layouts/OfferLayout.astro';
+
+const title = 'Continue to your CMO Game Plan';
+const description = 'Continue securely from checkout into your saved Maestro CMO Game Plan.';
+---
+
+<OfferLayout title={title} description={description} noindex={true}>
+  <div
+    data-blueprint-page
+    data-page-kind="blueprint-checkout-return"
+    data-preview-status={blueprintProductContract.status}
+    class="min-h-screen bg-background px-4 py-12 sm:px-6 sm:py-20"
+  >
+    <div class="mx-auto max-w-3xl">
+      <PreviewNotice />
+      <section
+        class="mt-8 rounded-xl border-2 border-brand bg-card p-7 text-center shadow-sm sm:p-12"
+      >
+        <p class="font-mono text-sm font-bold uppercase tracking-[0.16em] text-brand">
+          Secure checkout return
+        </p>
+        <h1 class="mt-4 text-balance text-4xl font-bold tracking-tight sm:text-6xl">
+          Continue to your saved CMO Game Plan.
+        </h1>
+        <p class="mx-auto mt-5 max-w-2xl text-lg leading-relaxed text-muted-foreground">
+          Maestro verifies the provider payment and the email used at checkout before importing your
+          Snapshot or creating product access. Refreshing this page cannot create a second charge.
+        </p>
+
+        <BlueprintFunnelRuntime mode="checkout-return" />
+        <a
+          data-blueprint-claim-link
+          aria-disabled="true"
+          class="pointer-events-none mt-8 inline-flex min-h-16 w-full items-center justify-center rounded-xl bg-brand px-6 py-4 text-lg font-bold text-brand-foreground opacity-60 sm:w-auto sm:min-w-96"
+        >
+          Continue securely to Maestro
+        </a>
+        <p
+          data-blueprint-runtime-status
+          aria-live="polite"
+          class="mt-5 text-sm text-muted-foreground"
+        >
+          Private preview: no purchase occurred and no access was created.
+        </p>
+      </section>
+
+      <div class="mt-8 grid gap-4 sm:grid-cols-3">
+        <div class="rounded-xl border border-border bg-card p-5">
+          <p class="font-bold">Payment first</p>
+          <p class="mt-2 text-sm leading-relaxed text-muted-foreground">
+            A verified Dodo receipt is the only paid fact.
+          </p>
+        </div>
+        <div class="rounded-xl border border-border bg-card p-5">
+          <p class="font-bold">Email match</p>
+          <p class="mt-2 text-sm leading-relaxed text-muted-foreground">
+            Sign in with the same verified purchase email.
+          </p>
+        </div>
+        <div class="rounded-xl border border-border bg-card p-5">
+          <p class="font-bold">One import</p>
+          <p class="mt-2 text-sm leading-relaxed text-muted-foreground">
+            Replay returns the same workspace and artifacts.
+          </p>
+        </div>
+      </div>
+
+      <footer class="mt-10 border-t border-border pt-8 text-sm text-muted-foreground">
+        If the secure handoff is unavailable, use the delivery email or contact <a
+          class="font-semibold underline"
+          href={`mailto:${blueprintProductContract.supportEmail}`}
+          >{blueprintProductContract.supportEmail}</a
+        >.
+      </footer>
+    </div>
+  </div>
+</OfferLayout>

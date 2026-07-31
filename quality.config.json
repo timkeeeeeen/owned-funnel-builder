@@ -23,6 +23,96 @@
       }
     },
     {
+      "route": "/authority-snapshot",
+      "profiles": ["desktop", "mobile"],
+      "captures": ["first-fold", "full-page"],
+      "primaryCta": {
+        "kind": "internal",
+        "selector": "article a[data-preserve-attribution][href*='/authority-snapshot/agency-owners/']",
+        "expectedDestination": "/authority-snapshot/agency-owners/"
+      }
+    },
+    {
+      "route": "/authority-snapshot/agency-owners",
+      "profiles": ["desktop", "tablet", "mobile"],
+      "captures": ["first-fold", "full-page"]
+    },
+    {
+      "route": "/authority-snapshot/consultants",
+      "profiles": ["desktop", "tablet", "mobile"],
+      "captures": ["first-fold", "full-page"]
+    },
+    {
+      "route": "/authority-snapshot/coaches",
+      "profiles": ["desktop", "tablet", "mobile"],
+      "captures": ["first-fold", "full-page"]
+    },
+    {
+      "route": "/authority-snapshot/solo-experts",
+      "profiles": ["desktop", "tablet", "mobile"],
+      "captures": ["first-fold", "full-page"]
+    },
+    {
+      "route": "/authority-snapshot/agency-owners/thank-you",
+      "profiles": ["desktop", "mobile"],
+      "captures": ["first-fold", "full-page"]
+    },
+    {
+      "route": "/authority-snapshot/consultants/thank-you",
+      "profiles": ["desktop", "mobile"],
+      "captures": ["first-fold", "full-page"]
+    },
+    {
+      "route": "/authority-snapshot/coaches/thank-you",
+      "profiles": ["desktop", "mobile"],
+      "captures": ["first-fold", "full-page"]
+    },
+    {
+      "route": "/authority-snapshot/solo-experts/thank-you",
+      "profiles": ["desktop", "mobile"],
+      "captures": ["first-fold", "full-page"]
+    },
+    {
+      "route": "/cmo-game-plan",
+      "profiles": ["desktop", "mobile"],
+      "captures": ["first-fold", "full-page"],
+      "primaryCta": {
+        "kind": "internal",
+        "selector": "article a[data-preserve-attribution][href*='/cmo-game-plan/agency-owners/']",
+        "expectedDestination": "/cmo-game-plan/agency-owners/"
+      }
+    },
+    {
+      "route": "/cmo-game-plan/agency-owners",
+      "profiles": ["desktop", "tablet", "mobile"],
+      "captures": ["first-fold", "full-page"]
+    },
+    {
+      "route": "/cmo-game-plan/consultants",
+      "profiles": ["desktop", "tablet", "mobile"],
+      "captures": ["first-fold", "full-page"]
+    },
+    {
+      "route": "/cmo-game-plan/coaches",
+      "profiles": ["desktop", "tablet", "mobile"],
+      "captures": ["first-fold", "full-page"]
+    },
+    {
+      "route": "/cmo-game-plan/solo-experts",
+      "profiles": ["desktop", "tablet", "mobile"],
+      "captures": ["first-fold", "full-page"]
+    },
+    {
+      "route": "/blueprint/asset",
+      "profiles": ["desktop", "mobile"],
+      "captures": ["first-fold", "full-page"]
+    },
+    {
+      "route": "/blueprint/checkout/return",
+      "profiles": ["desktop", "mobile"],
+      "captures": ["first-fold", "full-page"]
+    },
+    {
       "route": "/checkout/upsell/blueprints",
       "profiles": ["desktop", "mobile"],
       "captures": ["first-fold", "full-page"]
