@@ -1,6 +1,10 @@
 import assert from 'node:assert/strict';
 import { afterEach, test } from 'node:test';
 
+import {
+  minorUnitsToMajor,
+  recordAdmaxxerPayment,
+} from '../../functions/_lib/admaxxer.ts';
 import { deliverPurchase } from '../../functions/_lib/fulfillment.ts';
 import { nextFunnelPath, type FunnelState } from '../../functions/_lib/funnel.ts';
 import type {
@@ -65,6 +69,68 @@ const originalFetch = globalThis.fetch;
 
 afterEach(() => {
   globalThis.fetch = originalFetch;
+});
+
+test('Admaxxer payment attribution normalizes Dodo minor units and preserves identity', async () => {
+  let requestUrl = '';
+  let requestHeaders: Headers | undefined;
+  let requestBody: Record<string, unknown> | undefined;
+  globalThis.fetch = async (input, init) => {
+    requestUrl = String(input);
+    requestHeaders = new Headers(init?.headers);
+    requestBody = JSON.parse(String(init?.body)) as Record<string, unknown>;
+    return Response.json({ received: true });
+  };
+
+  const sent = await recordAdmaxxerPayment(
+    { ADMAXXER_API_KEY: 'workspace_test_key' },
+    {
+      paymentId: 'pay_immutable_123',
+      totalAmount: 2999,
+      currency: 'usd',
+      visitorId: 'admx_visitor_123',
+      email: 'OWNER@example.com',
+    }
+  );
+
+  assert.equal(sent, true);
+  assert.equal(requestUrl, 'https://admaxxer.com/api/v1/payments');
+  assert.equal(requestHeaders?.get('authorization'), 'Bearer workspace_test_key');
+  assert.deepEqual(requestBody, {
+    amount: 29.99,
+    currency: 'USD',
+    transaction_id: 'pay_immutable_123',
+    admaxxer_visitor_id: 'admx_visitor_123',
+    email: 'owner@example.com',
+  });
+});
+
+test('Admaxxer payment attribution supports zero- and three-decimal currencies', () => {
+  assert.equal(minorUnitsToMajor(3000, 'JPY'), 3000);
+  assert.equal(minorUnitsToMajor(1234, 'KWD'), 1.234);
+});
+
+test('Admaxxer payment attribution is optional but retries provider failures', async () => {
+  let fetchCalls = 0;
+  globalThis.fetch = async () => {
+    fetchCalls += 1;
+    return Response.json({ error: 'temporary' }, { status: 503 });
+  };
+
+  assert.equal(
+    await recordAdmaxxerPayment({}, { paymentId: '', totalAmount: null, currency: '' }),
+    false
+  );
+  assert.equal(fetchCalls, 0);
+
+  await assert.rejects(
+    recordAdmaxxerPayment(
+      { ADMAXXER_API_KEY: 'workspace_test_key' },
+      { paymentId: 'pay_retry', totalAmount: 1900, currency: 'USD' }
+    ),
+    /status 503/
+  );
+  assert.equal(fetchCalls, 1);
 });
 
 function checkoutRequest(body: Record<string, unknown>): Request {

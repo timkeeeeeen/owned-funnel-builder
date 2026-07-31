@@ -35,6 +35,9 @@ const page = `<!doctype html>
 <label>Optional From email<input type="email" name="RESEND_FROM_EMAIL" value="${value('RESEND_FROM_EMAIL')}" placeholder="access@yourdomain.com"></label>
 <label>Support email<input type="email" name="SUPPORT_EMAIL" required value="${value('SUPPORT_EMAIL')}" placeholder="help@yourdomain.com"></label>
 </div></div>
+<div class="section"><h2>Ad tracking</h2><p>Admaxxer connects visits, leads, and successful payments so you can see which ads made sales. This is optional until you run ads.</p><div class="grid">
+<label class="full">Optional Admaxxer API key<input type="password" name="ADMAXXER_API_KEY" autocomplete="off" placeholder="${saved('ADMAXXER_API_KEY')}"><small>Create a workspace key in Admaxxer → Settings → API Keys with Pixel write access. It is used privately by the verified payment webhook.</small></label>
+</div></div>
 <div class="section"><h2>Your Cloudflare site</h2><p>Choose simple lowercase names. Your agent will create the site and database.</p><div class="grid">
 <label>Site name<input name="FUNNEL_CLOUDFLARE_PROJECT" required pattern="[a-z0-9-]+" value="${value('FUNNEL_CLOUDFLARE_PROJECT', 'my-funnel-site')}"></label>
 <label>Database name<input name="FUNNEL_D1_DATABASE" required pattern="[a-z0-9-]+" value="${value('FUNNEL_D1_DATABASE', 'my-funnel-orders')}"></label>
@@ -77,6 +80,7 @@ const server = http.createServer(async (request, response) => {
       'RESEND_API_KEY',
       'RESEND_FROM_EMAIL',
       'SUPPORT_EMAIL',
+      'ADMAXXER_API_KEY',
       'FUNNEL_CLOUDFLARE_PROJECT',
       'FUNNEL_D1_DATABASE',
     ]) {

@@ -1,6 +1,7 @@
 import DodoPayments from 'dodopayments';
 
 import { getProductDefinition } from '../../_generated/funnels';
+import { recordAdmaxxerPayment } from '../../_lib/admaxxer';
 import { deliverPurchase } from '../../_lib/fulfillment';
 import {
   cleanString,
@@ -14,9 +15,11 @@ import {
 interface PaymentEventData {
   payment_id?: unknown;
   payment_method_id?: unknown;
+  total_amount?: unknown;
+  currency?: unknown;
   status?: unknown;
   metadata?: unknown;
-  customer?: { customer_id?: unknown } | null;
+  customer?: { customer_id?: unknown; email?: unknown } | null;
   customer_id?: unknown;
 }
 
@@ -117,6 +120,14 @@ async function markPaymentSucceeded(
     if (!getProductDefinition(bumpProductKey)) throw new Error('Order bump is not configured.');
     await deliverPurchase(env, database, { paymentId, productKey: bumpProductKey, leadId });
   }
+
+  await recordAdmaxxerPayment(env, {
+    paymentId,
+    totalAmount: data.total_amount,
+    currency: data.currency,
+    visitorId: metadata.admx_visitor_id,
+    email: data.customer?.email,
+  });
 }
 
 export async function onRequestPost({ request, env }: PagesContext): Promise<Response> {
