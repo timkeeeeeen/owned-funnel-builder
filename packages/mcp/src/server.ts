@@ -199,10 +199,14 @@ export function createServer(): McpServer {
   server.registerTool(
     'configuration_status',
     {
-      title: 'Check Dodo, Resend, and Cloudflare setup',
+      title: 'Check payments, Resend, and Cloudflare setup',
       description:
         'Reports whether required settings exist without reading or displaying any secret values.',
-      inputSchema: { service: z.enum(['all', 'dodo', 'resend', 'cloudflare']).default('all') },
+      inputSchema: {
+        service: z
+          .enum(['all', 'payments', 'dodo', 'stripe', 'resend', 'cloudflare'])
+          .default('all'),
+      },
       annotations: { readOnlyHint: true, openWorldHint: false },
     },
     async ({ service }) => {
@@ -281,7 +285,7 @@ export function createServer(): McpServer {
             'What simple add-on would be easy to include at checkout?',
             'What two upgrades would help the buyer get a bigger or faster result?',
             'Where should customers receive their access?',
-            'Do you already have Dodo, Resend, Cloudflare, and a domain?',
+            'Which payment service do you want to use: Dodo or Stripe? Do you already have the required Resend, Cloudflare, and domain accounts?',
           ],
           project: status,
           nextTool: status.offerCount > 0 ? 'funnel_list' : 'funnel_create',
@@ -426,25 +430,37 @@ export function createServer(): McpServer {
   server.registerTool(
     'funnel_configure_payments',
     {
-      title: 'Prepare Dodo Payments',
+      title: 'Prepare payments',
       description:
-        'Checks whether payment settings exist and explains the safe next steps. This tool never accepts, reads, or displays a payment key.',
+        'Checks the selected Dodo or Stripe settings and explains safe next steps. This tool never accepts, reads, or displays a payment key.',
       inputSchema: {},
       annotations: { readOnlyHint: true, openWorldHint: false },
     },
     async () => {
       try {
         const status = await integrationStatus(await root());
+        const provider = status.payments.provider;
+        const selectedStatus = provider === 'stripe' ? status.stripe : status.dodo;
         return response({
-          ...status.dodo,
+          ...status.payments,
+          variables: selectedStatus.variables,
           changedNothing: true,
-          safeSteps: [
-            'Open Dodo Payments in your own browser.',
-            'Ask the configure-dodo skill to guide product creation and secure secret storage.',
-            'Create the main product, order bump, and two upsells from the funnel definition.',
-            'Run a test checkout without making an unnecessary real charge.',
-            'Enable checkout only after product IDs and prices are verified.',
-          ],
+          safeSteps:
+            provider === 'stripe'
+              ? [
+                  'Open Stripe in your own browser and start in test mode.',
+                  'Ask the configure-stripe skill to guide secure setup.',
+                  'Connect Resend and replace every placeholder access link before enabling Stripe.',
+                  'Create or reuse the main, bump, and upsell Products and Prices and verify the signed webhook.',
+                  'Run a test checkout, saved-card upsell, and hosted fallback without making a live charge.',
+                ]
+              : [
+                  'Open Dodo Payments in your own browser.',
+                  'Ask the configure-dodo skill to guide product creation and secure secret storage.',
+                  'Create the main product, order bump, and two upsells from the funnel definition.',
+                  'Run a test checkout without making an unnecessary real charge.',
+                  'Enable checkout only after product IDs and prices are verified.',
+                ],
           privacy: status.privacy,
         });
       } catch (error) {

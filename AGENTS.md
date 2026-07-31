@@ -29,7 +29,7 @@ Never use reference-site names, screenshots, copy, assets, or provenance in prod
 
 Follow the invariants in `PROJECT.md`. Never commit or print credentials. Do not pass secrets as command arguments. Dodo is supported; do not claim Stripe parity without equivalent implementation and tests.
 
-Do not place a live order without explicit approval. Test-mode orders are allowed when the owner asks to connect or verify payments.
+Do not place a live order without explicit approval. Test-mode orders are allowed when the owner asks to connect or verify payments. Dodo remains the default; Stripe support must preserve the same checkout, upsell, webhook, fulfillment, and duplicate-charge protections.
 
 ## Safety and GitHub
 

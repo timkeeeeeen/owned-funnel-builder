@@ -1,6 +1,6 @@
 ---
 name: configure-resend
-description: Configure or troubleshoot Resend fulfillment for paid funnels, including sender-domain verification, secret storage, purchase and access emails, bump and upsell entitlements, idempotent webhook-driven delivery, test messages, and delivery-status recording. Use when buyers need product access or transactional email after Dodo payment.
+description: Configure or troubleshoot Resend fulfillment for Dodo or Stripe funnels, including sender-domain verification, secret storage, purchase and access emails, bump and upsell entitlements, idempotent webhook-driven delivery, test messages, and delivery-status recording. Use when buyers need product access or transactional email after a verified payment, especially when Stripe is selected.
 ---
 
 # Configure Resend
@@ -21,4 +21,4 @@ Keep fulfillment narrow, reliable, and separate from payment receipts.
 
 ## Scope
 
-Implement product confirmation, access delivery, support details, and relevant add-on access. Let Dodo issue payment receipts. Do not turn the funnel repository into a marketing automation platform.
+Implement product confirmation, access delivery, support details, and relevant add-on access. Let the selected payment provider issue payment receipts. Require Resend for Stripe; keep it optional when Dodo's native entitlement delivery is sufficient. Do not turn the funnel repository into a marketing automation platform.

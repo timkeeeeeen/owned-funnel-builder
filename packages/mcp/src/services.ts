@@ -4,18 +4,34 @@ import { pathExists } from './project.js';
 
 const SECRET_FILES = ['.dev.vars', '.env', '.env.local', '.env.production'];
 
-async function configuredNames(root: string): Promise<Set<string>> {
+type PaymentProvider = 'dodo' | 'stripe';
+
+function paymentProvider(value: unknown): PaymentProvider | null {
+  return value === 'dodo' || value === 'stripe' ? value : null;
+}
+
+async function configuredSettings(
+  root: string
+): Promise<{ names: Set<string>; provider: PaymentProvider }> {
   const found = new Set<string>();
+  let selectedProvider: PaymentProvider | null = null;
   for (const name of SECRET_FILES) {
     const path = join(root, name);
     if (!(await pathExists(path))) continue;
     const source = await readFile(path, 'utf8');
     for (const match of source.matchAll(/^\s*([A-Z][A-Z0-9_]*)\s*=/gm)) found.add(match[1] ?? '');
+    if (!selectedProvider) {
+      const match = source.match(
+        /^\s*PAYMENTS_PROVIDER\s*=\s*["']?(dodo|stripe)["']?\s*(?:#.*)?$/im
+      );
+      selectedProvider = paymentProvider(match?.[1]);
+    }
   }
   for (const name of Object.keys(process.env)) {
     if (process.env[name]) found.add(name);
   }
-  return found;
+  selectedProvider = paymentProvider(process.env.PAYMENTS_PROVIDER) ?? selectedProvider;
+  return { names: found, provider: selectedProvider ?? 'dodo' };
 }
 
 function variableStatus(names: Set<string>, required: string[]) {
@@ -39,29 +55,62 @@ async function cloudflareFileStatus(
 }
 
 export async function integrationStatus(root: string) {
-  const names = await configuredNames(root);
+  const { names, provider } = await configuredSettings(root);
   const cloudflare = await cloudflareFileStatus(root);
   const dodoVariables = variableStatus(names, [
     'DODO_PAYMENTS_API_KEY',
     'DODO_PAYMENTS_ENVIRONMENT',
   ]);
+  const stripeVariables = variableStatus(names, [
+    'STRIPE_SECRET_KEY',
+    'STRIPE_PAYMENTS_ENVIRONMENT',
+    'STRIPE_WEBHOOK_SECRET',
+  ]);
   const resendVariables = variableStatus(names, ['RESEND_API_KEY', 'RESEND_FROM_EMAIL']);
   const cloudflareAuth = names.has('CLOUDFLARE_API_TOKEN') || names.has('CLOUDFLARE_ACCOUNT_ID');
+  const dodoReady = Object.values(dodoVariables).every(Boolean);
+  const stripeReady = Object.values(stripeVariables).every(Boolean);
+  const resendReady = Object.values(resendVariables).every(Boolean);
+  const selectedPaymentsReady = provider === 'stripe' ? stripeReady && resendReady : dodoReady;
 
   return {
+    payments: {
+      provider,
+      ready: selectedPaymentsReady,
+      nextStep:
+        provider === 'stripe'
+          ? stripeReady
+            ? resendReady
+              ? 'Stripe and its required access email settings are present. Run test-mode validation before accepting money.'
+              : 'Stripe is selected. Connect Resend before enabling checkout so every buyer receives access.'
+            : 'Stripe is selected. Connect it with the Stripe setup skill; credentials are never displayed here.'
+          : dodoReady
+            ? 'Dodo settings are present. Run test-mode validation before accepting money.'
+            : 'Dodo is selected. Connect it with the Dodo setup skill; credentials are never displayed here.',
+    },
     dodo: {
-      ready: Object.values(dodoVariables).every(Boolean),
+      ready: dodoReady,
       variables: dodoVariables,
-      nextStep: Object.values(dodoVariables).every(Boolean)
+      nextStep: dodoReady
         ? 'Dodo settings are present. Run validation before accepting money.'
         : 'Connect Dodo with the setup skill. Credentials are never displayed here.',
     },
+    stripe: {
+      ready: stripeReady,
+      variables: stripeVariables,
+      requiresResend: true,
+      nextStep: stripeReady
+        ? 'Stripe settings are present. Verify Resend and run test-mode validation before accepting money.'
+        : 'Connect Stripe with the setup skill. Credentials are never displayed here.',
+    },
     resend: {
-      ready: Object.values(resendVariables).every(Boolean),
+      ready: resendReady,
       variables: resendVariables,
-      nextStep: Object.values(resendVariables).every(Boolean)
+      nextStep: resendReady
         ? 'Resend settings are present. Send a test delivery before launch.'
-        : 'Connect Resend if you want automatic product-delivery emails.',
+        : provider === 'stripe'
+          ? 'Connect Resend before enabling Stripe so buyers receive product access.'
+          : 'Connect Resend if you want an additional branded product-delivery email.',
     },
     cloudflare: {
       ready: Boolean(cloudflare.configFile && cloudflare.projectName && cloudflare.d1Binding),
@@ -72,6 +121,6 @@ export async function integrationStatus(root: string) {
         : 'Run the Cloudflare setup skill before publishing.',
     },
     privacy:
-      'Only setting names and yes/no status are reported. Secret values were not read or returned.',
+      'Only the selected provider, setting names, and yes/no status are reported. Secret values were not returned.',
   };
 }
