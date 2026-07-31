@@ -87,7 +87,7 @@ export interface OfferGatesSection {
 }
 
 export interface OfferCheckoutSection {
-  provider: 'dodo-inline';
+  provider: 'provider-checkout' | 'dodo-inline';
   enabled: boolean;
   eyebrow: string;
   title: string;
@@ -201,7 +201,9 @@ const offerModules = import.meta.glob<{ default: Offer }>('../content/offers/*.j
 
 function applyEnvironmentOverrides(offer: Offer): Offer {
   const checkoutUrl = import.meta.env.PUBLIC_CHECKOUT_URL ?? offer.checkoutUrl;
-  const checkoutEnabled = import.meta.env.PUBLIC_DODO_CHECKOUT_ENABLED !== 'false';
+  const checkoutEnabled =
+    (import.meta.env.PUBLIC_MANAGED_CHECKOUT_ENABLED ??
+      import.meta.env.PUBLIC_DODO_CHECKOUT_ENABLED) !== 'false';
 
   return {
     ...offer,

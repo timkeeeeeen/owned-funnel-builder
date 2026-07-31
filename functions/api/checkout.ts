@@ -1,9 +1,10 @@
 import { assertFunnelDefinition } from '../_lib/funnel';
-import { getProductId } from '../_lib/products';
+import { getProductId, getStripePrice } from '../_lib/products';
 import {
   cleanString,
   dodoRequest,
   getDodoConfig,
+  getPaymentProvider,
   hashFlowToken,
   json,
   randomFlowToken,
@@ -11,6 +12,14 @@ import {
   RequestError,
   type PagesContext,
 } from '../_lib/runtime';
+import {
+  appendStripeLineItems,
+  appendStripeMetadata,
+  assertStripeFulfillmentConfig,
+  getStripeConfig,
+  stripeRequest,
+  validateStripeCheckoutUrl,
+} from '../_lib/stripe';
 
 interface CheckoutRequest {
   email?: unknown;
@@ -36,6 +45,11 @@ interface DodoCustomer {
 
 interface DodoCustomerListResponse {
   items?: DodoCustomer[];
+}
+
+interface StripeCheckoutResponse {
+  id?: unknown;
+  url?: unknown;
 }
 
 const MAX_BODY_BYTES = 16 * 1024;
@@ -104,10 +118,7 @@ function validateCheckoutUrl(value: unknown): string {
   return checkoutUrl.toString();
 }
 
-async function getOrCreateDodoCustomer(
-  env: PagesContext['env'],
-  email: string
-): Promise<string> {
+async function getOrCreateDodoCustomer(env: PagesContext['env'], email: string): Promise<string> {
   const customers = await dodoRequest<DodoCustomerListResponse>(
     env,
     `/customers?email=${encodeURIComponent(email)}&page_size=100&page_number=0`
@@ -171,8 +182,25 @@ export async function onRequestPost(context: PagesContext): Promise<Response> {
 
     const definition = assertFunnelDefinition(offerSlug);
     const bumpAccepted = requestedBump && Boolean(definition.bump);
-    const { apiKey, apiBaseUrl, checkoutMode } = getDodoConfig(env);
-    const productId = await getProductId(env.LEADS, definition.base.productKey);
+    const paymentProvider = getPaymentProvider(env);
+    const dodoConfig = paymentProvider === 'dodo' ? getDodoConfig(env) : null;
+    const checkoutMode =
+      paymentProvider === 'dodo' ? dodoConfig?.checkoutMode : getStripeConfig(env).checkoutMode;
+    if (paymentProvider === 'stripe') assertStripeFulfillmentConfig(env);
+
+    const dodoProductIds: string[] = [];
+    const stripePriceIds: string[] = [];
+    if (paymentProvider === 'dodo') {
+      dodoProductIds.push(await getProductId(env.LEADS, definition.base.productKey));
+      if (bumpAccepted && definition.bump) {
+        dodoProductIds.push(await getProductId(env.LEADS, definition.bump.productKey));
+      }
+    } else {
+      stripePriceIds.push((await getStripePrice(env.LEADS, definition.base.productKey)).priceId);
+      if (bumpAccepted && definition.bump) {
+        stripePriceIds.push((await getStripePrice(env.LEADS, definition.bump.productKey)).priceId);
+      }
+    }
 
     leadId = crypto.randomUUID();
     const funnelId = crypto.randomUUID();
@@ -188,8 +216,8 @@ export async function onRequestPost(context: PagesContext): Promise<Response> {
       `INSERT INTO checkout_leads (
         id, email, offer_slug, placement, marketing_consent, consent_version,
         attribution_json, referrer, country, status, bump_selected, admaxxer_visitor_id,
-        created_at, updated_at
-      ) VALUES (?, ?, ?, ?, 1, ?, ?, ?, ?, 'captured', ?, ?, ?, ?)`
+        payment_provider, created_at, updated_at
+      ) VALUES (?, ?, ?, ?, 1, ?, ?, ?, ?, 'captured', ?, ?, ?, ?, ?)`
     )
       .bind(
         leadId,
@@ -202,6 +230,7 @@ export async function onRequestPost(context: PagesContext): Promise<Response> {
         country || null,
         bumpAccepted ? 1 : 0,
         admaxxerVisitorId || null,
+        paymentProvider,
         now,
         now
       )
@@ -210,10 +239,10 @@ export async function onRequestPost(context: PagesContext): Promise<Response> {
 
     const funnelResult = await env.LEADS.prepare(
       `INSERT INTO funnel_runs (
-        id, lead_id, offer_slug, token_hash, created_at, updated_at
-      ) VALUES (?, ?, ?, ?, ?, ?)`
+        id, lead_id, offer_slug, token_hash, payment_provider, created_at, updated_at
+      ) VALUES (?, ?, ?, ?, ?, ?, ?)`
     )
-      .bind(funnelId, leadId, offerSlug, flowTokenHash, now, now)
+      .bind(funnelId, leadId, offerSlug, flowTokenHash, paymentProvider, now, now)
       .run();
     if (!funnelResult.success) throw new Error('Checkout funnel initialization failed.');
 
@@ -228,7 +257,8 @@ export async function onRequestPost(context: PagesContext): Promise<Response> {
       if (!stepResult.success) throw new Error('Checkout step initialization failed.');
     }
 
-    const configuredReturnUrl = readEnvironmentValue(env, 'DODO_PAYMENTS_RETURN_URL');
+    const configuredReturnUrl =
+      paymentProvider === 'dodo' ? readEnvironmentValue(env, 'DODO_PAYMENTS_RETURN_URL') : '';
     const firstStep = definition.upsells[0];
     const returnUrl = new URL(
       firstStep
@@ -239,13 +269,59 @@ export async function onRequestPost(context: PagesContext): Promise<Response> {
     returnUrl.searchParams.set('offer', offerSlug);
     returnUrl.searchParams.set('flow', flowToken);
 
-    const productCart = [{ product_id: productId, quantity: 1 }];
-    if (bumpAccepted && definition.bump) {
-      productCart.push({
-        product_id: await getProductId(env.LEADS, definition.bump.productKey),
-        quantity: 1,
+    const metadata = {
+      offer_slug: offerSlug,
+      product_key: definition.base.productKey,
+      lead_id: leadId,
+      funnel_id: funnelId,
+      placement,
+      bump_selected: bumpAccepted ? 'true' : 'false',
+      bump_product_key: bumpAccepted && definition.bump ? definition.bump.productKey : '',
+      source: 'owned-funnel-builder',
+      ...(admaxxerVisitorId ? { admx_visitor_id: admaxxerVisitorId } : {}),
+    };
+
+    if (paymentProvider === 'stripe') {
+      const checkoutBody = new URLSearchParams({
+        mode: 'payment',
+        success_url: returnUrl.toString(),
+        cancel_url: new URL(`/${offerSlug}/`, requestUrl.origin).toString(),
+        customer_email: email,
+        customer_creation: 'always',
+        client_reference_id: leadId,
+        'payment_method_types[0]': 'card',
+        'payment_intent_data[setup_future_usage]': 'off_session',
+        'payment_intent_data[receipt_email]': email,
       });
+      appendStripeLineItems(checkoutBody, stripePriceIds);
+      appendStripeMetadata(checkoutBody, metadata);
+      appendStripeMetadata(checkoutBody, metadata, 'payment_intent_data[metadata]');
+
+      const session = await stripeRequest<StripeCheckoutResponse>(env, '/checkout/sessions', {
+        method: 'POST',
+        headers: { 'Idempotency-Key': `checkout:${funnelId}` },
+        body: checkoutBody,
+      });
+      const checkoutUrl = validateStripeCheckoutUrl(session.url);
+      const sessionId = cleanString(session.id, 180);
+      if (!sessionId) throw new Error('Stripe did not return a checkout session ID.');
+
+      await env.LEADS.prepare(
+        `UPDATE checkout_leads
+         SET status = 'session_created', stripe_session_id = ?, updated_at = ?
+         WHERE id = ?`
+      )
+        .bind(sessionId, new Date().toISOString(), leadId)
+        .run();
+
+      return json({ checkoutUrl, mode: checkoutMode, provider: paymentProvider });
     }
+
+    if (!dodoConfig) throw new Error('Dodo checkout configuration is unavailable.');
+    const productCart = dodoProductIds.map((productId) => ({
+      product_id: productId,
+      quantity: 1,
+    }));
 
     // Dodo's saved-card flow is documented against an explicitly attached
     // customer. Resolve that customer before checkout so the first card can be
@@ -257,10 +333,10 @@ export async function onRequestPost(context: PagesContext): Promise<Response> {
       .bind(dodoCustomerId, new Date().toISOString(), funnelId)
       .run();
 
-    const providerResponse = await fetch(`${apiBaseUrl}/checkouts`, {
+    const providerResponse = await fetch(`${dodoConfig.apiBaseUrl}/checkouts`, {
       method: 'POST',
       headers: {
-        Authorization: `Bearer ${apiKey}`,
+        Authorization: `Bearer ${dodoConfig.apiKey}`,
         'Content-Type': 'application/json',
       },
       body: JSON.stringify({
@@ -305,17 +381,7 @@ export async function onRequestPost(context: PagesContext): Promise<Response> {
           always_create_new_customer: false,
           redirect_immediately: true,
         },
-        metadata: {
-          offer_slug: offerSlug,
-          product_key: definition.base.productKey,
-          lead_id: leadId,
-          funnel_id: funnelId,
-          placement,
-          bump_selected: bumpAccepted ? 'true' : 'false',
-          bump_product_key: bumpAccepted && definition.bump ? definition.bump.productKey : '',
-          source: 'owned-funnel-builder',
-          ...(admaxxerVisitorId ? { admx_visitor_id: admaxxerVisitorId } : {}),
-        },
+        metadata,
       }),
       signal: AbortSignal.timeout(DODO_TIMEOUT_MS),
     });
@@ -342,7 +408,7 @@ export async function onRequestPost(context: PagesContext): Promise<Response> {
       .bind(sessionId, new Date().toISOString(), leadId)
       .run();
 
-    return json({ checkoutUrl, mode: checkoutMode });
+    return json({ checkoutUrl, mode: checkoutMode, provider: paymentProvider });
   } catch (error) {
     if (leadId && env.LEADS) {
       try {

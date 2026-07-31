@@ -5,12 +5,14 @@ import {
   RequestError,
   type D1Database,
   type Environment,
+  type PaymentProvider,
 } from './runtime';
 
 interface FulfillmentInput {
   paymentId: string;
   productKey: string;
   leadId: string;
+  provider: PaymentProvider;
 }
 
 interface LeadRow {
@@ -80,6 +82,19 @@ export async function deliverPurchase(
   const apiKey = readEnvironmentValue(env, 'RESEND_API_KEY');
   const from = readEnvironmentValue(env, 'RESEND_FROM_EMAIL');
   if (!apiKey || !from) {
+    if (input.provider === 'stripe') {
+      const message = 'Stripe delivery requires the access-email connection.';
+      await database
+        .prepare(
+          `UPDATE fulfillments
+           SET status = 'failed', error_message = ?, updated_at = ?
+           WHERE id = ?`
+        )
+        .bind(message, new Date().toISOString(), existing.id)
+        .run();
+      throw new RequestError(message, 503, 'configuration_fulfillment');
+    }
+
     // Every configured Dodo product carries a native Digital Files entitlement.
     // Dodo emails the grant and refreshes its download links in the customer portal.
     await database

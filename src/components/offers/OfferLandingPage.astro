@@ -19,10 +19,12 @@ interface Props {
 const { offer } = Astro.props;
 const funnel = getFunnel(offer.slug);
 const productInitial = offer.productName.trim().charAt(0).toUpperCase() || 'O';
-const usesInlineCheckout = offer.checkout?.provider === 'dodo-inline' && offer.checkout.enabled;
-const checkoutHref = usesInlineCheckout ? '#get-it' : offer.checkoutUrl;
+const usesManagedCheckout =
+  ['provider-checkout', 'dodo-inline'].includes(offer.checkout?.provider ?? '') &&
+  offer.checkout?.enabled;
+const checkoutHref = usesManagedCheckout ? '#get-it' : offer.checkoutUrl;
 const checkoutTarget =
-  !usesInlineCheckout && offer.checkoutUrl.startsWith('http') ? '_blank' : undefined;
+  !usesManagedCheckout && offer.checkoutUrl.startsWith('http') ? '_blank' : undefined;
 const checkoutRel = checkoutTarget ? 'noopener noreferrer' : undefined;
 
 const productSchema = {
@@ -70,7 +72,7 @@ const productSchema = {
           rel={checkoutRel}
           data-offer-cta
           data-offer-checkout
-          data-offer-checkout-trigger={usesInlineCheckout ? '' : undefined}
+          data-offer-checkout-trigger={usesManagedCheckout ? '' : undefined}
           data-placement="header"
           class="offer-cta hidden min-h-11 items-center justify-center rounded-xl bg-brand px-5 py-3 text-sm font-bold text-brand-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 md:inline-flex"
         >
@@ -109,7 +111,7 @@ const productSchema = {
             rel={checkoutRel}
             data-offer-cta
             data-offer-checkout
-            data-offer-checkout-trigger={usesInlineCheckout ? '' : undefined}
+            data-offer-checkout-trigger={usesManagedCheckout ? '' : undefined}
             data-placement="hero"
             class="offer-cta inline-flex min-h-20 w-full items-center justify-center rounded-xl bg-brand px-8 py-5 text-center text-xl font-bold text-brand-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 sm:text-2xl"
           >
@@ -310,7 +312,7 @@ const productSchema = {
             rel={checkoutRel}
             data-offer-cta
             data-offer-checkout
-            data-offer-checkout-trigger={usesInlineCheckout ? '' : undefined}
+            data-offer-checkout-trigger={usesManagedCheckout ? '' : undefined}
             data-placement="outcomes"
             class="offer-cta inline-flex min-h-16 w-full items-center justify-center rounded-xl bg-brand px-8 py-4 text-lg font-bold text-brand-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 sm:text-xl"
           >
@@ -536,7 +538,7 @@ const productSchema = {
             rel={checkoutRel}
             data-offer-cta
             data-offer-checkout
-            data-offer-checkout-trigger={usesInlineCheckout ? '' : undefined}
+            data-offer-checkout-trigger={usesManagedCheckout ? '' : undefined}
             data-placement="pricing"
             class="offer-cta mt-8 inline-flex min-h-20 w-full items-center justify-center rounded-xl bg-brand px-8 py-5 text-center text-xl font-bold text-brand-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 sm:text-2xl"
           >
@@ -603,7 +605,7 @@ const productSchema = {
             rel={checkoutRel}
             data-offer-cta
             data-offer-checkout
-            data-offer-checkout-trigger={usesInlineCheckout ? '' : undefined}
+            data-offer-checkout-trigger={usesManagedCheckout ? '' : undefined}
             data-placement="final"
             class="offer-cta inline-flex min-h-20 w-full items-center justify-center rounded-xl bg-brand px-8 py-5 text-center text-xl font-bold text-brand-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring sm:text-2xl"
           >
@@ -647,7 +649,7 @@ const productSchema = {
         rel={checkoutRel}
         data-offer-cta
         data-offer-checkout
-        data-offer-checkout-trigger={usesInlineCheckout ? '' : undefined}
+        data-offer-checkout-trigger={usesManagedCheckout ? '' : undefined}
         data-placement="mobile-sticky"
         class="offer-cta inline-flex min-h-14 w-full items-center justify-center rounded-xl bg-brand px-5 py-4 text-center text-base font-bold text-brand-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
       >
@@ -658,7 +660,7 @@ const productSchema = {
   </div>
 
   {
-    usesInlineCheckout && offer.checkout && (
+    usesManagedCheckout && offer.checkout && (
       <OfferCheckoutDialog offer={offer} checkout={offer.checkout} />
     )
   }

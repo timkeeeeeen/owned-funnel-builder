@@ -1,6 +1,6 @@
 import { getFunnelDefinition } from '../../_generated/funnels';
 import { refreshFunnel } from '../../_lib/funnel';
-import { getProductId } from '../../_lib/products';
+import { getProductId, getStripePrice } from '../../_lib/products';
 import {
   cleanString,
   dodoRequest,
@@ -9,6 +9,17 @@ import {
   validFlowToken,
   type PagesContext,
 } from '../../_lib/runtime';
+import {
+  appendStripeLineItems,
+  appendStripeMetadata,
+  assertStripeFulfillmentConfig,
+  isRecoverableStripePaymentError,
+  stripeObjectId,
+  stripeRequest,
+  validateStripeCheckoutUrl,
+  type StripeCheckoutSession,
+  type StripePaymentIntent,
+} from '../../_lib/stripe';
 
 interface DecisionRequest {
   flow?: unknown;
@@ -42,8 +53,8 @@ async function findReusablePaymentMethod(
       `/customers/${encodeURIComponent(customerId)}/payment-methods`
     );
     const availableMethods =
-      methods.items?.filter(
-        (method): method is { payment_method_id: string } => Boolean(method.payment_method_id)
+      methods.items?.filter((method): method is { payment_method_id: string } =>
+        Boolean(method.payment_method_id)
       ) ?? [];
     const paymentMethod =
       availableMethods.find((method) => method.payment_method_id === storedPaymentMethodId) ??
@@ -129,10 +140,17 @@ export async function onRequestPost({ request, env }: PagesContext): Promise<Res
       return json({ state: 'declined', nextUrl: nextUrl.toString() });
     }
 
-    if (!state.run.dodo_customer_id) {
+    const customerId =
+      state.run.payment_provider === 'stripe'
+        ? state.run.stripe_customer_id
+        : state.run.dodo_customer_id;
+    if (!customerId) {
       return json({ error: 'The saved payment method is not ready yet. Try again.' }, 409);
     }
     if (stepRun.status === 'charging') {
+      if (stepRun.checkout_url) {
+        return json({ state: 'redirect', checkoutUrl: stepRun.checkout_url });
+      }
       return json({ state: 'processing', nextUrl: nextUrl.toString() });
     }
 
@@ -147,28 +165,117 @@ export async function onRequestPost({ request, env }: PagesContext): Promise<Res
       return json({ state: 'processing', nextUrl: nextUrl.toString() });
     }
 
+    const metadata = {
+      funnel_id: state.run.id,
+      lead_id: state.run.lead_id,
+      offer_slug: state.run.offer_slug,
+      step_key: stepKey,
+      product_key: offerConfig.productKey,
+      source: 'owned-funnel-builder',
+      ...(state.run.admaxxer_visitor_id ? { admx_visitor_id: state.run.admaxxer_visitor_id } : {}),
+    };
+
+    if (state.run.payment_provider === 'stripe') {
+      assertStripeFulfillmentConfig(env);
+      const price = await getStripePrice(env.LEADS, offerConfig.productKey);
+      const paymentMethodId = state.run.stripe_payment_method_id;
+
+      // A previously recorded PaymentIntent has already had its one automatic
+      // attempt. If it later failed asynchronously, go straight to hosted
+      // checkout instead of replaying the same saved-card charge.
+      if (paymentMethodId && !stepRun.stripe_payment_intent_id && !stepRun.stripe_session_id) {
+        const paymentBody = new URLSearchParams({
+          amount: String(price.amount),
+          currency: price.currency,
+          customer: customerId,
+          payment_method: paymentMethodId,
+          confirm: 'true',
+          off_session: 'true',
+          error_on_requires_action: 'true',
+          receipt_email: state.run.email,
+        });
+        appendStripeMetadata(paymentBody, metadata);
+
+        try {
+          const payment = await stripeRequest<StripePaymentIntent>(env, '/payment_intents', {
+            method: 'POST',
+            headers: { 'Idempotency-Key': `upsell:${state.run.id}:${stepKey}` },
+            body: paymentBody,
+          });
+          const paymentIntentId = stripeObjectId(payment);
+          if (!paymentIntentId) throw new Error('Stripe did not return a payment ID.');
+
+          if (payment.status === 'succeeded' || payment.status === 'processing') {
+            await env.LEADS.prepare(
+              `UPDATE funnel_step_runs
+               SET status = ?, stripe_payment_intent_id = ?, checkout_url = NULL, updated_at = ?
+               WHERE id = ?`
+            )
+              .bind(
+                payment.status === 'succeeded' ? 'accepted' : 'charging',
+                paymentIntentId,
+                new Date().toISOString(),
+                stepRun.id
+              )
+              .run();
+
+            return json({ state: 'processing', nextUrl: nextUrl.toString() });
+          }
+        } catch (error) {
+          if (!isRecoverableStripePaymentError(error)) throw error;
+        }
+      }
+
+      const currentUrl = new URL(`/checkout/upsell/${stepKey}/`, request.url);
+      currentUrl.searchParams.set('flow', flow);
+      const checkoutBody = new URLSearchParams({
+        mode: 'payment',
+        customer: customerId,
+        success_url: nextUrl.toString(),
+        cancel_url: currentUrl.toString(),
+        'payment_method_types[0]': 'card',
+        'payment_intent_data[setup_future_usage]': 'off_session',
+        'payment_intent_data[receipt_email]': state.run.email,
+      });
+      appendStripeLineItems(checkoutBody, [price.priceId]);
+      appendStripeMetadata(checkoutBody, metadata);
+      appendStripeMetadata(checkoutBody, metadata, 'payment_intent_data[metadata]');
+
+      const checkout = await stripeRequest<StripeCheckoutSession>(env, '/checkout/sessions', {
+        method: 'POST',
+        headers: {
+          'Idempotency-Key': `upsell-fallback:${state.run.id}:${stepKey}:${stepRun.stripe_session_id ?? 'initial'}`,
+        },
+        body: checkoutBody,
+      });
+      const checkoutUrl = validateStripeCheckoutUrl(checkout.url);
+      const sessionId = stripeObjectId(checkout);
+      if (!sessionId) throw new Error('Stripe did not return a checkout session ID.');
+
+      await env.LEADS.prepare(
+        `UPDATE funnel_step_runs
+         SET status = 'charging', stripe_session_id = ?, stripe_payment_intent_id = NULL,
+             checkout_url = ?, updated_at = ?
+         WHERE id = ?`
+      )
+        .bind(sessionId, checkoutUrl, new Date().toISOString(), stepRun.id)
+        .run();
+
+      return json({ state: 'redirect', checkoutUrl });
+    }
+
     const paymentMethodId = await findReusablePaymentMethod(
       env,
-      state.run.dodo_customer_id,
+      customerId,
       state.run.dodo_payment_method_id
     );
     const productId = await getProductId(env.LEADS, offerConfig.productKey);
     const checkoutBody: Record<string, unknown> = {
       product_cart: [{ product_id: productId, quantity: 1 }],
-      customer: { customer_id: state.run.dodo_customer_id },
+      customer: { customer_id: customerId },
       return_url: nextUrl.toString(),
       feature_flags: { redirect_immediately: true },
-      metadata: {
-        funnel_id: state.run.id,
-        lead_id: state.run.lead_id,
-        offer_slug: state.run.offer_slug,
-        step_key: stepKey,
-        product_key: offerConfig.productKey,
-        source: 'owned-funnel-builder',
-        ...(state.run.admaxxer_visitor_id
-          ? { admx_visitor_id: state.run.admaxxer_visitor_id }
-          : {}),
-      },
+      metadata,
     };
     if (paymentMethodId) {
       checkoutBody.payment_method_id = paymentMethodId;

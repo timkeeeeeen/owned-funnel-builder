@@ -5,7 +5,14 @@ import {
   RequestError,
   type D1Database,
   type Environment,
+  type PaymentProvider,
 } from './runtime';
+import {
+  stripeObjectId,
+  stripeRequest,
+  type StripeCheckoutSession,
+  type StripePaymentIntent,
+} from './stripe';
 
 interface CheckoutSessionStatus {
   id?: string;
@@ -23,13 +30,18 @@ interface PaymentDetails {
 export interface FunnelRun {
   id: string;
   lead_id: string;
+  email: string;
   offer_slug: string;
   token_hash: string;
+  payment_provider: PaymentProvider;
   base_status: 'pending' | 'succeeded' | 'failed';
   base_payment_id: string | null;
   dodo_customer_id: string | null;
   dodo_payment_method_id: string | null;
   dodo_session_id: string | null;
+  stripe_customer_id: string | null;
+  stripe_payment_method_id: string | null;
+  stripe_session_id: string | null;
   bump_selected: 0 | 1;
   admaxxer_visitor_id: string | null;
 }
@@ -42,6 +54,8 @@ export interface FunnelStepRun {
   status: 'offered' | 'charging' | 'accepted' | 'declined' | 'failed';
   dodo_session_id: string | null;
   dodo_payment_id: string | null;
+  stripe_session_id: string | null;
+  stripe_payment_intent_id: string | null;
   checkout_url: string | null;
 }
 
@@ -55,6 +69,7 @@ export async function getFunnelByToken(database: D1Database, token: string): Pro
   const run = await database
     .prepare(
       `SELECT f.*, l.dodo_session_id, l.bump_selected, l.admaxxer_visitor_id
+              , l.email, l.stripe_session_id
        FROM funnel_runs f
        JOIN checkout_leads l ON l.id = f.lead_id
        WHERE f.token_hash = ?`
@@ -72,6 +87,142 @@ export async function getFunnelByToken(database: D1Database, token: string): Pro
     .all<FunnelStepRun>();
 
   return { run, steps: rows.results ?? [] };
+}
+
+async function getStripePaymentIntent(
+  env: Environment,
+  value: unknown
+): Promise<StripePaymentIntent | null> {
+  if (value && typeof value === 'object' && !Array.isArray(value)) {
+    return value as StripePaymentIntent;
+  }
+  const paymentIntentId = stripeObjectId(value);
+  if (!paymentIntentId) return null;
+  return stripeRequest<StripePaymentIntent>(
+    env,
+    `/payment_intents/${encodeURIComponent(paymentIntentId)}`
+  );
+}
+
+async function refreshStripeBasePayment(
+  env: Environment,
+  database: D1Database,
+  run: FunnelRun
+): Promise<void> {
+  if (run.base_status === 'failed' || !run.stripe_session_id) return;
+  if (run.base_status === 'succeeded' && run.stripe_customer_id && run.stripe_payment_method_id) {
+    return;
+  }
+
+  const session = await stripeRequest<StripeCheckoutSession>(
+    env,
+    `/checkout/sessions/${encodeURIComponent(run.stripe_session_id)}?expand[]=payment_intent`
+  );
+  const sessionStatus = typeof session.status === 'string' ? session.status : '';
+  if (sessionStatus === 'expired') {
+    await database
+      .prepare(`UPDATE funnel_runs SET base_status = 'failed', updated_at = ? WHERE id = ?`)
+      .bind(new Date().toISOString(), run.id)
+      .run();
+    return;
+  }
+  if (session.payment_status !== 'paid') return;
+
+  const paymentIntent = await getStripePaymentIntent(env, session.payment_intent);
+  const paymentIntentId = stripeObjectId(paymentIntent);
+  const customerId = stripeObjectId(session.customer ?? paymentIntent?.customer);
+  const paymentMethodId = stripeObjectId(paymentIntent?.payment_method);
+  if (!paymentIntentId || !customerId || paymentIntent?.status !== 'succeeded') return;
+
+  const now = new Date().toISOString();
+  await database
+    .prepare(
+      `UPDATE funnel_runs
+       SET base_status = 'succeeded',
+           base_payment_id = COALESCE(base_payment_id, ?),
+           stripe_customer_id = COALESCE(stripe_customer_id, ?),
+           stripe_payment_method_id = COALESCE(stripe_payment_method_id, ?),
+           updated_at = ?
+       WHERE id = ? AND base_status IN ('pending', 'succeeded')`
+    )
+    .bind(paymentIntentId, customerId, paymentMethodId || null, now, run.id)
+    .run();
+  await database
+    .prepare(
+      `UPDATE checkout_leads
+       SET status = 'converted', stripe_payment_intent_id = ?, updated_at = ?
+       WHERE id = ?`
+    )
+    .bind(paymentIntentId, now, run.lead_id)
+    .run();
+}
+
+async function refreshStripeUpsellPayment(
+  env: Environment,
+  database: D1Database,
+  step: FunnelStepRun
+): Promise<void> {
+  if (step.status !== 'charging') return;
+
+  let paymentIntent: StripePaymentIntent | null = null;
+  if (step.stripe_session_id) {
+    const session = await stripeRequest<StripeCheckoutSession>(
+      env,
+      `/checkout/sessions/${encodeURIComponent(step.stripe_session_id)}?expand[]=payment_intent`
+    );
+    if (session.status === 'expired') {
+      await database
+        .prepare(
+          `UPDATE funnel_step_runs SET status = 'failed', updated_at = ?
+           WHERE id = ? AND status = 'charging'`
+        )
+        .bind(new Date().toISOString(), step.id)
+        .run();
+      return;
+    }
+    if (session.payment_status !== 'paid') return;
+    paymentIntent = await getStripePaymentIntent(env, session.payment_intent);
+  } else if (step.stripe_payment_intent_id) {
+    paymentIntent = await getStripePaymentIntent(env, step.stripe_payment_intent_id);
+  }
+
+  const paymentIntentId = stripeObjectId(paymentIntent);
+  if (!paymentIntentId) return;
+  if (paymentIntent?.status === 'succeeded') {
+    const now = new Date().toISOString();
+    await database
+      .prepare(
+        `UPDATE funnel_step_runs
+         SET status = 'accepted', stripe_payment_intent_id = ?, updated_at = ?
+         WHERE id = ? AND status = 'charging'`
+      )
+      .bind(paymentIntentId, now, step.id)
+      .run();
+
+    const customerId = stripeObjectId(paymentIntent.customer);
+    const paymentMethodId = stripeObjectId(paymentIntent.payment_method);
+    if (customerId && paymentMethodId) {
+      await database
+        .prepare(
+          `UPDATE funnel_runs
+           SET stripe_customer_id = ?, stripe_payment_method_id = ?, updated_at = ?
+           WHERE id = ? AND payment_provider = 'stripe'`
+        )
+        .bind(customerId, paymentMethodId, now, step.funnel_id)
+        .run();
+    }
+    return;
+  }
+
+  if (['canceled', 'requires_payment_method'].includes(String(paymentIntent?.status))) {
+    await database
+      .prepare(
+        `UPDATE funnel_step_runs SET status = 'failed', updated_at = ?
+         WHERE id = ? AND status = 'charging'`
+      )
+      .bind(new Date().toISOString(), step.id)
+      .run();
+  }
 }
 
 async function refreshBasePayment(
@@ -178,11 +329,19 @@ export async function refreshFunnel(
   token: string
 ): Promise<FunnelState> {
   let state = await getFunnelByToken(database, token);
-  await refreshBasePayment(env, database, state.run);
+  if (state.run.payment_provider === 'stripe') {
+    await refreshStripeBasePayment(env, database, state.run);
+  } else {
+    await refreshBasePayment(env, database, state.run);
+  }
   state = await getFunnelByToken(database, token);
 
   for (const step of state.steps) {
-    await refreshUpsellPayment(env, database, step);
+    if (state.run.payment_provider === 'stripe') {
+      await refreshStripeUpsellPayment(env, database, step);
+    } else {
+      await refreshUpsellPayment(env, database, step);
+    }
   }
 
   return getFunnelByToken(database, token);

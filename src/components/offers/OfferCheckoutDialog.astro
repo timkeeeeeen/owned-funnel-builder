@@ -8,7 +8,7 @@ interface Props {
 
 const { offer, checkout } = Astro.props;
 const dialogId = `offer-checkout-${offer.slug}`;
-const frameId = `dodo-inline-checkout-${offer.slug}`;
+const frameId = `payment-checkout-${offer.slug}`;
 ---
 
 <dialog
@@ -481,14 +481,20 @@ const frameId = `dodo-inline-checkout-${offer.slug}`;
         const result = (await response.json()) as {
           checkoutUrl?: string;
           mode?: CheckoutMode;
+          provider?: 'dodo' | 'stripe';
           error?: string;
         };
 
-        if (!response.ok || !result.checkoutUrl || !result.mode) {
+        if (!response.ok || !result.checkoutUrl || !result.mode || !result.provider) {
           throw new Error(result.error ?? 'Checkout is temporarily unavailable. Please try again.');
         }
 
         trackLead(emailInput.value, offerSlug, placement, bumpInput?.checked === true);
+
+        if (result.provider === 'stripe') {
+          window.location.assign(result.checkoutUrl);
+          return;
+        }
 
         showPaymentStep();
         if (fallbackLink) fallbackLink.href = result.checkoutUrl;

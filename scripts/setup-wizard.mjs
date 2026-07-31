@@ -26,13 +26,17 @@ const page = `<!doctype html>
 <div class="hero"><div class="tag">Private setup screen</div><h1>Connect your funnel.</h1><p>Fill this out once. The details stay in this folder on your computer and are excluded from GitHub. Your agent will handle the technical steps after you save.</p></div>
 <form method="post" action="/save">
 <input type="hidden" name="token" value="${token}">
-<div class="section"><h2>Payments</h2><p>Dodo handles the main checkout, order bump, and one-click upsells.</p><div class="grid">
-<label class="full">Dodo API key<input type="password" name="DODO_PAYMENTS_API_KEY" autocomplete="off" placeholder="${saved('DODO_PAYMENTS_API_KEY')}"><small>Find this in Dodo Payments → Developer → API keys.</small></label>
+<div class="section"><h2>Payments</h2><p>Choose Dodo or Stripe. Both support the main checkout, order bump, and saved-card upsells.</p><div class="grid">
+<label class="full">Payment service<select name="PAYMENTS_PROVIDER"><option value="dodo" ${existing.PAYMENTS_PROVIDER !== 'stripe' ? 'selected' : ''}>Dodo Payments</option><option value="stripe" ${existing.PAYMENTS_PROVIDER === 'stripe' ? 'selected' : ''}>Stripe</option></select><small>Your agent connects only the service you choose.</small></label>
+<label class="full">Dodo API key<input type="password" name="DODO_PAYMENTS_API_KEY" autocomplete="off" placeholder="${saved('DODO_PAYMENTS_API_KEY')}"><small>For Dodo: find this in Dodo Payments → Developer → API keys.</small></label>
 <label>Mode<select name="DODO_PAYMENTS_ENVIRONMENT"><option value="test_mode" ${existing.DODO_PAYMENTS_ENVIRONMENT !== 'live_mode' ? 'selected' : ''}>Test mode</option><option value="live_mode" ${existing.DODO_PAYMENTS_ENVIRONMENT === 'live_mode' ? 'selected' : ''}>Live mode</option></select></label>
+<label class="full">Stripe secret key<input type="password" name="STRIPE_SECRET_KEY" autocomplete="off" placeholder="${saved('STRIPE_SECRET_KEY')}"><small>For Stripe: find this in Stripe Workbench → API keys. Start with a test key.</small></label>
+<label>Stripe mode<select name="STRIPE_PAYMENTS_ENVIRONMENT"><option value="test_mode" ${existing.STRIPE_PAYMENTS_ENVIRONMENT !== 'live_mode' ? 'selected' : ''}>Test mode</option><option value="live_mode" ${existing.STRIPE_PAYMENTS_ENVIRONMENT === 'live_mode' ? 'selected' : ''}>Live mode</option></select></label>
+<label class="full">Stripe webhook signing secret<input type="password" name="STRIPE_WEBHOOK_SECRET" autocomplete="off" placeholder="${saved('STRIPE_WEBHOOK_SECRET')}"><small>Usually leave this blank. Your agent creates and saves it automatically. Paste it only when reusing an existing webhook.</small></label>
 </div></div>
-<div class="section"><h2>Customer access</h2><p>Dodo delivers every product file by email and in its customer portal. Resend is optional if you want a second, branded access email.</p><div class="grid">
-<label class="full">Optional Resend API key<input type="password" name="RESEND_API_KEY" autocomplete="off" placeholder="${saved('RESEND_API_KEY')}"></label>
-<label>Optional From email<input type="email" name="RESEND_FROM_EMAIL" value="${value('RESEND_FROM_EMAIL')}" placeholder="access@yourdomain.com"></label>
+<div class="section"><h2>Customer access</h2><p>Dodo can deliver files itself. Stripe needs Resend so every successful payment receives the correct access link.</p><div class="grid">
+<label class="full">Resend API key<input type="password" name="RESEND_API_KEY" autocomplete="off" placeholder="${saved('RESEND_API_KEY')}"><small>Optional with Dodo; required with Stripe.</small></label>
+<label>From email<input type="email" name="RESEND_FROM_EMAIL" value="${value('RESEND_FROM_EMAIL')}" placeholder="access@yourdomain.com"><small>Optional with Dodo; required with Stripe.</small></label>
 <label>Support email<input type="email" name="SUPPORT_EMAIL" required value="${value('SUPPORT_EMAIL')}" placeholder="help@yourdomain.com"></label>
 </div></div>
 <div class="section"><h2>Ad tracking</h2><p>Admaxxer connects visits, leads, and successful payments so you can see which ads made sales. This is optional until you run ads.</p><div class="grid">
@@ -75,8 +79,12 @@ const server = http.createServer(async (request, response) => {
     }
     const next = { ...existing };
     for (const key of [
+      'PAYMENTS_PROVIDER',
       'DODO_PAYMENTS_API_KEY',
       'DODO_PAYMENTS_ENVIRONMENT',
+      'STRIPE_SECRET_KEY',
+      'STRIPE_PAYMENTS_ENVIRONMENT',
+      'STRIPE_WEBHOOK_SECRET',
       'RESEND_API_KEY',
       'RESEND_FROM_EMAIL',
       'SUPPORT_EMAIL',

@@ -2,7 +2,7 @@ import { execFile } from 'node:child_process';
 import { readdir, readFile } from 'node:fs/promises';
 import { promisify } from 'node:util';
 import DodoPayments from 'dodopayments';
-import { readLocalSettings, requireSetting } from './lib/local-settings.mjs';
+import { readLocalSettings, requireSetting, writeLocalSettings } from './lib/local-settings.mjs';
 
 const execute = promisify(execFile);
 const settings = await readLocalSettings();
@@ -28,8 +28,7 @@ const deliveryFiles = {
   'vibe-code-production-launch-pack': 'deliverables/vibe-code-anything/production-launch-pack.md',
   'talking-head-ad-machine':
     '.funnel-state/deliverables/talking-head-ad-machine-macos-arm64-v0.1.0.zip',
-  'talking-head-hook-recording-pack':
-    '.funnel-state/deliverables/hook-recording-pack-v0.1.0.zip',
+  'talking-head-hook-recording-pack': '.funnel-state/deliverables/hook-recording-pack-v0.1.0.zip',
   'talking-head-ad-test-lab': '.funnel-state/deliverables/ad-test-lab-v0.1.0.zip',
 };
 const funnelFiles = (await readdir('src/content/funnels')).filter((file) => file.endsWith('.json'));
@@ -151,6 +150,8 @@ for (const product of configuredProducts) {
 }
 
 if (skipRegistry) {
+  settings.PAYMENTS_PROVIDER = 'dodo';
+  await writeLocalSettings(settings);
   console.log(`Verified ${results.length} Dodo products and their customer delivery files.`);
   process.exit(0);
 }
@@ -175,4 +176,6 @@ await execute(
   ['d1', 'execute', databaseName, '--remote', '--command', statements.join('\n')],
   { cwd: process.cwd(), maxBuffer: 4 * 1024 * 1024 }
 );
+settings.PAYMENTS_PROVIDER = 'dodo';
+await writeLocalSettings(settings);
 console.log(`Connected ${results.length} Dodo products to the checkout database.`);
