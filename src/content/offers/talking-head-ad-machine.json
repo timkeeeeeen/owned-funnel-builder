@@ -7,7 +7,7 @@
   "headlineAccent": "a finished Meta ad.",
   "subheadline": "Give your coding agent the video. It finds the clean take, conforms the captions, adds restrained hook and CTA graphics, checks the render, and opens a reviewable MP4 before anything is final.",
   "metaTitle": "Talking-Head Ad Machine — One Raw Clip to a Reviewable Meta Ad",
-  "metaDescription": "A tested Apple Silicon Mac workspace for Codex and Claude Code that turns a talking-head recording into a captioned, checked, reviewable Facebook or Instagram ad.",
+  "metaDescription": "A tested Apple Silicon and Intel Mac workspace for Codex and Claude Code that turns a talking-head recording into a captioned, checked, reviewable Facebook or Instagram ad.",
   "ogImage": "/og-talking-head-ad-machine.jpg",
   "audience": "For founders, marketers, consultants, and small teams who already have Codex or Claude Code and want their own local, inspectable talking-head editing workflow.",
   "checkoutUrl": "/talking-head-ad-machine/#get-it",
@@ -20,7 +20,7 @@
     "emailLabel": "Email address",
     "emailPlaceholder": "you@company.com",
     "buttonLabel": "Continue to secure checkout",
-    "summaryDescription": "Talking-Head Ad Machine for Apple Silicon Mac, including the setup workflow, Fast/Designed/Studio guidance, local editing pipeline, review page, QA, receipts, and agent skill.",
+    "summaryDescription": "Talking-Head Ad Machine for Apple Silicon and Intel Mac, including the setup workflow, Fast/Designed/Studio guidance, local editing pipeline, review page, QA, receipts, and agent skill.",
     "guaranteeLabel": "14-day compatibility guarantee",
     "paymentTrustLabel": "Payment secured by Dodo",
     "consentCopy": "By continuing, you agree to receive product access and occasional emails about this offer, including a reminder if you leave checkout unfinished. Unsubscribe anytime.",
@@ -70,7 +70,7 @@
     "priceLabel": "One-time price",
     "priceNote": "Instant ZIP delivery after checkout. No subscription.",
     "priceIncludes": [
-      "Apple Silicon Mac setup and product doctor",
+      "Apple Silicon and Intel Mac setup with product doctor",
       "Codex and Claude Code launchers and agent skill",
       "Kinocut, HyperFrames, FFmpeg, and whisper.cpp workflow",
       "Fast, Designed, and Studio production guidance",
@@ -86,7 +86,7 @@
   "priceAmount": 27,
   "currency": "USD",
   "ctaLabel": "Get the Ad Machine — $27",
-  "ctaNote": "Apple Silicon Mac · Codex or Claude Code required · local preview before approval",
+  "ctaNote": "Apple Silicon or Intel Mac · Codex or Claude Code required · local preview before approval",
   "painTitle": "A simple talking-head ad should not require a new editing career.",
   "painBody": "The hard part is not adding more effects. It is deciding which take is true and useful, keeping every cut natural, timing captions to the new edit, checking the output, and making revision work reusable. This packages that entire path for an agent you already use.",
   "withoutLabel": "The manual loop",
@@ -113,7 +113,7 @@
     { "title": "Revise without starting over", "description": "A caption or CTA change can reuse the transcript and clean cut. A changed edit invalidates the downstream timing layers that truly need rebuilding." }
   ],
   "included": [
-    { "title": "Agent-owned Mac setup", "description": "Pinned dependencies, local environments, browser preparation, a product-specific doctor, and a deterministic demo." },
+    { "title": "Agent-owned Mac setup", "description": "Automatic Apple Silicon or Intel detection, pinned dependencies, local environments, browser preparation, a product-specific doctor, and a deterministic demo." },
     { "title": "Truthful editorial planning", "description": "Local transcription, source-backed hooks and beats, validated cut ranges, confidence markers, and prohibited-claim guardrails." },
     { "title": "Guarded clean-cut rendering", "description": "Kinocut where reliable, expected-duration verification, and an automatic timestamp-reset FFmpeg fallback when the render drifts." },
     { "title": "Reusable HyperFrames finishing", "description": "Social framing, output-timed captions, restrained hook and CTA graphics, motion assertions, contrast checks, and sampled-frame review." },
@@ -125,8 +125,8 @@
     { "title": "Resolve-friendly delivery package", "description": "Use the flattened master, captions, edit plan, and receipts in any editor. Try the narrow FCPXML bonus only when the cut is simple." }
   ],
   "proof": [
-    { "value": "8/8", "label": "Required doctor checks", "detail": "Passed from a fresh extracted buyer ZIP on the tested Apple Silicon Mac." },
-    { "value": "24", "label": "Automated checks", "detail": "Unit and integration coverage plus a real opt-in HyperFrames render gate." },
+    { "value": "9/9", "label": "Required doctor checks", "detail": "Passed from fresh extracted buyer ZIPs on both tested Mac architectures." },
+    { "value": "2", "label": "Accepted Mac architectures", "detail": "The exact same release bytes passed the complete buyer workflow on Apple Silicon and Intel hardware." },
     { "value": "−14.39", "label": "Demo dialogue LUFS", "detail": "Measured from the distributable finished proof, not an ad-performance metric." },
     { "value": "0", "label": "HyperFrames warnings", "detail": "Strict runtime, layout, motion, and contrast checks passed on the finished proof." }
   ],
@@ -134,7 +134,7 @@
   "guaranteeBody": "Send the generated doctor report within 14 days. If the included setup and demo cannot be made to work on the listed configuration, request a refund. Support covers the included setup, doctor, and demo—not custom editing, operating-system repair, ad strategy, or publishing.",
   "faqs": [
     { "question": "Does this replace DaVinci Resolve?", "answer": "No. The core path is agent-operated Kinocut, HyperFrames, and FFmpeg. The reliable handoff is a flattened master, SRT, edit plan, and receipts. Simple FCPXML is a best-effort bonus." },
-    { "question": "What computer does version 0.1 support?", "answer": "Apple Silicon Mac is the launch target. Codex or Claude Code is also required. Windows, Intel Mac, and Linux are not advertised until they pass clean-environment acceptance." },
+    { "question": "What computer does version 0.2 support?", "answer": "Apple Silicon and Intel Macs are accepted for version 0.2. Codex or Claude Code is also required. Windows x64 has passed the media runtime in CI, but it is not advertised until the real Windows 11 installer passes on a clean Windows 11 PC. Linux, Windows ARM, and phone apps are not supported." },
     { "question": "Is all processing offline?", "answer": "Transcription and rendering are local by default. Your coding agent may inspect prompts, filenames, transcripts, or project files under that provider’s terms. Optional cloud services require separate approval." },
     { "question": "Will it publish my ads?", "answer": "No. It may prepare and render previews, but it never publishes an ad and never approves the preview for you." },
     { "question": "Can it invent a stronger claim?", "answer": "It must not. The product preserves source meaning, checks prohibited and unsupported quantitative overlay claims, and shows uncertainty for review." },

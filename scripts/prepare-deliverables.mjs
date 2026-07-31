@@ -32,10 +32,12 @@ const talkingHeadManifest = JSON.parse(
   await readFile(resolve(talkingHeadDist, 'release-manifest.json'), 'utf8')
 );
 const talkingHeadArtifacts = [
-  'talking-head-ad-machine-macos-arm64-v0.1.0.zip',
+  'talking-head-ad-machine-macos-arm64-v0.2.0.zip',
+  'talking-head-ad-machine-macos-x64-v0.2.0.zip',
   'hook-recording-pack-v0.1.0.zip',
   'ad-test-lab-v0.1.0.zip',
 ];
+const talkingHeadChecksums = new Map();
 
 for (const name of talkingHeadArtifacts) {
   const artifact = talkingHeadManifest.artifacts.find((item) => item.name === name);
@@ -47,9 +49,20 @@ for (const name of talkingHeadArtifacts) {
   if (actualSha256 !== artifact.sha256) {
     throw new Error(`The Talking-Head release checksum failed for ${name}.`);
   }
+  talkingHeadChecksums.set(name, actualSha256);
   await copyFile(source, resolve(outputDirectory, name));
 }
 
+const armName = 'talking-head-ad-machine-macos-arm64-v0.2.0.zip';
+const intelName = 'talking-head-ad-machine-macos-x64-v0.2.0.zip';
+if (talkingHeadChecksums.get(armName) !== talkingHeadChecksums.get(intelName)) {
+  throw new Error('The accepted Apple Silicon and Intel Mac artifacts are not byte-identical.');
+}
+await copyFile(
+  resolve(talkingHeadDist, armName),
+  resolve(outputDirectory, 'talking-head-ad-machine-macos-v0.2.0.zip')
+);
+
 console.log(
-  'Prepared the source packages and three verified Talking-Head deliverables without including local secrets or dependencies.'
+  'Prepared the source packages, four verified Talking-Head release artifacts, and one accepted universal Mac delivery ZIP without including local secrets or dependencies.'
 );

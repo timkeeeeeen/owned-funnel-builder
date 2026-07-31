@@ -27,7 +27,7 @@ const deliveryFiles = {
   'vibe-code-five-app-blueprints': 'deliverables/vibe-code-anything/five-app-blueprints.md',
   'vibe-code-production-launch-pack': 'deliverables/vibe-code-anything/production-launch-pack.md',
   'talking-head-ad-machine':
-    '.funnel-state/deliverables/talking-head-ad-machine-macos-arm64-v0.1.0.zip',
+    '.funnel-state/deliverables/talking-head-ad-machine-macos-v0.2.0.zip',
   'talking-head-hook-recording-pack':
     '.funnel-state/deliverables/hook-recording-pack-v0.1.0.zip',
   'talking-head-ad-test-lab': '.funnel-state/deliverables/ad-test-lab-v0.1.0.zip',

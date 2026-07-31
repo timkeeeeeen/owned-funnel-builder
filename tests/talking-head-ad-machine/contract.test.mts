@@ -71,11 +71,12 @@ test('completion copy sends the buyer through the supported first-run path', asy
   assert.match(funnel.base.deliveryBody, /run the included demo/i);
 });
 
-test('Dodo preparation uses the three checksum-verified release archives', async () => {
+test('Dodo preparation uses the accepted v0.2 Mac release archives', async () => {
   const prepare = await readFile(resolve(root, 'scripts/prepare-deliverables.mjs'), 'utf8');
   const configure = await readFile(resolve(root, 'scripts/configure-dodo.mjs'), 'utf8');
   const expected = [
-    'talking-head-ad-machine-macos-arm64-v0.1.0.zip',
+    'talking-head-ad-machine-macos-arm64-v0.2.0.zip',
+    'talking-head-ad-machine-macos-x64-v0.2.0.zip',
     'hook-recording-pack-v0.1.0.zip',
     'ad-test-lab-v0.1.0.zip',
   ];
@@ -84,6 +85,8 @@ test('Dodo preparation uses the three checksum-verified release archives', async
   assert.match(prepare, /actualSha256 !== artifact\.sha256/);
   for (const name of expected) {
     assert.match(prepare, new RegExp(name.replaceAll('.', '\\.')));
-    assert.match(configure, new RegExp(name.replaceAll('.', '\\.')));
   }
+  assert.match(prepare, /talking-head-ad-machine-macos-v0\.2\.0\.zip/);
+  assert.match(configure, /talking-head-ad-machine-macos-v0\.2\.0\.zip/);
+  assert.match(prepare, /accepted Apple Silicon and Intel Mac artifacts are not byte-identical/);
 });
