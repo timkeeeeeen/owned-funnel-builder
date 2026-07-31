@@ -98,11 +98,12 @@ test('every audience demonstrates the complete shared output shape', () => {
 
 test('price and downstream scope cannot drift silently', () => {
   const { gamePlan, activation } = blueprintProductContract;
+  assert.equal(blueprintProductContract.status, 'ready');
   assert.equal(gamePlan.priceAmount, 5);
   assert.equal(gamePlan.currency, 'USD');
   assert.equal(gamePlan.weekCount * 5, gamePlan.slotCount);
   assert.equal(gamePlan.retainedDraftCount, 5);
-  assert.equal(gamePlan.ctaLabel, 'Get my full Game Plan — $5');
+  assert.equal(gamePlan.ctaLabel, 'Build my $5 Game Plan');
   assert.match(gamePlan.auditExpectation, /10 minutes/i);
   assert.match(gamePlan.auditExpectation, /no subscription or sales call/i);
   assert.equal(activation.amountMinor, 9_900);
@@ -125,7 +126,7 @@ test('proof and examples carry adjacent truth boundaries', () => {
   assert.ok(blueprintProductContract.launchGates.some((gate) => /permission/i.test(gate)));
 });
 
-test('acceptance-preview route components cannot submit or open checkout', async () => {
+test('ready route components remain fail closed until the configured runtime enables them', async () => {
   const pageFiles = [
     'src/components/blueprint/AuthoritySnapshotPage.astro',
     'src/components/blueprint/GamePlanPage.astro',
@@ -141,6 +142,13 @@ test('acceptance-preview route components cannot submit or open checkout', async
     assert.doesNotMatch(source, /OfferCheckoutDialog/);
     assert.doesNotMatch(source, /\/api\/checkout/);
   }
+
+  const runtime = await readRepositoryFile('src/components/blueprint/BlueprintFunnelRuntime.astro');
+  assert.match(runtime, /PUBLIC_BLUEPRINT_FUNNEL_ENABLED === 'true'/);
+  assert.match(runtime, /contractReady/);
+  assert.match(runtime, /validConvexUrl/);
+  assert.match(runtime, /validAppUrl/);
+  assert.match(runtime, /turnstileSiteKey\.length > 0/);
 });
 
 test('all audience route families and quality checks are declared', async () => {

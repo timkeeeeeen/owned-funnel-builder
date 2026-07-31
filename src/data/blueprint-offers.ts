@@ -30,9 +30,9 @@ export interface BlueprintAudienceCopy {
 }
 
 export const blueprintProductContract = {
-  status: 'acceptance-preview',
+  status: 'ready',
   previewNotice:
-    'This private preview shows the finished offer and example output. Submissions and checkout are not open yet.',
+    'The live funnel uses your LinkedIn profile and email to build a private, saved result.',
   supportEmail: 'tim@modernagencysales.com',
   sharedProductKey: 'cmo-game-plan',
   commercialTerms: {
@@ -80,7 +80,7 @@ export const blueprintProductContract = {
       'This is what a buyer can see. It does not score the systems behind your profile.',
     maximumFindings: 3,
     draftCount: 1,
-    ctaLabel: 'Run my free Authority Snapshot',
+    ctaLabel: 'Get my free Snapshot',
     ctaNote:
       'Uses your public LinkedIn evidence. Nothing is published. Your saved result can be resumed.',
     form: {
@@ -141,7 +141,7 @@ export const blueprintProductContract = {
         criteria: ['Inventory', 'Documentation', 'Deployment', 'Freshness and permission'],
       },
     ],
-    ctaLabel: 'Get my full Game Plan — $5',
+    ctaLabel: 'Build my $5 Game Plan',
     ctaNote: 'One payment. No subscription. No content is auto-published.',
     auditExpectation:
       'About 10 minutes · five short chapters · type your answers · no subscription or sales call.',
@@ -251,12 +251,12 @@ export const blueprintAudiences: Record<BlueprintAudienceSlug, BlueprintAudience
     singular: 'agency owner',
     plural: 'agency owners',
     switchLabel: 'Agency owners',
-    snapshotHeadline: 'See whether your LinkedIn makes your agency the obvious choice.',
+    snapshotHeadline: 'Find the one thing making your agency look interchangeable.',
     snapshotSubheadline:
-      'We read the public evidence a prospect sees, score what is actually visible, and show where strong client work is getting lost in generic agency language.',
-    gamePlanHeadline: 'A prioritized 30-day LinkedIn plan built from your agency’s evidence.',
+      'Paste your LinkedIn profile. See what buyers notice, what they miss, and the first change that will make your proof land.',
+    gamePlanHeadline: 'Know exactly what your agency should publish for the next 30 days.',
     gamePlanSubheadline:
-      'Give a personal AI CMO your profile, proof, offer, and pipeline reality. Get three ranked priorities, a 20-slot month, and your first five drafts for $5.',
+      'Turn your client proof and point of view into a focused month of posts built to start better sales conversations.',
     costlyPattern:
       'The best proof is trapped in delivery calls and case-study folders while the public feed sounds like every other capable agency.',
     desiredShift:
@@ -315,12 +315,12 @@ export const blueprintAudiences: Record<BlueprintAudienceSlug, BlueprintAudience
     singular: 'consultant',
     plural: 'consultants',
     switchLabel: 'Consultants',
-    snapshotHeadline: 'See whether buyers can find the judgment they would hire you for.',
+    snapshotHeadline: 'Find the one thing hiding the judgment clients hire you for.',
     snapshotSubheadline:
-      'We score the public evidence on your LinkedIn and show where deep expertise is being flattened into a list of capabilities.',
-    gamePlanHeadline: 'Build a prioritized month that makes your consulting judgment legible.',
+      'Paste your LinkedIn profile. See where your expertise becomes generic, then make the first change that will make it easier to hire you.',
+    gamePlanHeadline: 'Turn your consulting judgment into 30 days of useful content.',
     gamePlanSubheadline:
-      'Give a personal AI CMO your expertise, point of view, proof, and sales reality. Get three ranked priorities, a 20-slot month, and five retained drafts for $5.',
+      'Get a focused month that makes your thinking visible and gives the right clients a reason to start a conversation.',
     costlyPattern:
       'The work is highly specific, but the public language is broad enough to describe ten thousand other consultants.',
     desiredShift:
@@ -379,12 +379,12 @@ export const blueprintAudiences: Record<BlueprintAudienceSlug, BlueprintAudience
     singular: 'coach',
     plural: 'coaches',
     switchLabel: 'Coaches',
-    snapshotHeadline: 'See whether your LinkedIn makes the change you create believable.',
+    snapshotHeadline: 'Find the one thing making your coaching promise hard to believe.',
     snapshotSubheadline:
-      'We score what a buyer can actually see and show where strong coaching work is being hidden behind inspiration, broad promises, or an unnamed method.',
-    gamePlanHeadline: 'Build a month around the client change you can actually evidence.',
+      'Paste your LinkedIn profile. See what weakens trust, then make the first change that will make your method and results clearer.',
+    gamePlanHeadline: 'Turn your coaching method into 30 days of trust-building content.',
     gamePlanSubheadline:
-      'Give a personal AI CMO your method, permitted client evidence, audience language, and enrollment reality. Get three ranked priorities, 20 slots, and five retained drafts for $5.',
+      'Get a focused month that shows how you think, proves what you can, and leads naturally to your offer.',
     costlyPattern:
       'The feed is encouraging, but a serious buyer still cannot see the method, proof, or first step behind the transformation.',
     desiredShift:
@@ -443,12 +443,12 @@ export const blueprintAudiences: Record<BlueprintAudienceSlug, BlueprintAudience
     singular: 'solo expert',
     plural: 'solo experts',
     switchLabel: 'Solo experts',
-    snapshotHeadline: 'See what your LinkedIn is teaching people to remember you for.',
+    snapshotHeadline: 'Find the one thing making your expertise easy to overlook.',
     snapshotSubheadline:
-      'We score the visible evidence around your profile and content, then show where range and curiosity are diluting the one problem you want to own.',
-    gamePlanHeadline: 'Choose the commercial idea to reinforce, then build the month around it.',
+      'Paste your LinkedIn profile. See what buyers understand, where they get lost, and the first change that will make your value clearer.',
+    gamePlanHeadline: 'Make your expertise easier to understand and buy in 30 days.',
     gamePlanSubheadline:
-      'Give a personal AI CMO your body of work, commercial goal, buyer, and proof. Get three ranked priorities, a 20-slot month, and five retained drafts for $5.',
+      'Get a focused month that turns what you know into clear posts, stronger proof, and a simple path to your offer.',
     costlyPattern:
       'The work is good and the interests are real, but the market has to solve a new puzzle every time it sees your name.',
     desiredShift: 'Keep the range while making one commercial idea unmistakably yours.',

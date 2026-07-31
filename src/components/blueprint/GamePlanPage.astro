@@ -1,12 +1,8 @@
 ---
 import BlueprintNav from '@/components/blueprint/BlueprintNav.astro';
 import BlueprintFunnelRuntime from '@/components/blueprint/BlueprintFunnelRuntime.astro';
-import BlueprintScorecard from '@/components/blueprint/BlueprintScorecard.astro';
-import ContentBoard from '@/components/blueprint/ContentBoard.astro';
-import DraftPreview from '@/components/blueprint/DraftPreview.astro';
 import ExperienceProofStrip from '@/components/blueprint/ExperienceProofStrip.astro';
 import PreviewNotice from '@/components/blueprint/PreviewNotice.astro';
-import PriorExperienceProof from '@/components/blueprint/PriorExperienceProof.astro';
 import { blueprintProductContract, type BlueprintAudienceCopy } from '@/data/blueprint-offers';
 import OfferLayout from '@/layouts/OfferLayout.astro';
 
@@ -15,35 +11,10 @@ interface Props {
   description?: string;
 }
 
-const {
-  audience,
-  description = `${audience.gamePlanHeadline} See the score, three priorities, 20-slot month, and five drafts your $5 Game Plan produces.`,
-} = Astro.props;
+const { audience, description = audience.gamePlanSubheadline } = Astro.props;
 const plan = blueprintProductContract.gamePlan;
-const activation = blueprintProductContract.activation;
 const title = `$5 CMO Game Plan for ${audience.switchLabel}`;
-const intakeInputs = [
-  [
-    'Public evidence',
-    'LinkedIn profile and recent public content, with a tested unavailable-profile fallback.',
-  ],
-  [
-    'Commercial reality',
-    'The offer, best-fit buyer, 30-day objective, and the next action a qualified reader should take.',
-  ],
-  [
-    'Permitted proof',
-    'Results, stories, testimonials, and operating decisions the buyer is allowed to use publicly.',
-  ],
-  [
-    'Pipeline reality',
-    'How inbound and outbound work now, what is inconsistent, and where conversations currently stall.',
-  ],
-  [
-    'Voice and boundaries',
-    'Source writing, phrases to keep, prohibited claims, confidential details, and topics the buyer will not publish.',
-  ],
-] as const;
+const sampleWeeks = audience.exampleSlots.filter((_, index) => index % 5 === 0).slice(0, 4);
 ---
 
 <OfferLayout title={title} description={description} noindex={true}>
@@ -57,507 +28,238 @@ const intakeInputs = [
     <PreviewNotice />
     <BlueprintNav family="cmo-game-plan" activeAudience={audience.slug} />
 
-    <section
-      class="offer-grid border-b border-border px-4 py-12 sm:px-6 sm:py-20"
-      aria-labelledby="game-plan-hero-title"
-    >
-      <div class="mx-auto grid max-w-7xl gap-12 lg:grid-cols-[0.9fr_1.1fr] lg:items-center">
-        <div>
-          <p class="font-mono text-sm font-bold uppercase tracking-[0.16em] text-brand">
-            The $5 CMO Game Plan for {audience.plural}
-          </p>
-          <h1
-            id="game-plan-hero-title"
-            class="mt-4 text-balance text-5xl font-bold leading-[0.96] tracking-[-0.045em] sm:text-6xl lg:text-7xl"
-          >
-            {audience.gamePlanHeadline}
-          </h1>
-          <p class="mt-6 max-w-2xl text-lg leading-relaxed text-muted-foreground sm:text-xl">
-            {audience.gamePlanSubheadline}
-          </p>
-          <div class="mt-5 rounded-xl border border-border bg-card p-4 shadow-sm">
-            <p class="text-sm font-semibold leading-relaxed">{plan.directContinuity}</p>
-          </div>
-
-          <div class="mt-7 flex flex-wrap items-end gap-5">
-            <div>
-              <p
-                class="font-mono text-xs font-bold uppercase tracking-[0.14em] text-muted-foreground"
-              >
-                One payment
-              </p>
-              <p class="mt-1 text-6xl font-bold tracking-tight">$5</p>
-            </div>
-            <div class="pb-2 text-sm leading-relaxed text-muted-foreground">
-              <p>No subscription.</p>
-              <p>No automatic publishing.</p>
-              <p>Activation is optional.</p>
-            </div>
-          </div>
-
-          <form
-            data-blueprint-start-form
-            class="mt-7 rounded-xl border border-border bg-card p-5 shadow-sm"
-            aria-describedby="game-plan-form-status"
-          >
-            <p class="font-semibold">First, build the public evidence foundation</p>
-            <p class="mt-2 text-sm leading-relaxed text-muted-foreground">
-              The direct $5 journey starts the same saved Authority Snapshot, then unlocks secure
-              checkout when that foundation is complete.
-            </p>
-            <div class="mt-4 grid gap-4 sm:grid-cols-2">
-              <label class="block text-sm font-bold" for={`game-plan-linkedin-${audience.slug}`}>
-                LinkedIn profile URL
-                <input
-                  id={`game-plan-linkedin-${audience.slug}`}
-                  name="linkedin"
-                  data-blueprint-input
-                  type="url"
-                  placeholder="https://linkedin.com/in/you"
-                  disabled
-                  required
-                  class="mt-2 min-h-14 w-full rounded-xl border-2 border-border bg-muted px-4 text-base text-muted-foreground disabled:cursor-not-allowed"
-                />
-              </label>
-              <label class="block text-sm font-bold" for={`game-plan-email-${audience.slug}`}>
-                Work email for your saved result
-                <input
-                  id={`game-plan-email-${audience.slug}`}
-                  name="email"
-                  data-blueprint-input
-                  type="email"
-                  placeholder="you@company.com"
-                  disabled
-                  required
-                  class="mt-2 min-h-14 w-full rounded-xl border-2 border-border bg-muted px-4 text-base text-muted-foreground disabled:cursor-not-allowed"
-                />
-              </label>
-            </div>
-            <BlueprintFunnelRuntime audience={audience.slug} mode="direct" />
-            <button
-              type="submit"
-              disabled
-              data-blueprint-primary-action
-              data-acceptance-cta="game-plan-checkout"
-              class="mt-4 inline-flex min-h-20 w-full cursor-not-allowed items-center justify-center rounded-xl bg-brand px-6 py-5 text-center text-xl font-bold text-brand-foreground opacity-60 sm:text-2xl"
-            >
-              {plan.ctaLabel}
-            </button>
-            <p class="mt-3 text-center text-sm font-semibold text-muted-foreground">
-              {plan.auditExpectation}
-            </p>
-            <p
-              id="game-plan-form-status"
-              data-blueprint-runtime-status
-              aria-live="polite"
-              class="mt-4 text-sm leading-relaxed text-muted-foreground"
-            >
-              <strong>Private preview:</strong> checkout is not open yet. When it is, your $5 purchase
-              starts from the same saved Snapshot and continues into the full plan. {plan.ctaNote}
-            </p>
-          </form>
-
-          <div class="mt-7 rounded-xl border-l-4 border-brand bg-card p-5 shadow-sm">
-            <p class="font-semibold">The costly pattern</p>
-            <p class="mt-2 leading-relaxed text-muted-foreground">{audience.costlyPattern}</p>
-            <p class="mt-4 font-semibold text-brand">The shift: {audience.desiredShift}</p>
-          </div>
-        </div>
-
-        <div>
-          <BlueprintScorecard audience={audience} kind="game-plan" />
-          <p class="mt-4 text-sm leading-relaxed text-muted-foreground">
-            {blueprintProductContract.illustrativeSample.note}
-          </p>
-        </div>
-      </div>
-    </section>
-
-    <ExperienceProofStrip />
-
-    <section class="px-4 py-20 sm:px-6" aria-labelledby="inputs-title">
-      <div class="mx-auto max-w-7xl">
-        <div class="grid gap-10 lg:grid-cols-[0.75fr_1.25fr]">
+    <main>
+      <section class="px-4 py-12 sm:px-6 sm:py-20" aria-labelledby="game-plan-title">
+        <div class="mx-auto grid max-w-6xl gap-10 lg:grid-cols-[1fr_0.82fr] lg:items-center">
           <div>
-            <p class="font-mono text-sm font-bold uppercase tracking-[0.16em] text-brand">
-              What makes it personal
-            </p>
-            <h2 id="inputs-title" class="mt-3 text-3xl font-bold tracking-tight sm:text-5xl">
-              Specific output requires specific evidence.
-            </h2>
-            <p class="mt-5 text-lg leading-relaxed text-muted-foreground">
-              A LinkedIn URL shows what is public. These five input groups give your CMO the private
-              context needed to rank the right moves. Anything missing stays a question instead of
-              becoming a plausible-sounding guess.
-            </p>
-          </div>
-          <ol class="grid gap-4 sm:grid-cols-2">
-            {
-              intakeInputs.map(([label, detail], index) => (
-                <li
-                  class:list={[
-                    'rounded-xl border border-border bg-card p-5 shadow-sm',
-                    index === intakeInputs.length - 1 && 'sm:col-span-2',
-                  ]}
-                >
-                  <p class="font-mono text-xs font-bold uppercase tracking-[0.14em] text-brand">
-                    Input {(index + 1).toString().padStart(2, '0')}
-                  </p>
-                  <h3 class="mt-2 text-xl font-semibold">{label}</h3>
-                  <p class="mt-3 text-sm leading-relaxed text-muted-foreground">{detail}</p>
-                </li>
-              ))
-            }
-          </ol>
-        </div>
-      </div>
-    </section>
-
-    <section
-      class="border-y border-border bg-muted px-4 py-20 sm:px-6"
-      aria-labelledby="rubric-title"
-    >
-      <div class="mx-auto max-w-7xl">
-        <div class="max-w-4xl">
-          <p class="font-mono text-sm font-bold uppercase tracking-[0.16em] text-brand">
-            {plan.scoreName} · /100
-          </p>
-          <h2 id="rubric-title" class="mt-3 text-3xl font-bold tracking-tight sm:text-5xl">
-            Five dimensions. Twenty named criteria. Missing data stays missing.
-          </h2>
-          <p class="mt-5 text-lg leading-relaxed text-muted-foreground">
-            This is a separate system instrument, not an expanded version of the free /40. Each
-            criterion scores 0–5 only when its evidence is complete; the public score remains
-            visible beside the result but is never added to it.
-          </p>
-        </div>
-
-        <div class="mt-10 grid gap-5 lg:grid-cols-5">
-          {
-            plan.dimensions.map((dimension, index) => (
-              <article class="rounded-xl border border-border bg-card p-5 shadow-sm">
-                <p class="font-mono text-xs font-bold uppercase tracking-[0.14em] text-brand">
-                  Dimension {index + 1}
-                </p>
-                <h3 class="mt-2 text-xl font-semibold">{dimension.label}</h3>
-                <p class="mt-1 text-sm text-muted-foreground">Up to 20 points</p>
-                <ol class="mt-5 space-y-3 text-sm leading-relaxed">
-                  {dimension.criteria.map((criterion, criterionIndex) => (
-                    <li class="flex gap-2">
-                      <span class="font-mono text-muted-foreground">{criterionIndex + 1}.</span>
-                      <span>{criterion}</span>
-                    </li>
-                  ))}
-                </ol>
-              </article>
-            ))
-          }
-        </div>
-
-        <ul class="mt-6 grid gap-3 sm:grid-cols-2">
-          {
-            plan.completionRules.map((rule) => (
-              <li class="rounded-xl border border-dashed border-border bg-card p-4 text-sm font-semibold leading-relaxed">
-                {rule}
-              </li>
-            ))
-          }
-        </ul>
-
-        <details class="mt-6 rounded-xl border border-border bg-card p-5">
-          <summary
-            class="min-h-11 cursor-pointer py-2 text-lg font-bold focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-          >
-            Inspect the 0–5 scoring language
-          </summary>
-          <ol class="mt-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
-            {
-              plan.scoreScale.map((level) => (
-                <li class="rounded-xl bg-muted p-4 text-sm leading-relaxed">{level}</li>
-              ))
-            }
-          </ol>
-        </details>
-      </div>
-    </section>
-
-    <section class="px-4 py-20 sm:px-6" aria-labelledby="evidence-title">
-      <div class="mx-auto grid max-w-7xl gap-10 lg:grid-cols-[1.1fr_0.9fr] lg:items-start">
-        <div>
-          <p class="font-mono text-sm font-bold uppercase tracking-[0.16em] text-brand">
-            Evidence before advice
-          </p>
-          <h2 id="evidence-title" class="mt-3 text-3xl font-bold tracking-tight sm:text-5xl">
-            A recommendation should show its work.
-          </h2>
-          <p class="mt-5 max-w-3xl text-lg leading-relaxed text-muted-foreground">
-            In this example, every score sits beside its source and observation. You can challenge
-            the evidence before accepting the plan.
-          </p>
-          <div class="mt-8">
-            <BlueprintScorecard audience={audience} kind="game-plan" showEvidence={true} />
-          </div>
-        </div>
-
-        <aside
-          class="rounded-xl border-2 border-foreground bg-foreground p-6 text-background shadow-sm lg:sticky lg:top-6 sm:p-8"
-          aria-labelledby="priorities-title"
-        >
-          <p class="font-mono text-sm font-bold uppercase tracking-[0.16em] text-brand-soft">
-            The ranked plan
-          </p>
-          <h2 id="priorities-title" class="mt-3 text-3xl font-bold">
-            Three priorities—not a tip dump.
-          </h2>
-          <p class="mt-4 leading-relaxed text-background/75">
-            Synthetic objective: {audience.exampleObjective}
-          </p>
-          <ol class="mt-8 space-y-5">
-            {
-              audience.examplePriorities.map((priority, index) => (
-                <li class="flex gap-4 border-t border-background/20 pt-5 first:border-t-0 first:pt-0">
-                  <span class="grid size-10 shrink-0 place-items-center rounded-full bg-background font-mono font-bold text-foreground">
-                    {index + 1}
-                  </span>
-                  <span class="pt-1 font-semibold leading-relaxed">{priority}</span>
-                </li>
-              ))
-            }
-          </ol>
-        </aside>
-      </div>
-    </section>
-
-    <section
-      class="border-y border-border bg-muted px-4 py-20 sm:px-6"
-      aria-labelledby="board-title"
-    >
-      <div class="mx-auto max-w-[92rem]">
-        <div class="mx-auto max-w-4xl text-center">
-          <p class="font-mono text-sm font-bold uppercase tracking-[0.16em] text-brand">
-            The 20-slot month
-          </p>
-          <h2
-            id="board-title"
-            class="mt-3 text-balance text-3xl font-bold tracking-tight sm:text-5xl"
-          >
-            Every slot has a job, buyer, source, and reason it belongs now.
-          </h2>
-          <p class="mt-5 text-lg leading-relaxed text-muted-foreground">
-            These example titles show the level of specificity the board is built to reach. Your
-            version uses your buyer, evidence, objective, and source material. Anything it still
-            needs is shown as a question.
-          </p>
-        </div>
-        <div class="mt-12">
-          <ContentBoard audience={audience} />
-        </div>
-      </div>
-    </section>
-
-    <section class="px-4 py-20 sm:px-6" aria-labelledby="drafts-title">
-      <div class="mx-auto grid max-w-7xl gap-10 lg:grid-cols-[1.05fr_0.95fr] lg:items-start">
-        <div>
-          <p class="font-mono text-sm font-bold uppercase tracking-[0.16em] text-brand">
-            Five retained drafts
-          </p>
-          <h2 id="drafts-title" class="mt-3 text-3xl font-bold tracking-tight sm:text-5xl">
-            A strong starter admits what it still needs.
-          </h2>
-          <p class="mt-5 text-lg leading-relaxed text-muted-foreground">
-            “Ready” is reserved for a draft whose claims and source material are complete. Otherwise
-            the draft is a strong starter with the exact questions required to finish it.
-          </p>
-          <div class="mt-8">
-            <DraftPreview audience={audience} />
-          </div>
-        </div>
-
-        <div class="space-y-6">
-          <article class="rounded-xl border border-border bg-card p-6 shadow-sm sm:p-8">
-            <p class="font-mono text-sm font-bold uppercase tracking-[0.16em] text-brand">
-              Included Working Session
-            </p>
-            <h3 class="mt-3 text-2xl font-semibold">Keep working with the same CMO context.</h3>
-            <p class="mt-4 leading-relaxed text-muted-foreground">{plan.workingSession}</p>
-            <ul class="mt-6 space-y-3 text-sm leading-relaxed">
-              <li>✓ Continue by text with the paid plan and evidence already in context.</li>
-              <li>✓ Add new proof and repair only the drafts that depend on it.</li>
-              <li>✓ Use voice when it is available for your session.</li>
-              <li>
-                ✓ Nothing can publish without a separate, explicit action outside this product.
-              </li>
-            </ul>
-          </article>
-
-          <article class="rounded-xl border border-border bg-muted p-6 sm:p-8">
-            <p
-              class="font-mono text-sm font-bold uppercase tracking-[0.16em] text-muted-foreground"
+            <div class="flex items-center gap-3">
+              <span class="rounded-full bg-brand px-3 py-1 text-sm font-bold text-brand-foreground"
+                >$5</span
+              >
+              <p class="text-sm font-bold uppercase tracking-[0.14em] text-brand">
+                One-time payment
+              </p>
+            </div>
+            <h1
+              id="game-plan-title"
+              class="mt-5 max-w-4xl text-balance text-4xl font-bold leading-[1.02] tracking-[-0.045em] sm:text-6xl"
             >
-              Owned after the $5 purchase
+              {audience.gamePlanHeadline}
+            </h1>
+            <p class="mt-5 max-w-2xl text-lg leading-relaxed text-muted-foreground sm:text-xl">
+              {audience.gamePlanSubheadline}
             </p>
-            <h3 class="mt-3 text-2xl font-semibold">
-              Activation is not required to keep the work.
-            </h3>
-            <ul class="mt-6 grid grid-cols-2 gap-3">
+            <ul
+              class="mt-6 flex flex-wrap gap-x-6 gap-y-2 text-sm font-semibold text-muted-foreground"
+            >
+              <li>What to say</li>
+              <li>What to publish</li>
+              <li>What to do next</li>
+            </ul>
+
+            <form
+              id="game-plan-start"
+              data-blueprint-start-form
+              class="mt-8 max-w-2xl rounded-2xl border border-border bg-card p-5 shadow-sm sm:p-6"
+              aria-describedby="game-plan-form-status"
+            >
+              <p class="font-bold">Start with the profile your buyers already see.</p>
+              <div class="mt-4 grid gap-4 sm:grid-cols-2">
+                <label class="block text-sm font-bold" for={`game-plan-linkedin-${audience.slug}`}>
+                  LinkedIn profile
+                  <input
+                    id={`game-plan-linkedin-${audience.slug}`}
+                    name="linkedin"
+                    data-blueprint-input
+                    type="url"
+                    inputmode="url"
+                    autocomplete="url"
+                    placeholder="linkedin.com/in/you"
+                    disabled
+                    required
+                    class="mt-2 min-h-14 w-full rounded-xl border-2 border-border bg-background px-4 text-base disabled:cursor-not-allowed disabled:bg-muted"
+                  />
+                </label>
+                <label class="block text-sm font-bold" for={`game-plan-email-${audience.slug}`}>
+                  Email for your plan
+                  <input
+                    id={`game-plan-email-${audience.slug}`}
+                    name="email"
+                    data-blueprint-input
+                    type="email"
+                    inputmode="email"
+                    autocomplete="email"
+                    placeholder="you@company.com"
+                    disabled
+                    required
+                    class="mt-2 min-h-14 w-full rounded-xl border-2 border-border bg-background px-4 text-base disabled:cursor-not-allowed disabled:bg-muted"
+                  />
+                </label>
+              </div>
+              <BlueprintFunnelRuntime audience={audience.slug} mode="direct" />
+              <button
+                type="submit"
+                disabled
+                data-blueprint-primary-action
+                data-acceptance-cta="game-plan-checkout"
+                class="mt-4 inline-flex min-h-16 w-full cursor-not-allowed items-center justify-center rounded-xl bg-brand px-6 py-4 text-center text-lg font-bold text-brand-foreground opacity-60"
+              >
+                {plan.ctaLabel}
+              </button>
+              <p class="mt-3 text-center text-sm text-muted-foreground">
+                Secure checkout next · no subscription · nothing is auto-published
+              </p>
+              <p
+                id="game-plan-form-status"
+                data-blueprint-runtime-status
+                aria-live="polite"
+                class="mt-3 text-center text-sm font-semibold text-muted-foreground"
+              >
+                Add your profile and email to personalize the plan before checkout.
+              </p>
+            </form>
+          </div>
+
+          <aside class="overflow-hidden rounded-2xl border border-border bg-card shadow-xl">
+            <div class="bg-foreground p-6 text-background sm:p-8">
+              <p class="text-xs font-bold uppercase tracking-[0.14em] text-brand-soft">
+                Your 30-day plan
+              </p>
+              <h2 class="mt-3 text-3xl font-bold">Four weeks. One commercial goal.</h2>
+              <p class="mt-3 text-background/65">
+                Example for a {audience.singular}. Your plan uses your offer, proof, and objective.
+              </p>
+            </div>
+            <ol class="divide-y divide-border">
               {
-                plan.ownedAccess.map((item) => (
-                  <li class="rounded-xl border border-border bg-card p-4 text-center font-semibold">
-                    {item}
+                sampleWeeks.map((title, index) => (
+                  <li class="grid grid-cols-[auto_1fr] gap-4 p-5 sm:p-6">
+                    <span class="grid size-10 place-items-center rounded-full bg-muted text-sm font-bold">
+                      {index + 1}
+                    </span>
+                    <div>
+                      <p class="text-xs font-bold uppercase tracking-[0.12em] text-muted-foreground">
+                        Week {index + 1}
+                      </p>
+                      <p class="mt-1 font-semibold leading-snug">{title}</p>
+                    </div>
                   </li>
                 ))
               }
-            </ul>
-            <p class="mt-5 text-sm leading-relaxed text-muted-foreground">
-              You keep access to the score, plan, session summary, and first five drafts whether or
-              not you continue into Blueprint Activation.
-            </p>
-          </article>
+            </ol>
+          </aside>
         </div>
-      </div>
-    </section>
+      </section>
 
-    <section
-      class="border-y border-border bg-foreground px-4 py-20 text-background sm:px-6"
-      aria-labelledby="activation-title"
-    >
-      <div class="mx-auto grid max-w-6xl gap-10 lg:grid-cols-[0.8fr_1.2fr] lg:items-center">
-        <div>
-          <p class="font-mono text-sm font-bold uppercase tracking-[0.16em] text-brand-soft">
-            Optional next step
-          </p>
-          <h2 id="activation-title" class="mt-3 text-3xl font-bold tracking-tight sm:text-5xl">
-            Diagnosis leads to a plan. Activation implements the rest.
-          </h2>
-          <p class="mt-5 text-lg leading-relaxed text-background/75">{activation.description}</p>
-        </div>
-        <article
-          class="rounded-xl border border-background/25 bg-background p-6 text-foreground sm:p-8"
-        >
-          <div class="flex flex-wrap items-end justify-between gap-4">
-            <div>
-              <p class="font-mono text-xs font-bold uppercase tracking-[0.14em] text-brand">
-                Blueprint Activation
+      <ExperienceProofStrip />
+
+      <section
+        class="border-b border-border bg-muted px-4 py-16 sm:px-6"
+        aria-labelledby="plan-output-title"
+      >
+        <div class="mx-auto max-w-6xl">
+          <div class="mx-auto max-w-3xl text-center">
+            <p class="text-sm font-bold uppercase tracking-[0.14em] text-brand">The outcome</p>
+            <h2
+              id="plan-output-title"
+              class="mt-3 text-balance text-3xl font-bold tracking-tight sm:text-5xl"
+            >
+              Stop deciding what to post every morning.
+            </h2>
+            <p class="mx-auto mt-4 max-w-2xl text-lg leading-relaxed text-muted-foreground">
+              Leave with a focused month tied to the buyer and offer you want to grow now.
+            </p>
+          </div>
+          <div class="mt-10 grid gap-4 md:grid-cols-3">
+            <article class="rounded-2xl border border-border bg-card p-6">
+              <p class="text-sm font-bold text-brand">01 · Direction</p>
+              <h3 class="mt-3 text-xl font-bold">Three priorities</h3>
+              <p class="mt-2 leading-relaxed text-muted-foreground">
+                The few moves that matter most for your next 30 days.
               </p>
-              <p class="mt-2 text-5xl font-bold">
-                $99<span class="text-lg text-muted-foreground">/month</span>
+            </article>
+            <article class="rounded-2xl border border-border bg-card p-6">
+              <p class="text-sm font-bold text-brand">02 · Calendar</p>
+              <h3 class="mt-3 text-xl font-bold">Twenty post ideas</h3>
+              <p class="mt-2 leading-relaxed text-muted-foreground">
+                A complete four-week plan shaped around your buyer and proof.
+              </p>
+            </article>
+            <article class="rounded-2xl border border-border bg-card p-6">
+              <p class="text-sm font-bold text-brand">03 · Momentum</p>
+              <h3 class="mt-3 text-xl font-bold">Your first five drafts</h3>
+              <p class="mt-2 leading-relaxed text-muted-foreground">
+                Strong starting copy, with any missing stories clearly marked.
+              </p>
+            </article>
+          </div>
+        </div>
+      </section>
+
+      <section class="px-4 py-16 sm:px-6" aria-labelledby="plan-proof-title">
+        <div class="mx-auto grid max-w-5xl gap-8 lg:grid-cols-[0.75fr_1.25fr] lg:items-center">
+          <div>
+            <p class="text-5xl font-bold tracking-tight">$300K/mo</p>
+            <p class="mt-2 font-semibold">Tim’s agency before its seven-figure sale</p>
+            <p class="mt-2 text-sm leading-relaxed text-muted-foreground">
+              Its growth was LinkedIn-led. That operating experience informs the plan; it does not
+              guarantee the same result.
+            </p>
+          </div>
+          <figure class="rounded-2xl border border-border bg-card p-6 sm:p-8">
+            <blockquote class="text-xl font-semibold leading-relaxed">
+              “{blueprintProductContract.testimonials[1].quote}”
+            </blockquote>
+            <figcaption class="mt-4 text-sm text-muted-foreground">
+              {blueprintProductContract.testimonials[1].author} · {
+                blueprintProductContract.testimonials[1].role
+              }
+            </figcaption>
+            <p class="mt-4 text-xs leading-relaxed text-muted-foreground">
+              Earlier coaching result. It is not a result from this new Game Plan.
+            </p>
+          </figure>
+        </div>
+      </section>
+
+      <section class="bg-foreground px-4 py-16 text-background sm:px-6">
+        <div class="mx-auto max-w-4xl text-center">
+          <p class="text-sm font-bold uppercase tracking-[0.14em] text-brand-soft">
+            One payment · $5
+          </p>
+          <h2 class="mt-3 text-balance text-3xl font-bold sm:text-5xl">
+            Get the month out of your head and onto the page.
+          </h2>
+          <p class="mx-auto mt-4 max-w-2xl text-lg text-background/70">
+            About 10 minutes of input. A focused 30-day plan you can keep.
+          </p>
+          <a
+            href="#game-plan-start"
+            class="mt-7 inline-flex min-h-16 w-full items-center justify-center rounded-xl bg-brand px-6 py-4 text-lg font-bold text-brand-foreground sm:w-auto sm:min-w-80"
+          >
+            {plan.ctaLabel}
+          </a>
+          <details class="mx-auto mt-6 max-w-2xl text-left text-sm text-background/65">
+            <summary class="cursor-pointer py-2 font-semibold text-background"
+              >Delivery and refund details</summary
+            >
+            <div class="mt-2 space-y-3 leading-relaxed">
+              <p>{blueprintProductContract.commercialTerms.delivery}</p><p>
+                {blueprintProductContract.commercialTerms.refund}
               </p>
             </div>
-            <span
-              class="rounded-full bg-highlight px-3 py-2 text-sm font-bold text-highlight-foreground"
-              >$5 first-invoice credit</span
-            >
-          </div>
-          <ul class="mt-7 grid gap-3 sm:grid-cols-2">
-            <li class="rounded-xl bg-muted p-4 font-semibold">15 remaining posts</li>
-            <li class="rounded-xl bg-muted p-4 font-semibold">Profile rewrite</li>
-            <li class="rounded-xl bg-muted p-4 font-semibold">3 lead-magnet concepts</li>
-            <li class="rounded-xl bg-muted p-4 font-semibold">Ongoing CMO access</li>
-          </ul>
-          <p
-            class="mt-6 rounded-xl border border-destructive/30 bg-destructive/10 p-4 text-sm font-semibold leading-relaxed text-destructive"
-          >
-            Blueprint Activation is not included with the $5 Game Plan and is not available in this
-            private preview. You can keep the Game Plan without it.
-          </p>
-        </article>
-      </div>
-    </section>
-
-    <section
-      class="border-y border-border bg-muted px-4 py-20 sm:px-6"
-      aria-labelledby="commercial-terms-title"
-    >
-      <div class="mx-auto max-w-7xl">
-        <div class="max-w-4xl">
-          <p class="font-mono text-sm font-bold uppercase tracking-[0.16em] text-brand">
-            Delivery and support
-          </p>
-          <h2
-            id="commercial-terms-title"
-            class="mt-3 text-3xl font-bold tracking-tight sm:text-5xl"
-          >
-            Know what happens after the $5 payment.
-          </h2>
-          <p class="mt-5 text-lg leading-relaxed text-muted-foreground">
-            These are the proposed commercial terms for the finished product. Checkout remains
-            disabled until the product and these terms pass final acceptance.
-          </p>
+          </details>
         </div>
-        <dl class="mt-10 grid gap-5 md:grid-cols-2">
-          <div class="rounded-xl border border-border bg-card p-6 shadow-sm">
-            <dt class="text-xl font-semibold">Delivery</dt>
-            <dd class="mt-3 text-sm leading-relaxed text-muted-foreground">
-              {blueprintProductContract.commercialTerms.delivery}
-            </dd>
-          </div>
-          <div class="rounded-xl border border-border bg-card p-6 shadow-sm">
-            <dt class="text-xl font-semibold">Included revision</dt>
-            <dd class="mt-3 text-sm leading-relaxed text-muted-foreground">
-              {blueprintProductContract.commercialTerms.includedRevision}
-            </dd>
-          </div>
-          <div class="rounded-xl border border-border bg-card p-6 shadow-sm">
-            <dt class="text-xl font-semibold">Support and refund</dt>
-            <dd class="mt-3 text-sm leading-relaxed text-muted-foreground">
-              {blueprintProductContract.commercialTerms.support}
-              {' '}{blueprintProductContract.commercialTerms.refund}
-            </dd>
-          </div>
-          <div class="rounded-xl border border-border bg-card p-6 shadow-sm">
-            <dt class="text-xl font-semibold">Access and retention</dt>
-            <dd class="mt-3 text-sm leading-relaxed text-muted-foreground">
-              {blueprintProductContract.commercialTerms.retainedAccess}
-            </dd>
-          </div>
-        </dl>
-      </div>
-    </section>
+      </section>
+    </main>
 
-    <PriorExperienceProof />
-
-    <section class="px-4 py-20 sm:px-6" aria-labelledby="game-plan-close-title">
-      <div
-        class="mx-auto max-w-4xl rounded-xl border-2 border-brand bg-card p-7 text-center shadow-sm sm:p-12"
-      >
-        <p class="font-mono text-sm font-bold uppercase tracking-[0.16em] text-brand">
-          One shared product · four message-matched pages
-        </p>
-        <h2
-          id="game-plan-close-title"
-          class="mt-3 text-balance text-3xl font-bold tracking-tight sm:text-5xl"
-        >
-          Same product. Written for the work you actually do.
-        </h2>
-        <p class="mx-auto mt-5 max-w-2xl text-lg leading-relaxed text-muted-foreground">
-          Whichever page brought you here, the $5 result is the same: scored evidence, three ranked
-          priorities, a 20-slot month, five retained drafts, and continued access to your work.
-        </p>
-        <button
-          type="button"
-          disabled
-          data-acceptance-cta="game-plan-checkout-close"
-          class="mt-8 inline-flex min-h-20 w-full cursor-not-allowed items-center justify-center rounded-xl bg-brand px-6 py-5 text-center text-xl font-bold text-brand-foreground opacity-60 sm:w-auto sm:min-w-[28rem] sm:text-2xl"
-        >
-          {plan.ctaLabel}
-        </button>
-      </div>
-    </section>
-
-    <footer class="px-4 py-10 sm:px-6">
-      <div
-        class="mx-auto flex max-w-7xl flex-col gap-3 border-t border-border pt-8 text-sm text-muted-foreground sm:flex-row sm:items-center sm:justify-between"
-      >
-        <p>Private product preview · checkout is not open yet</p>
-        <div class="flex flex-wrap items-center gap-4">
-          <a class="min-h-11 py-3 font-semibold underline" href="/privacy/">Privacy</a>
-          <a class="min-h-11 py-3 font-semibold underline" href="/terms/">Terms</a>
-          <a
-            class="min-h-11 py-3 font-semibold underline"
-            href={`mailto:${blueprintProductContract.supportEmail}`}
+    <footer class="px-4 py-8 text-sm text-muted-foreground sm:px-6">
+      <div class="mx-auto flex max-w-6xl flex-wrap items-center justify-between gap-4">
+        <p>© Modern Agency Sales</p>
+        <div class="flex gap-4">
+          <a href="/privacy/" class="underline">Privacy</a><a href="/terms/" class="underline"
+            >Terms</a
           >
-            {blueprintProductContract.supportEmail}
-          </a>
         </div>
       </div>
     </footer>

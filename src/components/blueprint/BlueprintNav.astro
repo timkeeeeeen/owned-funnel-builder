@@ -1,10 +1,6 @@
 ---
 import PreserveAttribution from '@/components/blueprint/PreserveAttribution.astro';
-import {
-  BLUEPRINT_AUDIENCE_SLUGS,
-  blueprintAudiences,
-  type BlueprintAudienceSlug,
-} from '@/data/blueprint-offers';
+import { blueprintAudiences, type BlueprintAudienceSlug } from '@/data/blueprint-offers';
 
 interface Props {
   family: 'authority-snapshot' | 'cmo-game-plan';
@@ -12,113 +8,29 @@ interface Props {
 }
 
 const { family, activeAudience } = Astro.props;
-const companionFamily = family === 'authority-snapshot' ? 'cmo-game-plan' : 'authority-snapshot';
-const companionLabel =
-  family === 'authority-snapshot' ? 'See the $5 Game Plan' : 'See the free Snapshot';
-const companionMobileLabel = family === 'authority-snapshot' ? '$5 Game Plan →' : 'Free Snapshot →';
-const companionHref = activeAudience
-  ? `/${companionFamily}/${activeAudience}/`
-  : `/${companionFamily}/`;
-const activeAudienceLabel = activeAudience
-  ? blueprintAudiences[activeAudience].switchLabel
-  : 'Choose your type';
+const audienceLabel = activeAudience ? blueprintAudiences[activeAudience].switchLabel : '';
+const offerLabel = family === 'authority-snapshot' ? 'Free Authority Snapshot' : '$5 CMO Game Plan';
 ---
 
-<header class="border-b border-border bg-background px-4 sm:px-6">
-  <div
-    class="mx-auto flex max-w-7xl flex-col gap-5 py-5 lg:flex-row lg:items-center lg:justify-between"
-  >
-    <div class="flex items-center justify-between gap-4">
-      <a
-        href={`/${family}/`}
-        data-preserve-attribution
-        class="inline-flex min-h-11 items-center gap-3 rounded-xl focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-        aria-label="Modern Agency Sales offer previews"
+<header class="border-b border-border/70 bg-background px-4 sm:px-6">
+  <div class="mx-auto flex min-h-16 max-w-6xl items-center justify-between gap-4 py-3">
+    <a
+      href={`/${family}/`}
+      data-preserve-attribution
+      class="inline-flex min-h-11 items-center gap-3 rounded-lg focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+      aria-label={`${offerLabel} home`}
+    >
+      <span
+        class="grid size-9 place-items-center rounded-lg bg-foreground text-xs font-bold text-background"
+        >TK</span
       >
-        <span
-          class="grid size-11 place-items-center rounded-xl bg-foreground font-mono text-sm font-bold text-background"
-          aria-hidden="true">TK</span
-        >
-        <span>
-          <span class="block text-sm font-bold uppercase tracking-[0.14em]"
-            >Modern Agency Sales</span
-          >
-          <span class="block text-sm text-muted-foreground">Authority and content systems</span>
-        </span>
-      </a>
-      <a
-        href={companionHref}
-        data-preserve-attribution
-        class="inline-flex min-h-11 items-center rounded-xl border border-border bg-card px-3 py-2 text-sm font-semibold hover:bg-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring lg:hidden"
-      >
-        {companionMobileLabel}
-      </a>
-    </div>
-
-    <nav class="flex flex-col gap-3 lg:items-end" aria-label="Offer and audience navigation">
-      <a
-        href={companionHref}
-        data-preserve-attribution
-        class="hidden min-h-11 items-center rounded-xl px-3 text-sm font-semibold underline decoration-border decoration-2 underline-offset-4 hover:decoration-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring lg:inline-flex"
-      >
-        {companionLabel} →
-      </a>
-      <details class="lg:hidden">
-        <summary
-          class="flex min-h-11 cursor-pointer list-none items-center justify-between rounded-xl border border-border bg-card px-4 py-2 text-sm font-semibold focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-        >
-          <span>Audience: {activeAudienceLabel}</span>
-          <span aria-hidden="true">↓</span>
-        </summary>
-        <div
-          class="mt-2 grid gap-2 rounded-xl border border-border bg-muted p-2"
-          aria-label="Choose your business type"
-        >
-          {
-            BLUEPRINT_AUDIENCE_SLUGS.map((slug) => {
-              const isActive = slug === activeAudience;
-              return (
-                <a
-                  href={`/${family}/${slug}/`}
-                  data-preserve-attribution
-                  aria-current={isActive ? 'page' : undefined}
-                  class:list={[
-                    'inline-flex min-h-11 items-center rounded-xl border px-3 py-2 text-sm font-semibold transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring',
-                    isActive
-                      ? 'border-foreground bg-foreground text-background'
-                      : 'border-border bg-card hover:bg-background',
-                  ]}
-                >
-                  {blueprintAudiences[slug].switchLabel}
-                </a>
-              );
-            })
-          }
-        </div>
-      </details>
-      <div class="hidden flex-wrap gap-2 lg:flex" aria-label="Choose your business type">
-        {
-          BLUEPRINT_AUDIENCE_SLUGS.map((slug) => {
-            const isActive = slug === activeAudience;
-            return (
-              <a
-                href={`/${family}/${slug}/`}
-                data-preserve-attribution
-                aria-current={isActive ? 'page' : undefined}
-                class:list={[
-                  'inline-flex min-h-11 items-center rounded-xl border px-3 py-2 text-sm font-semibold transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring',
-                  isActive
-                    ? 'border-foreground bg-foreground text-background'
-                    : 'border-border bg-card hover:bg-muted',
-                ]}
-              >
-                {blueprintAudiences[slug].switchLabel}
-              </a>
-            );
-          })
-        }
-      </div>
-    </nav>
+      <span class="text-sm font-bold">{offerLabel}</span>
+    </a>
+    {
+      audienceLabel && (
+        <span class="text-sm font-semibold text-muted-foreground">For {audienceLabel}</span>
+      )
+    }
   </div>
 </header>
 

@@ -2,21 +2,25 @@
 import { blueprintProductContract } from '@/data/blueprint-offers';
 ---
 
-<section class="border-b border-border bg-muted px-4 py-8 sm:px-6" aria-label="Relevant experience">
-  <div class="mx-auto max-w-7xl">
-    <p class="text-center text-sm font-semibold leading-relaxed text-muted-foreground">
-      Built from Tim’s earlier agency operating experience, not claimed as results from this new
-      product.
-    </p>
-    <dl class="mt-5 grid grid-cols-2 gap-3 lg:grid-cols-4">
+<section
+  class="border-y border-border bg-muted px-4 py-7 sm:px-6"
+  aria-label="Tim's relevant experience"
+>
+  <div class="mx-auto max-w-6xl">
+    <dl class="grid grid-cols-2 gap-x-5 gap-y-6 text-center lg:grid-cols-4">
       {
         blueprintProductContract.proof.map((item) => (
-          <div class="rounded-xl border border-border bg-card p-4 text-center shadow-sm">
+          <div>
             <dt class="text-2xl font-bold tracking-tight sm:text-3xl">{item.value}</dt>
-            <dd class="mt-1 text-sm font-semibold">{item.label}</dd>
+            <dd class="mt-1 text-xs font-bold uppercase tracking-[0.1em] text-muted-foreground">
+              {item.label}
+            </dd>
           </div>
         ))
       }
     </dl>
+    <p class="mt-5 text-center text-xs leading-relaxed text-muted-foreground">
+      Tim’s earlier agency and coaching experience—not claimed as results from this new product.
+    </p>
   </div>
 </section>

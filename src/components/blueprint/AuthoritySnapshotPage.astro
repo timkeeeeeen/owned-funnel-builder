@@ -1,11 +1,8 @@
 ---
 import BlueprintNav from '@/components/blueprint/BlueprintNav.astro';
 import BlueprintFunnelRuntime from '@/components/blueprint/BlueprintFunnelRuntime.astro';
-import BlueprintScorecard from '@/components/blueprint/BlueprintScorecard.astro';
-import DraftPreview from '@/components/blueprint/DraftPreview.astro';
 import ExperienceProofStrip from '@/components/blueprint/ExperienceProofStrip.astro';
 import PreviewNotice from '@/components/blueprint/PreviewNotice.astro';
-import PriorExperienceProof from '@/components/blueprint/PriorExperienceProof.astro';
 import { blueprintProductContract, type BlueprintAudienceCopy } from '@/data/blueprint-offers';
 import OfferLayout from '@/layouts/OfferLayout.astro';
 
@@ -14,12 +11,9 @@ interface Props {
   description?: string;
 }
 
-const {
-  audience,
-  description = `${audience.snapshotHeadline} See the score, evidence-linked findings, and first post your free Snapshot produces.`,
-} = Astro.props;
+const { audience, description = audience.snapshotSubheadline } = Astro.props;
 const snapshot = blueprintProductContract.authoritySnapshot;
-const publicDimensions = snapshot.dimensions;
+const sample = blueprintProductContract.illustrativeSample;
 const title = `Free Authority Snapshot for ${audience.switchLabel}`;
 ---
 
@@ -33,278 +27,202 @@ const title = `Free Authority Snapshot for ${audience.switchLabel}`;
     <PreviewNotice />
     <BlueprintNav family="authority-snapshot" activeAudience={audience.slug} />
 
-    <section
-      class="offer-grid border-b border-border px-4 py-12 sm:px-6 sm:py-20"
-      aria-labelledby="snapshot-hero-title"
-    >
-      <div class="mx-auto grid max-w-7xl gap-12 lg:grid-cols-[0.9fr_1.1fr] lg:items-center">
-        <div>
-          <p class="font-mono text-sm font-bold uppercase tracking-[0.16em] text-brand">
-            Free Authority Snapshot for {audience.plural}
-          </p>
-          <h1
-            id="snapshot-hero-title"
-            class="mt-4 text-balance text-5xl font-bold leading-[0.96] tracking-[-0.045em] sm:text-6xl lg:text-7xl"
-          >
-            {audience.snapshotHeadline}
-          </h1>
-          <p class="mt-6 max-w-2xl text-lg leading-relaxed text-muted-foreground sm:text-xl">
-            {audience.snapshotSubheadline}
-          </p>
+    <main>
+      <section class="px-4 py-12 sm:px-6 sm:py-20" aria-labelledby="snapshot-title">
+        <div class="mx-auto grid max-w-6xl gap-10 lg:grid-cols-[1fr_0.82fr] lg:items-center">
+          <div>
+            <p class="text-sm font-bold uppercase tracking-[0.14em] text-brand">
+              Free · built for {audience.plural}
+            </p>
+            <h1
+              id="snapshot-title"
+              class="mt-4 max-w-4xl text-balance text-4xl font-bold leading-[1.02] tracking-[-0.045em] sm:text-6xl"
+            >
+              {audience.snapshotHeadline}
+            </h1>
+            <p class="mt-5 max-w-2xl text-lg leading-relaxed text-muted-foreground sm:text-xl">
+              {audience.snapshotSubheadline}
+            </p>
 
+            <form
+              data-blueprint-start-form
+              class="mt-8 max-w-2xl rounded-2xl border border-border bg-card p-5 shadow-sm sm:p-6"
+              aria-describedby="snapshot-form-status"
+            >
+              <div class="grid gap-4 sm:grid-cols-2">
+                <label class="block text-sm font-bold" for={`snapshot-linkedin-${audience.slug}`}>
+                  LinkedIn profile
+                  <input
+                    id={`snapshot-linkedin-${audience.slug}`}
+                    name="linkedin"
+                    data-blueprint-input
+                    type="url"
+                    inputmode="url"
+                    autocomplete="url"
+                    placeholder="linkedin.com/in/you"
+                    disabled
+                    required
+                    class="mt-2 min-h-14 w-full rounded-xl border-2 border-border bg-background px-4 text-base disabled:cursor-not-allowed disabled:bg-muted"
+                  />
+                </label>
+                <label class="block text-sm font-bold" for={`snapshot-email-${audience.slug}`}>
+                  Email for your result
+                  <input
+                    id={`snapshot-email-${audience.slug}`}
+                    name="email"
+                    data-blueprint-input
+                    type="email"
+                    inputmode="email"
+                    autocomplete="email"
+                    placeholder="you@company.com"
+                    disabled
+                    required
+                    class="mt-2 min-h-14 w-full rounded-xl border-2 border-border bg-background px-4 text-base disabled:cursor-not-allowed disabled:bg-muted"
+                  />
+                </label>
+              </div>
+              <BlueprintFunnelRuntime
+                audience={audience.slug}
+                mode="snapshot"
+                thankYouPath={`/authority-snapshot/${audience.slug}/thank-you/`}
+              />
+              <button
+                type="submit"
+                disabled
+                data-blueprint-primary-action
+                data-acceptance-cta="snapshot-form"
+                class="mt-4 inline-flex min-h-16 w-full cursor-not-allowed items-center justify-center rounded-xl bg-brand px-6 py-4 text-center text-lg font-bold text-brand-foreground opacity-60"
+              >
+                {snapshot.ctaLabel}
+              </button>
+              <p class="mt-3 text-center text-sm text-muted-foreground">
+                Free · private · nothing is posted to LinkedIn
+              </p>
+              <p
+                id="snapshot-form-status"
+                data-blueprint-runtime-status
+                aria-live="polite"
+                class="mt-3 text-center text-sm font-semibold text-muted-foreground"
+              >
+                Add your profile and email to see your private result.
+              </p>
+            </form>
+          </div>
+
+          <aside
+            class="rounded-2xl border border-border bg-foreground p-6 text-background shadow-xl sm:p-8"
+          >
+            <p class="text-xs font-bold uppercase tracking-[0.14em] text-background/60">
+              Example Snapshot
+            </p>
+            <div class="mt-5 flex items-end gap-2">
+              <span class="text-6xl font-bold tracking-tight">{sample.snapshotScore}</span>
+              <span class="pb-2 text-xl text-background/60">/ 40</span>
+            </div>
+            <div class="mt-7 border-t border-background/20 pt-6">
+              <p class="text-sm font-bold text-brand-soft">The biggest missed opportunity</p>
+              <p class="mt-2 text-xl font-semibold leading-snug">{audience.exampleFinding}</p>
+            </div>
+            <div class="mt-6 rounded-xl bg-background p-5 text-foreground">
+              <p class="text-xs font-bold uppercase tracking-[0.12em] text-brand">First move</p>
+              <p class="mt-2 font-semibold leading-relaxed">{audience.examplePriorities[0]}</p>
+            </div>
+            <p class="mt-4 text-xs leading-relaxed text-background/55">
+              Example only. Your result uses your public profile and content.
+            </p>
+          </aside>
+        </div>
+      </section>
+
+      <ExperienceProofStrip />
+
+      <section
+        class="border-b border-border bg-muted px-4 py-16 sm:px-6"
+        aria-labelledby="snapshot-output-title"
+      >
+        <div class="mx-auto max-w-6xl">
+          <div class="mx-auto max-w-3xl text-center">
+            <p class="text-sm font-bold uppercase tracking-[0.14em] text-brand">One clear answer</p>
+            <h2
+              id="snapshot-output-title"
+              class="mt-3 text-balance text-3xl font-bold tracking-tight sm:text-5xl"
+            >
+              See why strong work is not turning into visible authority.
+            </h2>
+          </div>
+          <ol class="mt-10 grid gap-4 md:grid-cols-3">
+            <li class="rounded-2xl border border-border bg-card p-6">
+              <span class="text-sm font-bold text-brand">01</span>
+              <h3 class="mt-3 text-xl font-bold">What buyers see</h3>
+              <p class="mt-2 leading-relaxed text-muted-foreground">
+                A simple read of the message and proof visible on your LinkedIn.
+              </p>
+            </li>
+            <li class="rounded-2xl border border-border bg-card p-6">
+              <span class="text-sm font-bold text-brand">02</span>
+              <h3 class="mt-3 text-xl font-bold">What is getting lost</h3>
+              <p class="mt-2 leading-relaxed text-muted-foreground">
+                The single clearest gap stopping the right buyer from understanding your value.
+              </p>
+            </li>
+            <li class="rounded-2xl border border-border bg-card p-6">
+              <span class="text-sm font-bold text-brand">03</span>
+              <h3 class="mt-3 text-xl font-bold">What to fix first</h3>
+              <p class="mt-2 leading-relaxed text-muted-foreground">
+                One practical move and a starter post built from what is already public.
+              </p>
+            </li>
+          </ol>
+        </div>
+      </section>
+
+      <section class="px-4 py-16 sm:px-6" aria-labelledby="snapshot-proof-title">
+        <div class="mx-auto grid max-w-5xl gap-8 lg:grid-cols-[0.75fr_1.25fr] lg:items-center">
+          <div>
+            <p class="text-5xl font-bold tracking-tight">300+</p>
+            <p class="mt-2 font-semibold">agencies helped through Tim’s earlier programs</p>
+          </div>
+          <figure class="rounded-2xl border border-border bg-card p-6 sm:p-8">
+            <blockquote class="text-xl font-semibold leading-relaxed">
+              “{blueprintProductContract.testimonials[0].quote}”
+            </blockquote>
+            <figcaption class="mt-4 text-sm text-muted-foreground">
+              {blueprintProductContract.testimonials[0].author} · {
+                blueprintProductContract.testimonials[0].role
+              }
+            </figcaption>
+            <p class="mt-4 text-xs leading-relaxed text-muted-foreground">
+              Earlier coaching result. It is not a result from this new Snapshot.
+            </p>
+          </figure>
+        </div>
+      </section>
+
+      <section class="bg-foreground px-4 py-16 text-background sm:px-6">
+        <div class="mx-auto max-w-4xl text-center">
+          <h2 class="text-balance text-3xl font-bold sm:text-5xl">Find the first thing to fix.</h2>
+          <p class="mx-auto mt-4 max-w-2xl text-lg text-background/70">
+            Two details. One private result. No generic audit report.
+          </p>
           <button
             type="button"
             disabled
             data-acceptance-cta="snapshot-mobile"
-            class="mt-7 inline-flex min-h-16 w-full cursor-not-allowed items-center justify-center rounded-xl bg-brand px-5 py-4 text-center text-lg font-bold text-brand-foreground opacity-60 sm:hidden"
+            class="mt-7 inline-flex min-h-16 w-full cursor-not-allowed items-center justify-center rounded-xl bg-brand px-6 py-4 text-lg font-bold text-brand-foreground opacity-60 sm:w-auto sm:min-w-80"
           >
             {snapshot.ctaLabel}
           </button>
+        </div>
+      </section>
+    </main>
 
-          <div class="mt-8 flex flex-wrap gap-3 text-sm font-semibold">
-            <span class="rounded-full border border-border bg-card px-4 py-2"
-              >{snapshot.priceLabel}</span
-            >
-            <span class="rounded-full border border-border bg-card px-4 py-2"
-              >2 public dimensions</span
-            >
-            <span class="rounded-full border border-border bg-card px-4 py-2">Up to 3 findings</span
-            >
-            <span class="rounded-full border border-border bg-card px-4 py-2"
-              >1 strong-starter draft</span
-            >
-          </div>
-
-          <form
-            data-blueprint-start-form
-            class="mt-9 rounded-xl border border-border bg-card p-5 shadow-sm sm:p-6"
-            aria-describedby="snapshot-form-status"
+    <footer class="px-4 py-8 text-sm text-muted-foreground sm:px-6">
+      <div class="mx-auto flex max-w-6xl flex-wrap items-center justify-between gap-4">
+        <p>© Modern Agency Sales</p>
+        <div class="flex gap-4">
+          <a href="/privacy/" class="underline">Privacy</a><a href="/terms/" class="underline"
+            >Terms</a
           >
-            <div class="grid gap-4 sm:grid-cols-2">
-              <label class="block text-sm font-bold" for={`linkedin-${audience.slug}`}>
-                {snapshot.form.linkedinLabel}
-                <input
-                  id={`linkedin-${audience.slug}`}
-                  name="linkedin"
-                  data-blueprint-input
-                  type="url"
-                  placeholder={snapshot.form.linkedinPlaceholder}
-                  disabled
-                  required
-                  class="mt-2 min-h-14 w-full rounded-xl border-2 border-border bg-muted px-4 text-base text-muted-foreground disabled:cursor-not-allowed"
-                />
-              </label>
-              <label class="block text-sm font-bold" for={`email-${audience.slug}`}>
-                {snapshot.form.emailLabel}
-                <input
-                  id={`email-${audience.slug}`}
-                  name="email"
-                  data-blueprint-input
-                  type="email"
-                  placeholder={snapshot.form.emailPlaceholder}
-                  disabled
-                  required
-                  class="mt-2 min-h-14 w-full rounded-xl border-2 border-border bg-muted px-4 text-base text-muted-foreground disabled:cursor-not-allowed"
-                />
-              </label>
-            </div>
-            <BlueprintFunnelRuntime
-              audience={audience.slug}
-              mode="snapshot"
-              thankYouPath={`/authority-snapshot/${audience.slug}/thank-you/`}
-            />
-            <button
-              type="submit"
-              disabled
-              data-blueprint-primary-action
-              data-acceptance-cta="snapshot"
-              class="mt-4 inline-flex min-h-16 w-full cursor-not-allowed items-center justify-center rounded-xl bg-brand px-6 py-4 text-center text-lg font-bold text-brand-foreground opacity-60"
-            >
-              {snapshot.ctaLabel}
-            </button>
-            <p
-              id="snapshot-form-status"
-              data-blueprint-runtime-status
-              aria-live="polite"
-              class="mt-4 text-sm leading-relaxed text-muted-foreground"
-            >
-              <strong>Private preview:</strong> submissions are not open yet. When they are, we will use
-              these two details to build and email your saved result. {snapshot.ctaNote}
-            </p>
-          </form>
-        </div>
-
-        <div>
-          <BlueprintScorecard audience={audience} kind="snapshot" showEvidence={true} />
-          <p class="mt-4 text-sm leading-relaxed text-muted-foreground">
-            {blueprintProductContract.illustrativeSample.note}
-          </p>
-        </div>
-      </div>
-    </section>
-
-    <ExperienceProofStrip />
-
-    <section class="px-4 py-20 sm:px-6" aria-labelledby="snapshot-boundary-title">
-      <div class="mx-auto max-w-7xl">
-        <div class="grid gap-10 lg:grid-cols-[0.8fr_1.2fr]">
-          <div>
-            <p class="font-mono text-sm font-bold uppercase tracking-[0.16em] text-brand">
-              What the free result can know
-            </p>
-            <h2
-              id="snapshot-boundary-title"
-              class="mt-3 text-3xl font-bold tracking-tight sm:text-5xl"
-            >
-              See exactly what a prospect can see, without invented private context.
-            </h2>
-            <p class="mt-5 text-lg leading-relaxed text-muted-foreground">
-              The free Snapshot scores two things a buyer can actually see. It leaves three private
-              system areas unassessed. Its /40 score is separate from the paid /100 score, so the
-              two numbers are never added together.
-            </p>
-          </div>
-          <div class="grid gap-5 sm:grid-cols-2">
-            {
-              publicDimensions.map((dimension) => (
-                <article class="rounded-xl border border-border bg-card p-6 shadow-sm">
-                  <h3 class="text-2xl font-semibold">{dimension.label}</h3>
-                  <p class="mt-2 text-sm text-muted-foreground">Four criteria · up to 20 points</p>
-                  <ul class="mt-5 space-y-3 text-sm leading-relaxed">
-                    {dimension.criteria.map((criterion) => (
-                      <li class="flex gap-3">
-                        <span aria-hidden="true">✓</span>
-                        <span>{criterion}</span>
-                      </li>
-                    ))}
-                  </ul>
-                </article>
-              ))
-            }
-            <article
-              class="rounded-xl border border-dashed border-border bg-muted p-6 sm:col-span-2"
-            >
-              <h3 class="text-xl font-semibold">Explicitly unassessed</h3>
-              <p class="mt-3 leading-relaxed text-muted-foreground">
-                {snapshot.unassessedSystemDimensions.join(', ')} require private operating context. The
-                free result leaves these open rather than guessing. The Visible Authority Score only describes
-                what a buyer can see in public.
-              </p>
-            </article>
-          </div>
-        </div>
-      </div>
-    </section>
-
-    <section
-      class="border-y border-border bg-foreground px-4 py-20 text-background sm:px-6"
-      aria-labelledby="snapshot-finding-title"
-    >
-      <div class="mx-auto grid max-w-7xl gap-10 lg:grid-cols-2 lg:items-start">
-        <div>
-          <p class="font-mono text-sm font-bold uppercase tracking-[0.16em] text-brand-soft">
-            Example output 01 · finding
-          </p>
-          <h2
-            id="snapshot-finding-title"
-            class="mt-3 text-3xl font-bold tracking-tight sm:text-5xl"
-          >
-            One evidence-linked finding is worth more than ten generic tips.
-          </h2>
-          <div class="mt-8 rounded-xl border border-background/25 bg-background/10 p-6">
-            <p class="font-mono text-xs font-bold uppercase tracking-[0.14em] text-brand-soft">
-              Observed pattern
-            </p>
-            <p class="mt-3 text-xl font-semibold leading-relaxed">{audience.exampleFinding}</p>
-            <p
-              class="mt-5 border-t border-background/20 pt-5 text-sm leading-relaxed text-background/75"
-            >
-              Example evidence: the LinkedIn profile observation shown in the scorecard above. Your
-              result points to the exact profile or content evidence behind each finding.
-            </p>
-          </div>
-        </div>
-        <DraftPreview audience={audience} compact={true} />
-      </div>
-    </section>
-
-    <section class="px-4 py-20 sm:px-6" aria-labelledby="handoff-title">
-      <div class="mx-auto max-w-6xl">
-        <div class="text-center">
-          <p class="font-mono text-sm font-bold uppercase tracking-[0.16em] text-brand">
-            The natural next decision
-          </p>
-          <h2
-            id="handoff-title"
-            class="mx-auto mt-3 max-w-4xl text-balance text-3xl font-bold tracking-tight sm:text-5xl"
-          >
-            The Snapshot says what is visible. The $5 Game Plan decides what to do next.
-          </h2>
-        </div>
-        <div class="mt-10 grid gap-6 lg:grid-cols-2">
-          <article class="rounded-xl border border-border bg-muted p-6 sm:p-8">
-            <p
-              class="font-mono text-sm font-bold uppercase tracking-[0.14em] text-muted-foreground"
-            >
-              Free · diagnosis
-            </p>
-            <h3 class="mt-3 text-3xl font-semibold">Authority Snapshot</h3>
-            <ul class="mt-6 space-y-3 leading-relaxed">
-              <li>2 publicly observable dimensions</li>
-              <li>Up to 3 evidence-linked findings</li>
-              <li>1 strong starter with visible source questions</li>
-              <li>3 system areas clearly left unassessed—not scored as zero</li>
-            </ul>
-          </article>
-          <article class="rounded-xl border-2 border-brand bg-card p-6 shadow-sm sm:p-8">
-            <div class="flex items-center justify-between gap-4">
-              <p class="font-mono text-sm font-bold uppercase tracking-[0.14em] text-brand">
-                $5 · prescription
-              </p>
-              <span class="text-3xl font-bold">$5</span>
-            </div>
-            <h3 class="mt-3 text-3xl font-semibold">CMO Game Plan</h3>
-            <ul class="mt-6 space-y-3 leading-relaxed">
-              <li>A separate /100 system score across 20 evidence-scored criteria</li>
-              <li>3 ranked priorities tied to the current bottleneck</li>
-              <li>20 content slots with job, buyer, source, and reason</li>
-              <li>First 5 retained drafts plus a continuing CMO session</li>
-            </ul>
-            <a
-              href={`/cmo-game-plan/${audience.slug}/`}
-              data-preserve-attribution
-              class="mt-7 inline-flex min-h-14 w-full items-center justify-center rounded-xl border border-foreground bg-foreground px-5 py-4 text-center font-bold text-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-            >
-              See what the $5 plan builds →
-            </a>
-            <button
-              type="button"
-              disabled
-              data-acceptance-cta="snapshot-bridge-checkout"
-              class="mt-3 inline-flex min-h-14 w-full cursor-not-allowed items-center justify-center rounded-xl bg-brand px-5 py-4 text-center font-bold text-brand-foreground opacity-60"
-            >
-              {blueprintProductContract.gamePlan.ctaLabel}
-            </button>
-          </article>
-        </div>
-      </div>
-    </section>
-
-    <PriorExperienceProof />
-    <footer class="px-4 py-10 sm:px-6">
-      <div
-        class="mx-auto flex max-w-7xl flex-col gap-3 border-t border-border pt-8 text-sm text-muted-foreground sm:flex-row sm:items-center sm:justify-between"
-      >
-        <p>Private product preview · submissions and checkout are not open yet</p>
-        <div class="flex flex-wrap items-center gap-4">
-          <a class="min-h-11 py-3 font-semibold underline" href="/privacy/">Privacy</a>
-          <a class="min-h-11 py-3 font-semibold underline" href="/terms/">Terms</a>
-          <a
-            class="min-h-11 py-3 font-semibold underline"
-            href={`mailto:${blueprintProductContract.supportEmail}`}
-          >
-            {blueprintProductContract.supportEmail}
-          </a>
         </div>
       </div>
     </footer>
