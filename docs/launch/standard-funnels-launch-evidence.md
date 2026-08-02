@@ -39,6 +39,11 @@ Status: implementation-ready; provider and production gates remain open
 - Preview readback includes historical Blueprint candidates, not the final
   accepted Blueprint SHA. A fresh Woodpecker preview is required before
   promotion.
+- Cloudflare confirms the custom domain `shop.maestrogtm.com` is attached to
+  the project, but the current live HTML still emits the Pages-host canonical
+  URL. Set production `PUBLIC_SITE_URL=https://shop.maestrogtm.com` in the
+  authorized deployment environment and verify canonical/OG URLs after
+  promotion; do not hard-code this environment value in source.
 - Aggregate remote read-only counts at baseline: `offer_products=11`,
   `webhook_events=11`, `fulfillments=16`, `funnel_runs=29`; the query reported
   zero writes.
