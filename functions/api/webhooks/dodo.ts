@@ -21,6 +21,13 @@ interface PaymentEventData {
   metadata?: unknown;
   customer?: { customer_id?: unknown; email?: unknown } | null;
   customer_id?: unknown;
+  product_cart?: unknown;
+}
+
+interface OfferProductRow {
+  dodo_product_id: string;
+  price_amount: number;
+  currency: string;
 }
 
 interface WebhookPayload {
@@ -85,6 +92,66 @@ async function recordPaymentRevocation(
     )
     .bind(paymentId, eventType, webhookId, new Date().toISOString())
     .run();
+  await database
+    .prepare(
+      `UPDATE fulfillments
+       SET status = 'failed', error_message = ?, updated_at = ?
+       WHERE payment_id = ? AND status IN ('pending', 'sending', 'sent')`
+    )
+    .bind(`Payment access revoked after ${eventType}.`, new Date().toISOString(), paymentId)
+    .run();
+}
+
+async function assertPaymentMatchesCatalog(
+  database: D1Database,
+  data: PaymentEventData,
+  metadata: Record<string, string>
+): Promise<void> {
+  const productKeys = [metadata.product_key, metadata.bump_product_key].filter(Boolean);
+  const products = await Promise.all(
+    productKeys.map((productKey) =>
+      database
+        .prepare(
+          `SELECT dodo_product_id, price_amount, currency
+           FROM offer_products WHERE product_key = ?`
+        )
+        .bind(productKey)
+        .first<OfferProductRow>()
+    )
+  );
+  const cart = Array.isArray(data.product_cart)
+    ? data.product_cart.map((item) => {
+        if (!item || typeof item !== 'object' || Array.isArray(item)) return null;
+        const product = item as { product_id?: unknown; quantity?: unknown };
+        return {
+          productId: cleanString(product.product_id, 180),
+          quantity: product.quantity,
+        };
+      })
+    : null;
+  const expectedProductIds = products.map((product) => cleanString(product?.dodo_product_id, 180));
+  const cartMatches =
+    products.every(Boolean) &&
+    cart?.length === expectedProductIds.length &&
+    cart.every(
+      (item) =>
+        item !== null &&
+        item.quantity === 1 &&
+        expectedProductIds.includes(item.productId)
+    ) &&
+    new Set(cart.filter(Boolean).map((item) => item?.productId)).size === expectedProductIds.length;
+  const expectedAmount = products.reduce(
+    (total, product) => total + (product?.price_amount ?? Number.NaN),
+    0
+  );
+  const amountMatches = data.total_amount === expectedAmount;
+  const currency = cleanString(data.currency, 3).toUpperCase();
+  const currencyMatches =
+    Boolean(currency) &&
+    products.every((product) => cleanString(product?.currency, 3).toUpperCase() === currency);
+  if (!cartMatches || !Number.isSafeInteger(expectedAmount) || !amountMatches || !currencyMatches) {
+    throw new Error('The payment does not match the configured Dodo product.');
+  }
 }
 
 async function markPaymentSucceeded(
@@ -107,6 +174,7 @@ async function markPaymentSucceeded(
   if (!leadId || !funnelId || !productKey) {
     throw new Error('The payment event is missing funnel metadata.');
   }
+  await assertPaymentMatchesCatalog(database, data, metadata);
 
   const now = new Date().toISOString();
   if (metadata.step_key) {

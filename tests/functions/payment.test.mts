@@ -1400,7 +1400,94 @@ test('refund before Dodo success prevents fulfillment', async () => {
   });
 
   assert.equal(database.calls.some(({ query }) => query.includes('UPDATE funnel_runs')), false);
-  assert.equal(database.calls.some(({ query }) => query.includes('fulfillments')), false);
+  assert.equal(
+    database.calls.some(({ query }) => query.includes('INSERT OR IGNORE INTO fulfillments')),
+    false
+  );
+});
+
+test('Dodo payment fulfillment fails closed on product, amount, currency, or cart mismatch', async () => {
+  const expected = {
+    payment_id: 'pay_catalog_mismatch',
+    total_amount: 4900,
+    currency: 'USD',
+    product_cart: [{ product_id: 'prod_main', quantity: 1 }],
+    customer_id: 'customer_1',
+    metadata: {
+      source: 'owned-funnel-builder',
+      lead_id: 'lead_1',
+      funnel_id: 'funnel_1',
+      product_key: 'owned-funnel-builder',
+    },
+  };
+  const mismatches = [
+    { ...expected, product_cart: [{ product_id: 'prod_wrong', quantity: 1 }] },
+    { ...expected, total_amount: 4800 },
+    { ...expected, currency: 'EUR' },
+    { ...expected, product_cart: undefined },
+  ];
+
+  for (const [index, data] of mismatches.entries()) {
+    const database = new FakeDatabase((query, values, method) => {
+      if (query.includes('INSERT OR IGNORE INTO webhook_events')) {
+        return { success: true, meta: { changes: 1 } };
+      }
+      if (query.includes('SELECT payment_id FROM payment_revocations')) return null;
+      if (query.includes('SELECT dodo_product_id, price_amount, currency')) {
+        return { dodo_product_id: 'prod_main', price_amount: 4900, currency: 'USD' };
+      }
+      if (query.includes('SELECT email FROM checkout_leads')) return { email: 'buyer@example.com' };
+      if (query.includes('SELECT id, status, updated_at FROM fulfillments')) {
+        return { id: 'fulfillment_1', status: 'sent', updated_at: new Date().toISOString() };
+      }
+      if (method === 'run') return { success: true, meta: { changes: 1 } };
+      return null;
+    });
+
+    await assert.rejects(
+      processDodoWebhookPayload({}, database, `event_catalog_mismatch_${index}`, {
+        type: 'payment.succeeded',
+        data,
+      }),
+      /does not match the configured Dodo product/
+    );
+    assert.equal(database.calls.some(({ query }) => query.includes('fulfillments')), false);
+  }
+});
+
+test('Dodo refunds and terminal dispute losses revoke delivered fulfillment access', async () => {
+  let revocations = 0;
+  let fulfillmentRevocations = 0;
+  const database = new FakeDatabase((query, _values, method) => {
+    if (query.includes('INSERT OR IGNORE INTO webhook_events')) {
+      return { success: true, meta: { changes: 1 } };
+    }
+    if (query.includes('INSERT OR IGNORE INTO payment_revocations')) {
+      revocations += 1;
+      return { success: true, meta: { changes: 1 } };
+    }
+    if (query.includes('UPDATE fulfillments')) {
+      fulfillmentRevocations += 1;
+      return { success: true, meta: { changes: 1 } };
+    }
+    if (query.includes("SET status = 'processed'")) {
+      return { success: true, meta: { changes: 1 } };
+    }
+    if (method === 'run') return { success: true, meta: { changes: 1 } };
+    return null;
+  });
+
+  await processDodoWebhookPayload({}, database, 'event_refund_revoke_delivery', {
+    type: 'refund.succeeded',
+    data: { payment_id: 'pay_delivered_refund' },
+  });
+  await processDodoWebhookPayload({}, database, 'event_dispute_revoke_delivery', {
+    type: 'dispute.lost',
+    data: { payment_id: 'pay_delivered_dispute' },
+  });
+
+  assert.equal(revocations, 2);
+  assert.equal(fulfillmentRevocations, 2);
 });
 
 test('terminal losing Dodo disputes revoke the payment', async () => {
@@ -1438,6 +1525,9 @@ test('missing Admaxxer configuration retries live Dodo payments', async () => {
       return { success: true, meta: { changes: 1 } };
     }
     if (query.includes('SELECT payment_id FROM payment_revocations')) return null;
+    if (query.includes('SELECT dodo_product_id, price_amount, currency')) {
+      return { dodo_product_id: 'prod_main', price_amount: 4900, currency: 'USD' };
+    }
     if (query.includes('SELECT email FROM checkout_leads')) return { email: 'buyer@example.com' };
     if (query.includes('SELECT id, status, updated_at FROM fulfillments')) {
       return { id: 'fulfillment_1', status: 'sent', updated_at: new Date().toISOString() };
@@ -1456,8 +1546,9 @@ test('missing Admaxxer configuration retries live Dodo payments', async () => {
         data: {
           payment_id: 'pay_live_admaxxer_missing',
           customer_id: 'customer_1',
-          total_amount: 100,
+          total_amount: 4900,
           currency: 'USD',
+          product_cart: [{ product_id: 'prod_main', quantity: 1 }],
           metadata: {
             source: 'owned-funnel-builder',
             lead_id: 'lead_1',
