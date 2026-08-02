@@ -43,6 +43,22 @@ Status: implementation-ready; provider and production gates remain open
   `webhook_events=11`, `fulfillments=16`, `funnel_runs=29`; the query reported
   zero writes.
 
+### Production mapping readback (IDs redacted to suffix)
+
+| Product key | Dodo ID suffix | Amount | Currency |
+| --- | --- | ---: | --- |
+| `owned-funnel-builder` | `vPxAFG` | $49.00 | USD |
+| `owned-funnel-conversion-copy-swipe-file` | `vZOKUc` | $19.00 | USD |
+| `owned-funnel-ten-blueprints` | `aoKtSq` | $39.00 | USD |
+| `owned-funnel-agency-toolkit` | `zAZFCe` | $79.00 | USD |
+| `talking-head-ad-machine` | `vt1Gb5` | $27.00 | USD |
+| `talking-head-hook-recording-pack` | `zJ87XW` | $9.00 | USD |
+| `talking-head-ad-test-lab` | `MgTBbh` | $37.00 | USD |
+| `vibe-code-anything` | `yzSSBC` | $29.00 | USD |
+| `vibe-code-prompt-pack` | `7y8kWo` | $19.00 | USD |
+| `vibe-code-five-app-blueprints` | `kZjFhy` | $39.00 | USD |
+| `vibe-code-production-launch-pack` | `OBeEWj` | $79.00 | USD |
+
 ## Code changes
 
 - `payment.succeeded` events with `source=owned-funnel-diagnostic` are durable
