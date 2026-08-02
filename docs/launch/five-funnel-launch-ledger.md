@@ -25,9 +25,9 @@ stage proof; never use the real-price catalog for this test.
 
 ## Current CI/runtime evidence
 
-- All three launch branches are clean, pushed, and represented by ready-for-review PRs: standard `cdedd04`, App Idea `73850292c`, Blueprint `865f25917d`.
+- All three launch branches are clean, pushed, and represented by ready-for-review PRs: standard `505761b`, App Idea `ca11b2427`, Blueprint `865f25917d`.
 - Standard local function suite is green (`42/42`) and its Functions build passes.
-- App Idea targeted commerce tests are green (`3/3`); the prior release-ownership failure was patched on `ab922492c`, and Woodpecker re-verification is required before merge.
+- App Idea targeted commerce tests are green (`3/3`); the reviewed-release ownership hashes were refreshed on `ca11b2427`, and Woodpecker re-verification is required before merge.
 - Blueprint remote focused suite and typecheck are green; lint fixes are on `865f25917d`, and Woodpecker re-verification is required before merge.
 - Production remains on the older Pages deployment; no launch branch has been promoted.
 
@@ -39,7 +39,7 @@ stage proof; never use the real-price catalog for this test.
 | Talking-Head Ad Machine / Sales → Purchase | Code `cdedd04`; URL/deploy unverified; deck r1 pending; publish/checkout flag readback required | $27/$9/$37 readback unverified; 3-stage live $1 canary unverified; real-price checkout intentionally uncharged | Same event chain + supported-platform delivery: unverified | Exact slug and paused campaign destination: unverified; rollback owner: standard release owner | unverified |
 | Vibe Code Anything / Sales → Purchase | Code `cdedd04`; URL/deploy unverified; deck r1 pending | $29/$19/$39/$79 readback unverified; 4-stage live $1 canary unverified; real-price checkout intentionally uncharged | Same event chain + exact template entitlement: unverified | Exact slug and paused campaign destination: unverified; rollback owner: standard release owner | unverified |
 | Authority Snapshot → $5 Game Plan / Leads → Lead | Maestro code `865f25917d`; runtime URL/deploy unverified; Blueprint copy/proof approval pending | Free lead + $5 product readback unverified; one live $1 paid-stage canary unverified; real-price checkout intentionally uncharged | PageView; durable Snapshot Lead; visitor handoff; $5 Purchase/plan artifact: unverified | Four variants, consent, and recovery: unverified; rollback owner: Blueprint release owner | unverified |
-| App Idea Evaluator → $29 Build Pack / Leads → Lead | App Idea code `ab922492c`; URL/deploy unverified; canonical copy approval pending | Free report + $29 product readback unverified; one live $1 paid-stage canary unverified; real-price checkout intentionally uncharged | PageView; durable report Lead; visitor handoff; Purchase, entitlement, credit, resume: unverified | Low-fit suppression and exact destination: unverified; rollback owner: App Idea release owner | unverified |
+| App Idea Evaluator → $29 Build Pack / Leads → Lead | App Idea code `ca11b2427`; URL/deploy unverified; canonical copy approval pending | Free report + $29 product readback unverified; one live $1 paid-stage canary unverified; real-price checkout intentionally uncharged | PageView; durable report Lead; visitor handoff; Purchase, entitlement, credit, resume: unverified | Low-fit suppression and exact destination: unverified; rollback owner: App Idea release owner | unverified |
 
 ## Closure and approvals
 
