@@ -23,6 +23,14 @@ stage proof; never use the real-price catalog for this test.
 | Meta dataset/domain/billing/permissions | unverified | Events Manager and Ads Manager readback | Keep campaigns paused |
 | Monitoring, alerts, budgets, pause owners | unverified | monitoring log and named approvers | Pause affected/all campaigns |
 
+## Current CI/runtime evidence
+
+- All three launch branches are clean, pushed, and represented by ready-for-review PRs: standard `3274dc9`, App Idea `ab92249`, Blueprint `eafcf5d`.
+- Standard local function suite is green (`42/42`) and its Functions build passes.
+- App Idea targeted commerce tests are green (`3/3`); its Woodpecker verify reached the generator suite but failed on the unrelated historical fixture lookup `fatal: not a tree object` in `tooling/generators/src/blueprints/saasApplication.test.ts:134`.
+- Blueprint remote focused suite and typecheck are green; its Woodpecker trusted-policy step exits before verification after Node bootstrap. The same trusted-policy script passes locally; this is CI infrastructure evidence, not a production/runtime pass.
+- Production remains on the older Pages deployment; no launch branch has been promoted.
+
 ## Funnel rows
 
 | Funnel / objective | Deployment + copy | Dodo / canary | Events + entitlement | Destination / rollback | Row |
