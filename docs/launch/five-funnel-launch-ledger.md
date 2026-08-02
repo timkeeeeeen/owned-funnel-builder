@@ -17,7 +17,7 @@ stage proof; never use the real-price catalog for this test.
 | --- | --- | --- | --- |
 | Dodo live account, mode, products, prices, attachments | unverified | Dodo readback; owner/provider | Disable checkout routes; restore prior catalog mapping |
 | Dodo webhook URL, signature secret, retry/idempotency | passed locally / unverified live | `npm run test:functions`; production delivery readback | Revert deployment; keep webhook retryable |
-| D1 migrations 0006/0007, backup/time-travel marker | unverified | Remote readback shows both pending; Time Travel bookmark `00000031-00000000-000050bb-d66926ee30685fcaf0f1dfdb1179dd8e` recorded; migration receipt still required | Restore bookmark; do not run ads |
+| D1 migrations 0006/0007, backup/time-travel marker | passed for schema / deployment still unverified | Remote migration receipt: `0006_stripe_provider.sql` and `0007_webhook_retry_and_revocations.sql` applied successfully; readback confirms `offer_products`, `checkout_leads`, `funnel_runs`, `funnel_step_runs`, `webhook_events`, `payment_revocations`, and `fulfillments`; Time Travel bookmark `00000031-00000000-000050bb-d66926ee30685fcaf0f1dfdb1179dd8e` recorded | Restore bookmark; do not run ads |
 | Admaxxer websites, pixel, Lead/Purchase API, Meta CAPI | unverified | owner CAPI connection + redacted event traces | Disable server ingestion/campaigns |
 | Privacy/consent, terms, refund/support owner | unverified | approved copy and production URL check | Pause all campaigns |
 | Meta dataset/domain/billing/permissions | unverified | Events Manager and Ads Manager readback | Keep campaigns paused |

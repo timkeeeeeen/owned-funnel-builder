@@ -5,7 +5,7 @@ Status: implementation-ready; provider and production gates remain open
 ## Reviewed source
 
 - Branch: `codex/owned-funnel-launch`
-- Code commit: `27c71df`; privacy/evidence follow-up: `543e0ee`
+- Code candidate: `559f636` (webhook hardening is included in the reviewed branch)
 - Offers: Owned Funnel Builder, Talking-Head Ad Machine, Vibe Code Anything
 - Dodo production catalog: 11 real paid stages; temporary live canary catalog:
   11 separate `$1 USD` products, not yet created
@@ -18,20 +18,20 @@ Status: implementation-ready; provider and production gates remain open
 | Migration preservation | passed | `tests/functions/migrations.test.mts` |
 | Functions build | passed | `npm run check:functions` |
 | Static build | passed | `npm run build` — 29 pages |
-| Functions tests | passed | 40 tests, 0 failures |
+| Functions tests | passed | 42 tests, 0 failures |
 | Focused Astro/type check | passed for changed standard files; repository check blocked | `dodo.ts` and `migrations.test.mts` fixes type-check; `npm run typecheck` still reports 17 pre-existing `packages/mcp` diagnostics because `@modelcontextprotocol/sdk` is unavailable |
 | Live Dodo products/webhook | unverified | Requires Dodo live credentials and account readback |
 | Dodo `$1` canary sequence | unverified | Test mode cannot validate one-click upsells; requires one temporary live `$1` product and owner-entered live card for each of the 11 paid stages, with immediate refund/revocation |
 | Admaxxer live website/CAPI | unverified | Production secret name exists; local BWS lacks `ADMAXXER_API_KEY`, and live API/CAPI event readback is still required |
-| Production D1 migration | unverified | Requires Cloudflare access, backup, and remote migration |
+| Production D1 migration | passed | Cloudflare remote receipt applied `0006_stripe_provider.sql` and `0007_webhook_retry_and_revocations.sql`; schema and product mapping readback passed |
 | Production deployment | unverified | Requires approved release credentials |
 
 ## Read-only Cloudflare baseline
 
 - D1 database: `owned-funnel-builder` (`f37a6e92-fcc6-43fd-898c-e8a7bf87767f`)
 - Remote migration readback: `0006_stripe_provider.sql` and
-  `0007_webhook_retry_and_revocations.sql` are pending; no migration was
-  applied by this execution.
+  `0007_webhook_retry_and_revocations.sql` applied successfully; a subsequent
+  remote readback reports no migrations remaining.
 - Time Travel recovery bookmark:
   `00000031-00000000-000050bb-d66926ee30685fcaf0f1dfdb1179dd8e`
 - Current Pages production readback includes older `main` deployments (latest
@@ -86,7 +86,7 @@ Status: implementation-ready; provider and production gates remain open
 
 ## Required next evidence
 
-1. D1 export/time-travel recovery coordinate and remote migrations 0006/0007.
+1. Deployment of the reviewed SHA and post-deploy D1/route readback.
 2. Test/live Dodo product and webhook readbacks.
 3. Admaxxer website, Lead, visitor, Purchase, and Meta CAPI traces.
 4. Owner-approved `$1` canary charges, immediate refunds, and revocation proof.
