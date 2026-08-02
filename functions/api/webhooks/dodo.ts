@@ -71,15 +71,11 @@ async function markPaymentFailed(
 async function recordPaymentRevocation(
   database: D1Database,
   data: PaymentEventData,
-  metadata: Record<string, string>,
   webhookId: string,
-  eventType: 'refund.succeeded' | 'dispute.opened'
+  eventType: 'refund.succeeded' | 'dispute.accepted' | 'dispute.lost'
 ): Promise<void> {
   const paymentId = cleanString(data.payment_id, 180);
-  if (!paymentId || metadata.source !== 'owned-funnel-builder') {
-    if (metadata.source === 'owned-funnel-diagnostic' || !metadata.source) return;
-    throw new Error('The revocation event source is not configured for this funnel.');
-  }
+  if (!paymentId) throw new Error('The revocation event is missing the payment ID.');
 
   await database
     .prepare(
@@ -101,7 +97,14 @@ async function markPaymentSucceeded(
   const leadId = metadata.lead_id;
   const funnelId = metadata.funnel_id;
   const productKey = metadata.product_key;
-  if (!paymentId || !leadId || !funnelId || !productKey) {
+  if (!paymentId) throw new Error('The payment event is missing the payment ID.');
+  const revoked = await database
+    .prepare('SELECT payment_id FROM payment_revocations WHERE payment_id = ?')
+    .bind(paymentId)
+    .first<{ payment_id: string }>();
+  if (revoked) return;
+
+  if (!leadId || !funnelId || !productKey) {
     throw new Error('The payment event is missing funnel metadata.');
   }
 
@@ -152,13 +155,19 @@ async function markPaymentSucceeded(
     });
   }
 
-  await recordAdmaxxerPayment(env, {
+  const attributed = await recordAdmaxxerPayment(env, {
     paymentId,
     totalAmount: data.total_amount,
     currency: data.currency,
     visitorId: metadata.admx_visitor_id,
     email: data.customer?.email,
   });
+  if (
+    !attributed &&
+    ['live', 'live_mode', 'production'].includes(readEnvironmentValue(env, 'DODO_PAYMENTS_ENVIRONMENT'))
+  ) {
+    throw new Error('Live payment attribution is not configured.');
+  }
 }
 
 export async function onRequestPost({ request, env }: PagesContext): Promise<Response> {
@@ -256,9 +265,11 @@ export async function processDodoWebhookPayload(
       await markPaymentFailed(database, metadata);
     } else if (
       payload.data &&
-      (eventType === 'refund.succeeded' || eventType === 'dispute.opened')
+      (eventType === 'refund.succeeded' ||
+        eventType === 'dispute.accepted' ||
+        eventType === 'dispute.lost')
     ) {
-      await recordPaymentRevocation(database, payload.data, metadata, webhookId, eventType);
+      await recordPaymentRevocation(database, payload.data, webhookId, eventType);
     } else if (!isOwnedFunnelEvent && !isIntentionalNoOp) {
       throw new Error('The payment event source is not configured for this funnel.');
     }
