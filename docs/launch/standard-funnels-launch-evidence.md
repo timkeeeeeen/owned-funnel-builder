@@ -21,7 +21,7 @@ Status: implementation-ready; provider and production gates remain open
 | Functions tests | passed | 40 tests, 0 failures |
 | Focused Astro/type check | passed for changed standard files; repository check blocked | `dodo.ts` and `migrations.test.mts` fixes type-check; `npm run typecheck` still reports 17 pre-existing `packages/mcp` diagnostics because `@modelcontextprotocol/sdk` is unavailable |
 | Live Dodo products/webhook | unverified | Requires Dodo live credentials and account readback |
-| Dodo `$1` canary sequence | unverified | Requires owner approval and card entry |
+| Dodo `$1` canary sequence | unverified | Test mode cannot validate one-click upsells; requires one temporary live `$1` product and owner-entered live card for each of the 11 paid stages, with immediate refund/revocation |
 | Admaxxer live website/CAPI | unverified | Production secret name exists; local BWS lacks `ADMAXXER_API_KEY`, and live API/CAPI event readback is still required |
 | Production D1 migration | unverified | Requires Cloudflare access, backup, and remote migration |
 | Production deployment | unverified | Requires approved release credentials |

@@ -5,6 +5,12 @@ Rule: blank evidence is **unverified**, never green. `intentionally uncharged`
 is permitted only for a final real-price Purchase after live configuration and
 the separate $1 canary are proven.
 
+Important Dodo constraint: test mode cannot validate one-click upsells. Test
+mode may cover rendering, signatures, retries, and webhook fixtures, but every
+paid stage—including each one-click upsell—must use its own temporary live `$1`
+product and an owner-entered live card. Refund and revoke immediately after the
+stage proof; never use the real-price catalog for this test.
+
 ## Shared infrastructure
 
 | Gate | Status | Evidence / owner | Rollback |
@@ -51,6 +57,9 @@ proof.
 | App Idea Evaluator → Complete Build Pack | temporary Complete Build Pack canary product |
 
 After each charge, record Dodo payment ID, webhook receipt, fulfillment or
-entitlement, Admaxxer Purchase, Meta event, refund, and revocation. Remove the
-canary mapping and deactivate the temporary product before restoring the real
-price. The `$99/month` Blueprint Activation is never part of this matrix.
+entitlement, Admaxxer Purchase, Meta event, refund, and revocation. For a
+one-click upsell, do not mark the stage green until the preceding checkout,
+upsell acceptance, and resulting fulfillment are all visible in that same
+live trace. Remove the canary mapping and deactivate the temporary product
+before restoring the real price. The `$99/month` Blueprint Activation is never
+part of this matrix.
