@@ -50,6 +50,9 @@ Status: implementation-ready; provider and production gates remain open
 - Aggregate remote read-only counts at baseline: `offer_products=11`,
   `webhook_events=11`, `fulfillments=16`, `funnel_runs=29`; the query reported
   zero writes.
+- Webhook status baseline: `processed=9`, `failed=2`; the two historical failed
+  rows remain immutable evidence and require explicit retry/recovery review
+  after the new migration and deployment.
 
 ### Production mapping readback (IDs redacted to suffix)
 
