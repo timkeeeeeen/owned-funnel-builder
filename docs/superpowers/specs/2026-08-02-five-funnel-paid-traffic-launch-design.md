@@ -2,7 +2,7 @@
 
 Date: 2026-08-02
 
-Status: approved design pending written-spec review
+Status: revised after self-review; pending written-spec approval
 
 ## Summary
 
@@ -139,7 +139,9 @@ approved offer sheet containing:
 - refund or guarantee terms;
 - permitted proof and its source;
 - prohibited claims;
-- ad promise, landing headline, and CTA message match.
+- ad promise, landing headline, and CTA message match;
+- launch geography and any tracking-consent requirement it creates;
+- support contact, refund owner, and customer-response expectation.
 
 The intended message hierarchy is:
 
@@ -155,6 +157,14 @@ The three standard funnels remain editable through their Keystatic-backed offer
 and funnel records. Blueprint and App Idea copy remains in their existing
 canonical product records. The agent presents proposed replacements in a copy
 deck and applies approved edits; no second source of truth is introduced.
+
+The copy deck covers every launch-visible surface: Meta primary text, headline,
+description, landing-page first fold, body claims, CTA, checkout labels, bump and
+upsell copy, thank-you or recovery copy, fulfillment email, support language,
+privacy disclosure, and refund language. One complete ad package per funnel is
+required for launch; extra variants wait until the baseline journey is proven.
+Approval records the final text and source path so deployment cannot silently
+mix copy revisions.
 
 Paid-ad proof is stricter than page proof. Blueprint testimonials and prior
 performance claims require source records and explicit paid-ad permission. Any
@@ -194,6 +204,12 @@ has its own API key, webhook secret, products, customers, transactions, and
 return URLs. The live environment must never reference a product created in
 test mode.
 
+Live-mode work cannot begin until Dodo KYC and business verification are
+approved and the live account's business details, support details, payout
+access, and refund/dispute owner are confirmed. Every runtime passes
+`test_mode` or `live_mode` explicitly; an unset or unrecognized value fails
+closed to test mode or blocks startup and never silently selects live mode.
+
 Thirteen products are required for this launch:
 
 - 11 standard products across the first three funnels;
@@ -210,10 +226,27 @@ For every product, the launch operator must read back:
 - refund terms;
 - environment identity.
 
+Each environment has its own HTTPS webhook registration and signing secret.
+The subscribed one-time-purchase event set is `payment.succeeded`,
+`payment.failed`, `refund.succeeded`, `dispute.opened`, `dispute.accepted`,
+`dispute.won`, and `dispute.lost`, plus `entitlement_grant.delivered`,
+`entitlement_grant.failed`, and `entitlement_grant.revoked` where Dodo Digital
+Files is authoritative. The endpoint URL, event set, secret binding name, and a
+successful signed delivery are read back separately in test and live mode.
+
 Standard downloadable products use real Dodo Digital Files entitlements and
 plain-language access instructions. Blueprint and App Idea purchases grant
 application access only from their canonical verified webhook handlers. A
 checkout return is never payment truth.
+
+Refund and dispute handling follows the product's real access model. Standard
+downloads are marked refunded or disputed, cannot be fulfilled again, and
+revoke any revocable Dodo entitlement; already downloaded files are not
+pretended to be recoverable. Blueprint and App Idea revoke gated paid access
+and future paid generation according to their existing entitlement authority
+without deleting customer-authored input. Out-of-order events cannot downgrade
+a successful payment to failed or re-grant access after a terminal revocation;
+when event order is ambiguous, the current Dodo resource state is authoritative.
 
 Verification occurs at three levels:
 
@@ -239,23 +272,39 @@ returned a failure, and invited retries.
 The minimum root-cause fix is:
 
 1. Verify the raw request and Dodo signature exactly as today.
-2. Durably claim the webhook ID.
-3. Classify the event by trusted `metadata.source` and configured product.
-4. Process `owned-funnel-builder` events through the existing funnel handler.
-5. Acknowledge diagnostic or unrelated account payments as an intentional
+2. Persist the original signed event before returning `2xx`; persistence
+   failure returns non-`2xx` so Dodo retries.
+3. Acquire one atomic processing claim per `webhook-id`. A duplicate may return
+   `2xx` only when the event is terminal or another non-stale claim owns it; a
+   failed or stale claim remains reclaimable.
+4. Classify the event by trusted `metadata.source` and configured product.
+5. Process `owned-funnel-builder` events through the existing funnel handler.
+6. Acknowledge diagnostic or unrelated account payments as an intentional
    no-op instead of a processing failure.
-6. Preserve the original event record and classification for audit.
-7. Keep unknown events retryable only when they claim to be funnel events but
+7. Preserve the original event payload and terminal result for audit; source
+   classification remains derivable from the verified payload.
+8. Keep unknown events retryable only when they claim to be funnel events but
    violate the funnel contract.
+
+Durable conversion, entitlement, and fulfillment writes remain independently
+idempotent by payment and product. Email and Admaxxer are external effects: a
+retry may attempt them again, so each uses its existing stable fulfillment or
+transaction key. A webhook is not terminally processed until all required
+effects have either succeeded or have a durable retry record. Missing live
+Admaxxer configuration is a launch-blocking configuration failure, not a silent
+successful attribution result.
 
 Tests must prove:
 
 - a missing or invalid signature grants nothing;
 - a valid diagnostic payment returns 2xx and grants nothing;
 - a valid funnel payment converts the correct lead and fulfills once;
-- a duplicate webhook produces no duplicate fulfillment or revenue event;
+- concurrent duplicate webhooks have one processing owner and produce no
+  duplicate fulfillment or revenue event;
+- a failed or stale processing claim can be retried safely;
 - a failed external fulfillment remains retryable;
 - a temporary Admaxxer failure can retry without duplicating fulfillment;
+- missing Admaxxer configuration cannot silently pass in live mode;
 - logs contain no email, API key, raw flow token, or payment details.
 
 The two historical failed rows remain immutable audit evidence. Readiness
@@ -272,17 +321,21 @@ already present in Maestro or App Idea may remain; they do not replace
 Admaxxer's campaign attribution.
 
 Use one Admaxxer website for `shop.maestrogtm.com`, segmented by `offer_slug`,
-and a separate Admaxxer website for the App Idea production hostname. Each
-hostname loads one shared pixel. Website IDs and public tracking domains are
-environment values, never hard-coded into reusable components.
+plus one for the Blueprint runtime hostname and one for the App Idea production
+hostname. The Blueprint handoff carries attribution through an existing
+server-side record or signed opaque state; it does not put email, secrets, or a
+raw flow token in the URL. Every hostname that renders an acquisition or
+conversion step loads exactly one intended pixel. Website IDs and public
+tracking domains are environment values, never hard-coded into reusable
+components.
 
 The canonical event flow is:
 
 ```text
 Meta ad with UTMs and fbclid
   -> Admaxxer page view
-  -> email capture and successful checkout creation
-  -> identify email and emit one Lead
+  -> successful durable acquisition action
+  -> identify the visitor and emit one Lead
   -> attach admx_visitor_id to Dodo metadata
   -> verify payment.succeeded webhook
   -> complete idempotent fulfillment
@@ -290,15 +343,32 @@ Meta ad with UTMs and fbclid
   -> forward the configured server event to Meta CAPI
 ```
 
-Lead must not fire on typing, invalid email, bot rejection, or provider failure.
+The durable Lead boundary differs by funnel:
+
+| Funnel | Lead fires after | Stable identity |
+| --- | --- | --- |
+| Owned Funnel Builder | Dodo checkout session is created | checkout lead ID |
+| Talking-Head Ad Machine | Dodo checkout session is created | checkout lead ID |
+| Vibe Code Anything | Dodo checkout session is created | checkout lead ID |
+| Authority Snapshot | Snapshot is durably saved or claimed | snapshot/lead ID |
+| App Idea Evaluator | free report is durably saved or claimed | report/lead ID |
+
+PageView is browser-side. Lead fires once at the boundary above, not on typing,
+button click, invalid email, bot rejection, or failed provider work. Purchase is
+server-side only after a verified successful-payment webhook, with Dodo
+`payment_id` as the transaction and deduplication key. `offer_slug`, value,
+currency, UTMs, `fbclid`, and the Admaxxer visitor ID survive every cross-domain
+handoff and enter the payment metadata where the provider permits it.
+
 Purchase must not fire from the browser or return URL. No second browser
 Purchase is added unless Admaxxer's current documentation supplies an explicit
 shared deduplication contract.
 
 The owner supplies or approves Meta CAPI access inside Admaxxer. Meta tokens
-must not enter either repository. A first-party tracking hostname such as
+must not enter any repository. A first-party tracking hostname such as
 `t.maestrogtm.com` may be configured after its exact Admaxxer website is known;
-it never replaces the storefront hostname.
+it never replaces the storefront hostname and is not a launch blocker unless
+Admaxxer requires it for the selected configuration.
 
 Production verification must demonstrate:
 
@@ -313,6 +383,12 @@ Production verification must demonstrate:
 
 Privacy copy must disclose visitor identifiers, email identification, campaign
 parameters, payment attribution, Admaxxer, and server-side advertising events.
+Raw Meta or Admaxxer secrets never reach the browser, logs, Dodo metadata, or
+repositories. Launch geography determines consent behavior: where prior opt-in
+is legally required for nonessential advertising tracking, the pixel remains
+blocked until consent; elsewhere the approved notice and opt-out behavior must
+still be present. User-data transmission follows the provider's required
+normalization or hashing contract and is verified without logging the value.
 
 ## Funnel-Specific Release Gates
 
@@ -350,7 +426,8 @@ parameters, payment attribution, Admaxxer, and server-side advertising events.
 - Recovery, thank-you bridge, direct $5 entry, checkout return, claim, paid
   audit, retained outputs, and CMO continuation pass on staging.
 - The paid result produces the promised 30-day plan and retained first five
-  drafts at the current human quality bar.
+  drafts, compared with an owner-approved reference output for specificity,
+  factuality, usefulness, and absence of fabricated proof.
 - Proof and testimonial permissions cover landing pages and paid ads, or the
   affected proof is removed.
 - Blueprint runtime URLs, Turnstile, live flag, workspace, and lead-magnet
@@ -399,19 +476,31 @@ the relevant branch head. Broad local tests on the control Mac use
 ## Meta Campaign Design
 
 Create five campaign families with independently measurable ad sets and ads.
+The three direct-sale funnels use the Sales objective optimized for Purchase.
+Authority Snapshot and App Idea Evaluator begin with the objective optimized for
+their durable Lead boundary because the ad promise is a free result; Purchase
+remains the downstream revenue event. Changing a free-entry campaign to
+Purchase optimization requires enough clean attributed purchase volume to make
+that decision evidence-based.
+
 Campaign URLs use a consistent convention:
 
-- `utm_source=facebook` or `instagram` as appropriate;
+- `utm_source={{site_source_name}}` so automatic placements report their real
+  Meta source;
 - `utm_medium=paid_social`;
-- a funnel-specific `utm_campaign`;
-- audience and angle in `utm_content`;
-- creative or hook variant in a stable suffix;
+- a stable funnel slug in `utm_campaign`;
+- `utm_id={{campaign.id}}`;
+- `utm_term={{adset.id}}`;
+- `utm_content={{ad.id}}`, with the readable audience, angle, and creative
+  variant retained in Meta's ad-set and ad names;
 - Meta `fbclid` preserved automatically.
 
 Every ad must match the first landing-page fold on audience, outcome, and next
-action. Campaigns are created paused. Before activation, each campaign receives
-one destination click and trace through page view and the deepest safe
-no-charge event.
+action. The minimum launch inventory is one approved copy-and-creative ad, one
+destination URL, and one explicitly named audience per funnel. Additional hooks,
+creatives, and retargeting sets are not launch blockers. Campaigns are created
+paused. Before activation, each campaign receives one destination click and
+trace through page view and the deepest safe no-charge event.
 
 All five campaigns may be activated in the same launch window only when the
 launch ledger contains five green funnel rows and one green shared-infrastructure
@@ -427,7 +516,10 @@ Each required check is reported as `passed`, `failed`, `unverified`, or
 - exact production commit and hostname are verified;
 - Dodo test purchase and live no-charge checkout pass;
 - fulfillment or application entitlement passes;
-- Admaxxer PageView, Lead, visitor metadata, and Purchase pass;
+- Admaxxer PageView, Lead, and visitor metadata pass;
+- Purchase attribution passes end to end in test mode, while production is
+  either proven by an approved live purchase or explicitly marked
+  `intentionally uncharged` with its live configuration read back;
 - Meta destination and event reception pass;
 - responsive, accessibility, and browser checks pass;
 - monitoring and rollback are ready;
@@ -436,6 +528,13 @@ Each required check is reported as `passed`, `failed`, `unverified`, or
 An environment key being present by name is not proof that its value or mode is
 correct. A script tag is not proof that an event arrived. A checkout return is
 not proof that payment succeeded. A Git push is not proof of deployment.
+
+`Intentionally uncharged` is allowed only for the final live Purchase event. It
+does not waive a test-mode end-to-end purchase, a live no-charge checkout, live
+webhook registration, product and destination readback, or first-customer
+monitoring. The first real production purchase becomes the canary: if Dodo,
+fulfillment, Admaxxer, and Meta do not agree on payment ID, value, and currency,
+the affected campaign pauses before more spend accumulates.
 
 ## Error Handling and Monitoring
 
@@ -455,28 +554,58 @@ Provider `402`, `429`, or usage-limit errors are environmental blockers. They do
 not trigger repeated identical launches or speculative code fixes. A funnel may
 be paused independently while the other four remain available.
 
+The first-day review points are activation, 15 minutes, 30 minutes, 60 minutes,
+4 hours, and 24 hours. Any spend with zero expected PageViews, a paid order
+without fulfillment, a payment without one attributed Purchase, or a material
+price/currency mismatch pauses the affected funnel immediately. Other alert
+thresholds are recorded in the launch ledger before activation, not invented
+during an incident.
+
+## Implementation Planning Boundary
+
+This program produces four execution plans under one launch ledger, not one
+cross-repository mega-change:
+
+1. standard platform: copy, migration 0006, shared webhook repair, Dodo catalog,
+   Admaxxer, and the first three funnels;
+2. Blueprint: Authority Snapshot variants, $5 Game Plan, runtime bindings,
+   cross-domain attribution, and release proof;
+3. App Idea: clean-worktree release, environment bindings, free report, $29
+   Build Pack, entitlement, and attribution;
+4. Meta activation: approved ads, paused campaign construction, destination
+   traces, six-row ledger review, activation, and first-day monitoring.
+
+Each repository uses its own branch, CI result, deployment identifier, and
+rollback. The plans may prepare independently, but production promotion follows
+the dependency order below and campaign activation remains the final gate.
+
 ## Deployment and Launch Sequence
 
 1. Approve the five offer sheets and copy deck.
-2. Record deployment, database, product, and tracking baselines.
-3. Test and apply Owned Funnel Builder migration 0006.
-4. Add the webhook source-classification regression test and root-cause fix.
-5. Verify the standard platform in preview against the migrated schema.
-6. Provision or read back all test and live Dodo products and entitlements.
-7. Complete test-mode purchase matrices for all five funnels.
-8. Configure Admaxxer websites, pixels, server ingestion, and privacy copy.
-9. Connect the owner-provided Meta CAPI destination inside Admaxxer.
-10. Deploy and verify the current Owned Funnel Builder production commit.
-11. Deploy and verify Blueprint staging, run all audience canaries, then promote
+2. Confirm Dodo live-account approval, business details, and refund ownership.
+3. Record deployment, database, product, webhook, and tracking baselines.
+4. Test and apply Owned Funnel Builder migration 0006.
+5. Add the webhook source-classification and retry-ownership regression tests,
+   then apply the root-cause fix.
+6. Verify the standard platform in preview against the migrated schema.
+7. Provision or read back all test and live Dodo products, webhooks, and
+   entitlements.
+8. Complete test-mode purchase matrices for all five funnels.
+9. Configure Admaxxer websites, cross-domain handoffs, pixels, server ingestion,
+   consent behavior, and privacy copy.
+10. Connect the owner-provided Meta CAPI destination inside Admaxxer.
+11. Deploy and verify the current Owned Funnel Builder production commit.
+12. Deploy and verify Blueprint staging, run all audience canaries, then promote
     the exact accepted versions.
-12. Provision App Idea release bindings, run the configured Convex smoke, deploy
+13. Provision App Idea release bindings, run the configured Convex smoke, deploy
     staging, verify the free and paid journeys, then promote the accepted version.
-13. Open live-mode no-charge Dodo checkouts for all five base products.
-14. Verify Admaxxer and Meta events end to end.
-15. Create Meta campaigns paused and verify their exact destination URLs.
-16. Review the six-row launch ledger: shared infrastructure plus five funnels.
-17. Activate all five campaign families in the approved launch window.
-18. Monitor continuously for the first hour and at scheduled checkpoints over
+14. Open live-mode no-charge Dodo checkouts for all five base products.
+15. Verify Admaxxer and Meta events end to end, using `intentionally uncharged`
+    only for the final production Purchase when no live charge was approved.
+16. Create Meta campaigns paused and verify their exact destination URLs.
+17. Review the six-row launch ledger: shared infrastructure plus five funnels.
+18. Activate all five campaign families in the approved launch window.
+19. Monitor continuously for the first hour and at scheduled checkpoints over
     the first 24 hours; pause only the affected funnel when a localized failure
     appears.
 
@@ -488,6 +617,8 @@ The owner is asked only for decisions or authority that cannot be inferred:
 - approve Cloudflare or DNS access if a browser authorization is required;
 - provide or approve Meta CAPI connection information inside Admaxxer;
 - approve Dodo live-account access when required;
+- approve campaign geography, audiences, budgets, and any consent-dependent
+  tracking behavior;
 - approve any real live charge with its amount and refund plan;
 - approve final campaign activation and budgets.
 
@@ -498,7 +629,9 @@ name environment variables, or paste secrets into a repository.
 
 The program is complete when all five public funnels are reachable at their
 stable production URLs, their exact commits are recorded, their copy is
-approved, Dodo is verified in live mode, safe purchase evidence exists,
-webhooks and fulfillment are healthy, Admaxxer and Meta CAPI show correctly
-attributed events, campaigns are active, and the first 24-hour monitoring
-window ends without an unresolved launch-blocking defect.
+approved, full test-mode purchases pass, live Dodo checkouts are verified, and
+the live Purchase gate is either proven by an approved charge or explicitly
+recorded as `intentionally uncharged`. Webhooks and fulfillment are healthy,
+Admaxxer and Meta CAPI show the required events at the evidence level defined by
+the launch ledger, campaigns are active, and the first 24-hour monitoring window
+ends without an unresolved launch-blocking defect.
