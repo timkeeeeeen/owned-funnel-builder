@@ -44,6 +44,9 @@ Status: implementation-ready; provider and production gates remain open
   URL. Set production `PUBLIC_SITE_URL=https://shop.maestrogtm.com` in the
   authorized deployment environment and verify canonical/OG URLs after
   promotion; do not hard-code this environment value in source.
+- Production Pages secret names include Dodo, Admaxxer, D1, return-URL,
+  webhook, public website, and support bindings. Secret values were not read or
+  printed; presence by name is not mode, value, or end-to-end tracking proof.
 - Aggregate remote read-only counts at baseline: `offer_products=11`,
   `webhook_events=11`, `fulfillments=16`, `funnel_runs=29`; the query reported
   zero writes.
