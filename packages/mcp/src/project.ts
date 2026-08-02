@@ -3,7 +3,7 @@ import { constants } from 'node:fs';
 import { dirname, isAbsolute, join, relative, resolve, sep } from 'node:path';
 import { spawn } from 'node:child_process';
 
-const SECRET_NAME = /(secret|token|password|private|api[_-]?key|credential|dodo|stripe|resend)/i;
+const SECRET_NAME = /(secret|token|password|private|api[_-]?key|credential|dodo|stripe|postmark)/i;
 
 export async function pathExists(path: string): Promise<boolean> {
   try {

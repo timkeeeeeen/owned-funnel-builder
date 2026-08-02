@@ -1,0 +1,4 @@
+interface:
+  display_name: 'Configure Email'
+  short_description: 'Connect Postmark for purchase access and opted-in updates.'
+  default_prompt: 'Use $configure-email to connect safe transactional and broadcast email.'

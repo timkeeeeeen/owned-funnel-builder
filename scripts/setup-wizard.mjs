@@ -34,9 +34,13 @@ const page = `<!doctype html>
 <label>Stripe mode<select name="STRIPE_PAYMENTS_ENVIRONMENT"><option value="test_mode" ${existing.STRIPE_PAYMENTS_ENVIRONMENT !== 'live_mode' ? 'selected' : ''}>Test mode</option><option value="live_mode" ${existing.STRIPE_PAYMENTS_ENVIRONMENT === 'live_mode' ? 'selected' : ''}>Live mode</option></select></label>
 <label class="full">Stripe webhook signing secret<input type="password" name="STRIPE_WEBHOOK_SECRET" autocomplete="off" placeholder="${saved('STRIPE_WEBHOOK_SECRET')}"><small>Usually leave this blank. Your agent creates and saves it automatically. Paste it only when reusing an existing webhook.</small></label>
 </div></div>
-<div class="section"><h2>Customer access</h2><p>Dodo can deliver files itself. Stripe needs Resend so every successful payment receives the correct access link.</p><div class="grid">
-<label class="full">Resend API key<input type="password" name="RESEND_API_KEY" autocomplete="off" placeholder="${saved('RESEND_API_KEY')}"><small>Optional with Dodo; required with Stripe.</small></label>
-<label>From email<input type="email" name="RESEND_FROM_EMAIL" value="${value('RESEND_FROM_EMAIL')}" placeholder="access@yourdomain.com"><small>Optional with Dodo; required with Stripe.</small></label>
+<div class="section"><h2>Email</h2><p>Postmark delivers purchase access and simple updates to people who opted in. Stripe requires it; Dodo can still use native file delivery.</p><div class="grid">
+<label class="full">Postmark server token<input type="password" name="POSTMARK_SERVER_TOKEN" autocomplete="off" placeholder="${saved('POSTMARK_SERVER_TOKEN')}"><small>Use a Postmark sandbox token until your sending domain is verified.</small></label>
+<label>Purchase From email<input type="email" name="EMAIL_TRANSACTIONAL_FROM" value="${value('EMAIL_TRANSACTIONAL_FROM')}" placeholder="access@yourdomain.com"><small>Required with Stripe.</small></label>
+<label>Updates From email<input type="email" name="EMAIL_MARKETING_FROM" value="${value('EMAIL_MARKETING_FROM')}" placeholder="updates@yourdomain.com"><small>Used only for opted-in broadcasts.</small></label>
+<label>Reply-to email<input type="email" name="EMAIL_REPLY_TO" value="${value('EMAIL_REPLY_TO')}" placeholder="help@yourdomain.com"></label>
+<label>Sender name<input name="EMAIL_SENDER_NAME" value="${value('EMAIL_SENDER_NAME')}" placeholder="Your Company"></label>
+<label class="full">Postal address<input name="EMAIL_POSTAL_ADDRESS" value="${value('EMAIL_POSTAL_ADDRESS')}" placeholder="123 Main Street, City, State ZIP"><small>Required in every marketing email footer.</small></label>
 <label>Support email<input type="email" name="SUPPORT_EMAIL" required value="${value('SUPPORT_EMAIL')}" placeholder="help@yourdomain.com"></label>
 </div></div>
 <div class="section"><h2>Ad tracking</h2><p>Admaxxer connects visits, leads, and successful payments so you can see which ads made sales. This is optional until you run ads.</p><div class="grid">
@@ -85,8 +89,12 @@ const server = http.createServer(async (request, response) => {
       'STRIPE_SECRET_KEY',
       'STRIPE_PAYMENTS_ENVIRONMENT',
       'STRIPE_WEBHOOK_SECRET',
-      'RESEND_API_KEY',
-      'RESEND_FROM_EMAIL',
+      'POSTMARK_SERVER_TOKEN',
+      'EMAIL_TRANSACTIONAL_FROM',
+      'EMAIL_MARKETING_FROM',
+      'EMAIL_REPLY_TO',
+      'EMAIL_SENDER_NAME',
+      'EMAIL_POSTAL_ADDRESS',
       'SUPPORT_EMAIL',
       'ADMAXXER_API_KEY',
       'FUNNEL_CLOUDFLARE_PROJECT',
@@ -95,6 +103,11 @@ const server = http.createServer(async (request, response) => {
       const submitted = (form.get(key) ?? '').trim();
       if (submitted) next[key] = submitted;
     }
+    next.EMAIL_OPERATOR_SECRET ||= randomBytes(32).toString('base64url');
+    next.EMAIL_UNSUBSCRIBE_SECRET ||= randomBytes(32).toString('base64url');
+    next.POSTMARK_WEBHOOK_USERNAME ||= 'postmark';
+    next.POSTMARK_WEBHOOK_PASSWORD ||= randomBytes(32).toString('base64url');
+    next.EMAIL_PURCHASE_TEMPLATE_ALIAS ||= 'purchase-access';
     next.PUBLIC_SITE_URL = `https://${next.FUNNEL_CLOUDFLARE_PROJECT}.pages.dev`;
     await writeLocalSettings(next);
     response.writeHead(200, {

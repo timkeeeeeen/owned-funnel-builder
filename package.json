@@ -11,8 +11,10 @@
     "setup:cloudflare": "node scripts/run-friendly.mjs setup-cloudflare.mjs",
     "setup:dodo": "node scripts/run-friendly.mjs configure-dodo.mjs",
     "setup:stripe": "node scripts/run-friendly.mjs configure-stripe.mjs",
+    "setup:email": "node scripts/run-friendly.mjs configure-email.mjs",
     "setup:deliverables": "node scripts/run-friendly.mjs prepare-deliverables.mjs",
-    "setup:resend:test": "node scripts/run-friendly.mjs test-resend.mjs",
+    "setup:email:test": "node scripts/run-friendly.mjs test-email.mjs",
+    "email:send": "node scripts/run-friendly.mjs send-email.mjs",
     "setup:upload": "node scripts/run-friendly.mjs upload-cloudflare-settings.mjs",
     "start": "astro dev",
     "generate:funnels": "node scripts/generate-funnel-catalog.mjs",
@@ -56,7 +58,6 @@
     "dodopayments-checkout": "^1.9.5",
     "react": "^19.1.1",
     "react-dom": "^19.1.1",
-    "resend": "^6.18.1",
     "tailwindcss": "^4.3.0"
   },
   "devDependencies": {

@@ -20,12 +20,14 @@ import {
   stripeRequest,
   validateStripeCheckoutUrl,
 } from '../_lib/stripe';
+import { MARKETING_CONSENT_COPY } from '../../src/data/emailConsent';
 
 interface CheckoutRequest {
   email?: unknown;
   offerSlug?: unknown;
   placement?: unknown;
   consentVersion?: unknown;
+  marketingOptIn?: unknown;
   website?: unknown;
   attribution?: unknown;
   referrer?: unknown;
@@ -162,6 +164,7 @@ export async function onRequestPost(context: PagesContext): Promise<Response> {
     offerSlug = cleanString(input.offerSlug, 80);
     const placement = cleanString(input.placement, 80) || 'unknown';
     const consentVersion = cleanString(input.consentVersion, 80);
+    const marketingOptIn = input.marketingOptIn === true;
     const honeypot = cleanString(input.website, 200);
     const referrer = cleanString(input.referrer, 1024);
     const attribution = sanitizeAttribution(input.attribution);
@@ -175,7 +178,9 @@ export async function onRequestPost(context: PagesContext): Promise<Response> {
     if (!OFFER_SLUG_PATTERN.test(offerSlug) || offerSlug.length > 80) {
       throw new RequestError('Offer is invalid.', 400);
     }
-    if (!consentVersion) throw new RequestError('Email consent is required.', 400);
+    if (marketingOptIn && !consentVersion) {
+      throw new RequestError('Marketing consent version is required.', 400);
+    }
     if (!env.LEADS) {
       throw new RequestError('Checkout is not configured yet.', 503, 'configuration_storage');
     }
@@ -217,13 +222,14 @@ export async function onRequestPost(context: PagesContext): Promise<Response> {
         id, email, offer_slug, placement, marketing_consent, consent_version,
         attribution_json, referrer, country, status, bump_selected, admaxxer_visitor_id,
         payment_provider, created_at, updated_at
-      ) VALUES (?, ?, ?, ?, 1, ?, ?, ?, ?, 'captured', ?, ?, ?, ?, ?)`
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'captured', ?, ?, ?, ?, ?)`
     )
       .bind(
         leadId,
         email,
         offerSlug,
         placement,
+        marketingOptIn ? 1 : 0,
         consentVersion,
         JSON.stringify(attribution),
         referrer || null,
@@ -236,6 +242,32 @@ export async function onRequestPost(context: PagesContext): Promise<Response> {
       )
       .run();
     if (!insertResult.success) throw new Error('Lead capture failed.');
+
+    if (marketingOptIn) {
+      const subscriberResult = await env.LEADS.prepare(
+        `INSERT INTO email_subscribers (
+          id, email, offer_slug, status, consent_version, consent_copy,
+          source_placement, consented_at, created_at, updated_at
+        ) VALUES (?, ?, ?, 'subscribed', ?, ?, ?, ?, ?, ?)
+        ON CONFLICT(email, offer_slug) DO UPDATE SET
+          status = 'subscribed', consent_version = excluded.consent_version,
+          consent_copy = excluded.consent_copy, source_placement = excluded.source_placement,
+          consented_at = excluded.consented_at, updated_at = excluded.updated_at`
+      )
+        .bind(
+          crypto.randomUUID(),
+          email,
+          offerSlug,
+          consentVersion,
+          MARKETING_CONSENT_COPY,
+          placement,
+          now,
+          now,
+          now
+        )
+        .run();
+      if (!subscriberResult.success) throw new Error('Marketing opt-in could not be recorded.');
+    }
 
     const funnelResult = await env.LEADS.prepare(
       `INSERT INTO funnel_runs (

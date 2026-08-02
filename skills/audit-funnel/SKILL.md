@@ -1,6 +1,6 @@
 ---
 name: audit-funnel
-description: Audit a funnel before or after publication for copy truth, conversion clarity, responsive visual quality, accessibility, performance, SEO, Keystatic editability, Dodo or Stripe checkout, order bump, upsell flows, Resend fulfillment, Cloudflare deployment, and secret safety. Use for QA, release gates, regression checks, visual review, or investigating whether a live funnel is actually ready for paid traffic.
+description: Audit a funnel before or after publication for copy truth, conversion clarity, responsive visual quality, accessibility, performance, SEO, Keystatic editability, Dodo or Stripe checkout, order bump, upsell flows, Postmark fulfillment, Cloudflare deployment, and secret safety. Use for QA, release gates, regression checks, visual review, or investigating whether a live funnel is actually ready for paid traffic.
 ---
 
 # Audit a Funnel
@@ -18,7 +18,7 @@ Gather evidence from source, rendered pages, provider state, and the exact live 
 7. Verify Keystatic exposes all intended customer-visible content without exposing secrets or infrastructure.
 8. Run publish-mode configuration validation and require real support addresses, customer access links, and existing social assets.
 9. Exercise checkout with the bump declined and selected at a no-charge level. Verify upsell decline paths and structurally verify accept paths without an unauthorized charge.
-10. Verify fulfillment idempotency and Dodo-native or Stripe-plus-Resend delivery through sandbox or safe fixtures.
+10. Verify fulfillment idempotency and Dodo-native or Stripe-plus-Postmark delivery through sandbox or safe fixtures.
 11. Repeat relevant checks against the stable production URL and exact commit.
 12. Fix in-scope defects, rerun affected checks, and report residual limitations precisely.
 

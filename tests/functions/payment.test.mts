@@ -199,6 +199,7 @@ test('checkout creates the configured cart, bump, steps, and first upsell return
       offerSlug: 'owned-funnel-builder',
       placement: 'hero',
       consentVersion: 'v1',
+      marketingOptIn: true,
       bumpAccepted: true,
       attribution: { utm_source: 'newsletter', ignored: 'nope' },
       admaxxerVisitorId: 'admx_visitor_123',
@@ -230,6 +231,11 @@ test('checkout creates the configured cart, bump, steps, and first upsell return
     call.query.includes('INSERT INTO checkout_leads')
   );
   assert.equal(leadInsert?.values.includes('admx_visitor_123'), true);
+  assert.equal(leadInsert?.values.includes(1), true);
+  assert.equal(
+    database.calls.filter((call) => call.query.includes('INSERT INTO email_subscribers')).length,
+    1
+  );
   assert.equal(
     database.calls.filter((call) => call.query.includes('INSERT INTO funnel_step_runs')).length,
     2
@@ -299,6 +305,11 @@ test('checkout creates and attaches a Dodo customer before the first payment', a
       DODO_PAYMENTS_ENVIRONMENT: 'test_mode',
     },
   });
+
+  assert.equal(
+    database.calls.filter((call) => call.query.includes('INSERT INTO email_subscribers')).length,
+    0
+  );
 
   assert.equal(response.status, 200);
   assert.deepEqual(providerCalls, [
@@ -378,8 +389,8 @@ const stripeEnvironment = {
   PAYMENTS_PROVIDER: 'stripe',
   STRIPE_SECRET_KEY: 'sk_test_template_key',
   STRIPE_PAYMENTS_ENVIRONMENT: 'test_mode',
-  RESEND_API_KEY: 'resend_test',
-  RESEND_FROM_EMAIL: 'Offers <offers@example.com>',
+  POSTMARK_SERVER_TOKEN: 'postmark_test',
+  EMAIL_TRANSACTIONAL_FROM: 'Offers <offers@example.com>',
 } as const;
 
 test('Stripe checkout creates the base and bump cart and saves a card for off-session upsells', async () => {
@@ -467,7 +478,7 @@ test('Stripe checkout fails closed for a missing price mapping or access-email c
   assert.equal(missingPrice.status, 503);
   assert.equal((await missingPrice.json()).code, 'configuration_product');
 
-  const missingResend = await createCheckout({
+  const missingEmail = await createCheckout({
     request: checkoutRequest({
       email: 'owner@example.com',
       offerSlug: 'owned-funnel-builder',
@@ -482,8 +493,8 @@ test('Stripe checkout fails closed for a missing price mapping or access-email c
       STRIPE_PAYMENTS_ENVIRONMENT: 'test_mode',
     },
   });
-  assert.equal(missingResend.status, 503);
-  assert.equal((await missingResend.json()).code, 'configuration_fulfillment');
+  assert.equal(missingEmail.status, 503);
+  assert.equal((await missingEmail.json()).code, 'configuration_fulfillment');
   assert.equal(fetchCalls, 0);
 });
 
@@ -1102,8 +1113,8 @@ class FulfillmentDatabase extends FakeDatabase {
 }
 
 const emailEnvironment: Environment = {
-  RESEND_API_KEY: 'resend_test',
-  RESEND_FROM_EMAIL: 'Offers <offers@example.com>',
+  POSTMARK_SERVER_TOKEN: 'postmark_test',
+  EMAIL_TRANSACTIONAL_FROM: 'Offers <offers@example.com>',
 };
 
 test('fulfillment sends once for duplicate payment events', async () => {
@@ -1111,7 +1122,7 @@ test('fulfillment sends once for duplicate payment events', async () => {
   let fetchCalls = 0;
   globalThis.fetch = async () => {
     fetchCalls += 1;
-    return Response.json({ id: 'email_1' });
+    return Response.json({ ErrorCode: 0, Message: 'OK', MessageID: 'email_1' });
   };
   const input = {
     paymentId: 'payment_1',
@@ -1126,12 +1137,12 @@ test('fulfillment sends once for duplicate payment events', async () => {
   assert.equal(database.fulfillment?.attempt_count, 1);
 });
 
-test('Dodo-native delivery completes without a separate Resend credential', async () => {
+test('Dodo-native delivery completes without a separate email credential', async () => {
   const database = new FulfillmentDatabase();
   let fetchCalls = 0;
   globalThis.fetch = async () => {
     fetchCalls += 1;
-    throw new Error('Resend should not be called.');
+    throw new Error('Email provider should not be called.');
   };
   await deliverPurchase({}, database, {
     paymentId: 'payment_dodo_native',
@@ -1144,7 +1155,7 @@ test('Dodo-native delivery completes without a separate Resend credential', asyn
   assert.equal(database.fulfillment?.attempt_count, 1);
 });
 
-test('Stripe delivery fails closed without Resend and remains retryable', async () => {
+test('Stripe delivery fails closed without Postmark and remains retryable', async () => {
   const database = new FulfillmentDatabase();
   let fetchCalls = 0;
   globalThis.fetch = async () => {
@@ -1154,7 +1165,7 @@ test('Stripe delivery fails closed without Resend and remains retryable', async 
 
   await assert.rejects(
     deliverPurchase({}, database, {
-      paymentId: 'payment_stripe_missing_resend',
+      paymentId: 'payment_stripe_missing_email',
       productKey: 'owned-funnel-builder',
       leadId: 'lead_1',
       provider: 'stripe',
@@ -1172,8 +1183,8 @@ test('failed email delivery can retry without creating a second payment', async 
   globalThis.fetch = async () => {
     fetchCalls += 1;
     return fetchCalls === 1
-      ? Response.json({ message: 'Temporary failure' }, { status: 500 })
-      : Response.json({ id: 'email_2' });
+      ? Response.json({ Message: 'Temporary failure' }, { status: 500 })
+      : Response.json({ ErrorCode: 0, Message: 'OK', MessageID: 'email_2' });
   };
   const input = {
     paymentId: 'payment_retry',
@@ -1363,13 +1374,13 @@ test('Stripe webhook fulfills and attributes a successful purchase exactly once 
   const rawBody = JSON.stringify(event);
   const timestamp = Math.floor(Date.now() / 1000);
   const signature = stripeSignature(secret, rawBody, timestamp);
-  let resendCalls = 0;
+  let emailCalls = 0;
   let admaxxerCalls = 0;
   globalThis.fetch = async (input) => {
     const url = String(input);
-    if (url === 'https://api.resend.com/emails') {
-      resendCalls += 1;
-      return Response.json({ id: 'email_stripe_1' });
+    if (url === 'https://api.postmarkapp.com/email/withTemplate') {
+      emailCalls += 1;
+      return Response.json({ ErrorCode: 0, Message: 'OK', MessageID: 'email_stripe_1' });
     }
     assert.equal(url, 'https://admaxxer.com/api/v1/payments');
     admaxxerCalls += 1;
@@ -1380,8 +1391,8 @@ test('Stripe webhook fulfills and attributes a successful purchase exactly once 
     STRIPE_SECRET_KEY: 'sk_test_template_key',
     STRIPE_PAYMENTS_ENVIRONMENT: 'test_mode',
     STRIPE_WEBHOOK_SECRET: secret,
-    RESEND_API_KEY: 'resend_test',
-    RESEND_FROM_EMAIL: 'Offers <offers@example.com>',
+    POSTMARK_SERVER_TOKEN: 'postmark_test',
+    EMAIL_TRANSACTIONAL_FROM: 'Offers <offers@example.com>',
     ADMAXXER_API_KEY: 'workspace_test_key',
   };
   const makeRequest = () =>
@@ -1401,7 +1412,7 @@ test('Stripe webhook fulfills and attributes a successful purchase exactly once 
   assert.equal(database.savedPaymentMethodId, 'pm_webhook');
   assert.equal(database.fulfillment?.status, 'sent');
   assert.equal(database.events.get('stripe:evt_payment_succeeded'), 'processed');
-  assert.equal(resendCalls, 1);
+  assert.equal(emailCalls, 1);
   assert.equal(admaxxerCalls, 1);
 });
 
@@ -1447,7 +1458,9 @@ test('Stripe hosted upsell fallback saves the replacement card for the next upse
         metadata: event.data.object.metadata,
       });
     }
-    if (url === 'https://api.resend.com/emails') return Response.json({ id: 'email_stripe_2' });
+    if (url === 'https://api.postmarkapp.com/email/withTemplate') {
+      return Response.json({ ErrorCode: 0, Message: 'OK', MessageID: 'email_stripe_2' });
+    }
     if (url === 'https://admaxxer.com/api/v1/payments') {
       return Response.json({ received: true });
     }
@@ -1465,8 +1478,8 @@ test('Stripe hosted upsell fallback saves the replacement card for the next upse
       STRIPE_SECRET_KEY: 'sk_test_template_key',
       STRIPE_PAYMENTS_ENVIRONMENT: 'test_mode',
       STRIPE_WEBHOOK_SECRET: secret,
-      RESEND_API_KEY: 'resend_test',
-      RESEND_FROM_EMAIL: 'Offers <offers@example.com>',
+      POSTMARK_SERVER_TOKEN: 'postmark_test',
+      EMAIL_TRANSACTIONAL_FROM: 'Offers <offers@example.com>',
       ADMAXXER_API_KEY: 'workspace_test_key',
     },
   });

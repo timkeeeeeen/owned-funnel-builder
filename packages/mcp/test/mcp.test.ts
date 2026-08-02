@@ -71,7 +71,7 @@ test('configuration status never returns secret values', async () => {
     const secret = 'should-never-be-returned-123456789';
     await writeFile(
       join(root, '.dev.vars'),
-      `DODO_PAYMENTS_API_KEY=${secret}\nDODO_PAYMENTS_ENVIRONMENT=test\nRESEND_API_KEY=${secret}\n`
+      `DODO_PAYMENTS_API_KEY=${secret}\nDODO_PAYMENTS_ENVIRONMENT=test\nPOSTMARK_SERVER_TOKEN=${secret}\n`
     );
     const status = await integrationStatus(root);
     const serialized = JSON.stringify(status);
@@ -106,12 +106,12 @@ test('configuration status and publish planning follow the selected Stripe provi
     const blockedPlan = await publishPlan(root, false);
     assert.equal(blockedPlan.readyToAttempt, false);
     assert.deepEqual(blockedPlan.blockers, [
-      'Stripe requires complete Resend access-email settings.',
+      'Stripe requires complete Postmark access-email settings.',
     ]);
 
     await writeFile(
       join(root, '.dev.vars'),
-      `PAYMENTS_PROVIDER=stripe\nSTRIPE_SECRET_KEY=${secret}\nSTRIPE_PAYMENTS_ENVIRONMENT=test_mode\nSTRIPE_WEBHOOK_SECRET=${secret}\nRESEND_API_KEY=${secret}\nRESEND_FROM_EMAIL=access@example.com\n`
+      `PAYMENTS_PROVIDER=stripe\nSTRIPE_SECRET_KEY=${secret}\nSTRIPE_PAYMENTS_ENVIRONMENT=test_mode\nSTRIPE_WEBHOOK_SECRET=${secret}\nPOSTMARK_SERVER_TOKEN=${secret}\nEMAIL_TRANSACTIONAL_FROM=access@example.com\nEMAIL_MARKETING_FROM=updates@example.com\n`
     );
     const readyPlan = await publishPlan(root, false);
     assert.equal(readyPlan.readyToAttempt, true);
