@@ -34,3 +34,23 @@ refund/revocation evidence to every row. Owner must approve final copy,
 geography/audiences/budgets, Meta activation window, CAPI connection, and each
 live `$1` canary/card entry. A row cannot become green because a script tag,
 checkout return, or environment variable merely exists.
+
+## Live `$1` canary matrix
+
+These are temporary non-public live products, not replacements for the approved
+catalog. Every product carries trusted `launch_canary=true` metadata, is charged
+only after owner approval, and is refunded immediately after the stage-specific
+proof.
+
+| Funnel | Stages requiring one live `$1` product |
+| --- | --- |
+| Owned Funnel Builder | `owned-funnel-builder`, `owned-funnel-conversion-copy-swipe-file`, `owned-funnel-ten-blueprints`, `owned-funnel-agency-toolkit` |
+| Talking-Head Ad Machine | `talking-head-ad-machine`, `talking-head-hook-recording-pack`, `talking-head-ad-test-lab` |
+| Vibe Code Anything | `vibe-code-anything`, `vibe-code-prompt-pack`, `vibe-code-five-app-blueprints`, `vibe-code-production-launch-pack` |
+| Authority Snapshot → CMO Game Plan | temporary `blueprint_game_plan` canary product |
+| App Idea Evaluator → Complete Build Pack | temporary Complete Build Pack canary product |
+
+After each charge, record Dodo payment ID, webhook receipt, fulfillment or
+entitlement, Admaxxer Purchase, Meta event, refund, and revocation. Remove the
+canary mapping and deactivate the temporary product before restoring the real
+price. The `$99/month` Blueprint Activation is never part of this matrix.
