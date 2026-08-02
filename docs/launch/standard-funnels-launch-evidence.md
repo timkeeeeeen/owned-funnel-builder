@@ -26,6 +26,20 @@ Status: implementation-ready; provider and production gates remain open
 | Production D1 migration | unverified | Requires Cloudflare access, backup, and remote migration |
 | Production deployment | unverified | Requires approved release credentials |
 
+## Read-only Cloudflare baseline
+
+- D1 database: `owned-funnel-builder` (`f37a6e92-fcc6-43fd-898c-e8a7bf87767f`)
+- Remote migration readback: `0006_stripe_provider.sql` and
+  `0007_webhook_retry_and_revocations.sql` are pending; no migration was
+  applied by this execution.
+- Time Travel recovery bookmark:
+  `00000031-00000000-000050bb-d66926ee30685fcaf0f1dfdb1179dd8e`
+- Current Pages production readback includes older `main` deployments (latest
+  observed source `25bbc4a`); the launch branches have not been promoted.
+- Preview readback includes historical Blueprint candidates, not the final
+  accepted Blueprint SHA. A fresh Woodpecker preview is required before
+  promotion.
+
 ## Code changes
 
 - `payment.succeeded` events with `source=owned-funnel-diagnostic` are durable

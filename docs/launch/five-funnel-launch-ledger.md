@@ -11,7 +11,7 @@ the separate $1 canary are proven.
 | --- | --- | --- | --- |
 | Dodo live account, mode, products, prices, attachments | unverified | Dodo readback; owner/provider | Disable checkout routes; restore prior catalog mapping |
 | Dodo webhook URL, signature secret, retry/idempotency | passed locally / unverified live | `npm run test:functions`; production delivery readback | Revert deployment; keep webhook retryable |
-| D1 migrations 0006/0007, backup/time-travel marker | unverified | Cloudflare export + migration receipt | Restore marker; do not run ads |
+| D1 migrations 0006/0007, backup/time-travel marker | unverified | Remote readback shows both pending; Time Travel bookmark `00000031-00000000-000050bb-d66926ee30685fcaf0f1dfdb1179dd8e` recorded; migration receipt still required | Restore bookmark; do not run ads |
 | Admaxxer websites, pixel, Lead/Purchase API, Meta CAPI | unverified | owner CAPI connection + redacted event traces | Disable server ingestion/campaigns |
 | Privacy/consent, terms, refund/support owner | unverified | approved copy and production URL check | Pause all campaigns |
 | Meta dataset/domain/billing/permissions | unverified | Events Manager and Ads Manager readback | Keep campaigns paused |
