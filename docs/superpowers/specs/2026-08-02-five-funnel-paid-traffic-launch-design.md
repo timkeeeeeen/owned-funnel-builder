@@ -655,14 +655,15 @@ those are launch inputs, not reasons to weaken the plans.
 
 ### Second-pass implementation review (2026-08-02)
 
-Code review found four implementation-level gaps that temporarily reopen the
-corresponding gates: Blueprint one-time refund/dispute revocation and
-activation Purchase attribution; App Idea fail-closed live product/amount
-binding and durable Admaxxer retry recovery; and standard-funnel exact
-product/amount/currency binding plus revocation of already-delivered access.
-These are being patched on the three launch branches with focused regression
-tests. No provider or production action is authorized until those patches are
-reviewed and the live `$1` canary evidence is attached.
+Code review found four implementation-level gaps and the branches now contain
+the fixes: Blueprint `96e6755` (one-time refund/dispute revocation and
+activation Purchase attribution), App Idea `ab92249` (fail-closed live
+product/amount/currency binding and durable Admaxxer retry recovery), and
+standard `06a8eab` (exact product/cart/amount/currency binding plus revocation
+of already-delivered access). Focused regressions are green on the standard and
+App Idea branches; Blueprint’s remote focused suite is green. No provider or
+production action is authorized until the live `$1` canary evidence is
+attached.
 
 ## Human Approvals
 
