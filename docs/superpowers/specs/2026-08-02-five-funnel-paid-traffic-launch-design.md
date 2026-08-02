@@ -2,7 +2,7 @@
 
 Date: 2026-08-02
 
-Status: revised after self-review; pending written-spec approval
+Status: approved design; implementation plans reviewed
 
 ## Summary
 
@@ -49,7 +49,8 @@ analytics, or generation backend.
 - No new universal funnel framework or cross-repository CMS.
 - No Stripe migration.
 - No replacement for Maestro's Blueprint or App Idea product backends.
-- No live charge without separate approval of the amount and refund handling.
+- No live charge without separate approval of the amount, card-entry moment,
+  test identity, and refund handling.
 - No automatic publishing of generated content or customer media.
 - No launch of the optional $99/month Blueprint Activation subscription. It
   remains informational until its own billing, capacity, cancellation, credit,
@@ -83,7 +84,8 @@ The following facts were observed before writing this design:
   because production is behind `main`.
 - Blueprint PRs 3638 and 3639 are merged in the Maestro repository. The
   production Blueprint pages remain disabled previews and require a current
-  deployed canary, runtime bindings, proof permission, and Dodo test purchase.
+  deployed canary, runtime bindings, proof permission, and an approved live `$1`
+  canary purchase.
 - The App Idea Evaluator was merged through PR 16 at `4aa0b268`, with focused
   tests passing. Its production Cloudflare deployment predates the funnel and
   its environment-specific Convex and release bindings remain unresolved.
@@ -248,18 +250,32 @@ without deleting customer-authored input. Out-of-order events cannot downgrade
 a successful payment to failed or re-grant access after a terminal revocation;
 when event order is ambiguous, the current Dodo resource state is authoritative.
 
-Verification occurs at three levels:
+Verification occurs at four levels:
 
 1. **Fixtures:** invalid signature, duplicate webhook, failed payment, refund,
    dispute, missing product, stale lock, and retry behavior.
-2. **Test mode:** one full base purchase per funnel, bump declined and selected
-   where applicable, every upsell declined, each upsell accepted in a safe test
-   flow, and fulfillment or application access verified.
-3. **Live mode without charge:** open one checkout per base product, confirm the
-   response reports live mode, confirm cart and total, and stop before payment.
+2. **Test mode:** signature, malformed-event, duplicate, failure, refund,
+   dispute, provider-error, and ordinary hosted-checkout fixtures. Test mode is
+   not accepted as proof of one-click upsells because Dodo support confirms that
+   one-click upsells do not work there.
+3. **Temporary live `$1` canaries:** create one clearly named, non-public live
+   `$1 USD` product for each of the 13 paid stages: four Owned Funnel Builder,
+   three Talking-Head, four Vibe Code, one Blueprint Game Plan, and one App Idea
+   Build Pack. Map them only during a controlled canary window. After the owner
+   separately approves the exact charges and enters a card directly in Dodo's
+   hosted checkout, prove the purchase/one-click sequence, signed webhooks,
+   fulfillment or application access, Admaxxer Purchase, Meta CAPI, refund, and
+   revocation. Restore real mappings and deactivate/archive temporary products.
+4. **Live mode without charge:** open every real base checkout and optional bump,
+   confirm live mode/cart/total, and stop before payment. Read back each real
+   upsell product and route mapping from Dodo/application configuration; the `$1`
+   canary is the one-click transition proof because real upsells are post-charge.
 
-A real live purchase is optional evidence and requires separate explicit
-approval of the product, amount, test email, and refund plan.
+The temporary `$1` charges are required canary evidence but remain blocked until
+separate explicit approval of the products, total amount, test email, card-entry
+moment, and refund plan. Card data is entered directly into Dodo by the owner
+and never shared with an agent, tool, log, or repository. A purchase at the real
+launch price remains optional.
 
 ## Webhook Repair Design
 
@@ -274,9 +290,11 @@ The minimum root-cause fix is:
 1. Verify the raw request and Dodo signature exactly as today.
 2. Persist the original signed event before returning `2xx`; persistence
    failure returns non-`2xx` so Dodo retries.
-3. Acquire one atomic processing claim per `webhook-id`. A duplicate may return
-   `2xx` only when the event is terminal or another non-stale claim owns it; a
-   failed or stale claim remains reclaimable.
+3. Acquire one atomic processing claim per `webhook-id`. A duplicate returns
+   `2xx` only when the event is terminal or a durable asynchronous worker has
+   accepted responsibility for it. With the current synchronous handler, a
+   nonterminal duplicate returns retryable non-`2xx`; failed and stale claims
+   remain reclaimable.
 4. Classify the event by trusted `metadata.source` and configured product.
 5. Process `owned-funnel-builder` events through the existing funnel handler.
 6. Acknowledge diagnostic or unrelated account payments as an intentional
@@ -379,7 +397,8 @@ Production verification must demonstrate:
 - one API-ingested Purchase with correct value and currency;
 - the correct Meta pixel/dataset destination;
 - browser/server deduplication where Admaxxer emits both sides;
-- no test purchase contamination in production reporting.
+- temporary `$1` canaries carry an explicit canary marker and are excluded from
+  launch-performance reporting without deleting their audit evidence.
 
 Privacy copy must disclose visitor identifiers, email identification, campaign
 parameters, payment attribution, Admaxxer, and server-side advertising events.
@@ -514,11 +533,12 @@ Each required check is reported as `passed`, `failed`, `unverified`, or
 
 - approved copy and proof are live;
 - exact production commit and hostname are verified;
-- Dodo test purchase and live no-charge checkout pass;
+- Dodo fixtures, approved temporary live `$1` canaries, refund/revocation, and
+  real-price live no-charge checkouts pass;
 - fulfillment or application entitlement passes;
 - Admaxxer PageView, Lead, and visitor metadata pass;
-- Purchase attribution passes end to end in test mode, while production is
-  either proven by an approved live purchase or explicitly marked
+- Purchase attribution passes end to end for the approved live `$1` canary,
+  while each real-price Purchase is either separately proven or marked
   `intentionally uncharged` with its live configuration read back;
 - Meta destination and event reception pass;
 - responsive, accessibility, and browser checks pass;
@@ -590,24 +610,48 @@ the dependency order below and campaign activation remains the final gate.
 6. Verify the standard platform in preview against the migrated schema.
 7. Provision or read back all test and live Dodo products, webhooks, and
    entitlements.
-8. Complete test-mode purchase matrices for all five funnels.
-9. Configure Admaxxer websites, cross-domain handoffs, pixels, server ingestion,
+8. Configure Admaxxer websites, cross-domain handoffs, pixels, server ingestion,
    consent behavior, and privacy copy.
-10. Connect the owner-provided Meta CAPI destination inside Admaxxer.
-11. Deploy and verify the current Owned Funnel Builder production commit.
-12. Deploy and verify Blueprint staging, run all audience canaries, then promote
+9. Connect the owner-provided Meta CAPI destination inside Admaxxer.
+10. Complete the Dodo fixture matrices.
+11. Deploy and accept each preproduction journey, then run its separately
+    approved live `$1` paid-stage canaries with immediate refund/revocation.
+12. Deploy and verify the current Owned Funnel Builder production commit.
+13. Deploy and verify Blueprint staging, run all audience canaries, then promote
     the exact accepted versions.
-13. Provision App Idea release bindings, run the configured Convex smoke, deploy
+14. Provision App Idea release bindings, run the configured Convex smoke, deploy
     staging, verify the free and paid journeys, then promote the accepted version.
-14. Open live-mode no-charge Dodo checkouts for all five base products.
-15. Verify Admaxxer and Meta events end to end, using `intentionally uncharged`
+15. Open real-price live-mode no-charge checkouts for every base product/bump and
+    read back each post-purchase upsell mapping.
+16. Verify Admaxxer and Meta events end to end, using `intentionally uncharged`
     only for the final production Purchase when no live charge was approved.
-16. Create Meta campaigns paused and verify their exact destination URLs.
-17. Review the six-row launch ledger: shared infrastructure plus five funnels.
-18. Activate all five campaign families in the approved launch window.
-19. Monitor continuously for the first hour and at scheduled checkpoints over
-    the first 24 hours; pause only the affected funnel when a localized failure
-    appears.
+17. Create Meta campaigns paused and verify their exact destination URLs.
+18. Review the six-row launch ledger: shared infrastructure plus five funnels.
+19. Activate all five campaign families in the approved launch window.
+20. Monitor continuously for the first hour and at scheduled checkpoints over
+    the first 24 hours; pause the affected funnel for localized failure and all
+    five for shared-infrastructure failure.
+
+## Implementation Plan Review
+
+The four plans were reviewed together against this design after drafting:
+
+| Review area | Result | Plan consequence |
+| --- | --- | --- |
+| Scope and funnel count | Pass | Three standard offers, four Blueprint audience variants as one funnel family, App Idea, and five Meta campaigns are explicit. |
+| Dodo live behavior | Revised | Test mode is fixture-only; 13 temporary live `$1` stage products provide paid/one-click proof with approval and refund controls. |
+| Product and amount binding | Revised | Canary mappings are recoverable; App Idea must bind signed product, checkout, actual amount, currency, and equal Maestro credit. |
+| Webhook retry/idempotency | Revised | A persisted payment is not terminal attribution evidence; Blueprint and App Idea retry unreported Admaxxer effects by payment ID. |
+| Real-price no-charge proof | Revised | Base/bump checkouts are opened without payment; post-purchase upsells use provider/config readback because only the `$1` canary can traverse them. |
+| Deployment authority | Pass with planned gap closure | Owned and Maestro use Woodpecker; App Idea first lands its existing reviewed Woodpecker adapter. Buildkite is not invoked. |
+| Copy editability | Pass | Existing Keystatic or canonical product records remain authoritative; one shared approved copy deck maps every surface. |
+| Attribution/CAPI | Pass | Each funnel has PageView, durable Lead, visitor handoff, verified server Purchase, Meta destination, and privacy evidence. |
+| Activation safety | Pass | Five campaigns are created paused; six ledger rows, explicit budget/window approval, checkpoints, and shared/local pause rules gate activation. |
+| Out-of-scope control | Pass | No new funnel framework/CMS, Stripe migration, automatic publishing, or `$99` Blueprint Activation subscription. |
+
+No unresolved design contradiction remains. Execution still requires the owner
+decisions listed below and provider/configuration access at the relevant gate;
+those are launch inputs, not reasons to weaken the plans.
 
 ## Human Approvals
 
@@ -619,7 +663,8 @@ The owner is asked only for decisions or authority that cannot be inferred:
 - approve Dodo live-account access when required;
 - approve campaign geography, audiences, budgets, and any consent-dependent
   tracking behavior;
-- approve any real live charge with its amount and refund plan;
+- approve each live `$1` canary batch with product list, total amount, test
+  identity, card-entry moment, and refund plan;
 - approve final campaign activation and budgets.
 
 The owner is never asked to edit source, run commands, identify product IDs,
@@ -629,9 +674,10 @@ name environment variables, or paste secrets into a repository.
 
 The program is complete when all five public funnels are reachable at their
 stable production URLs, their exact commits are recorded, their copy is
-approved, full test-mode purchases pass, live Dodo checkouts are verified, and
-the live Purchase gate is either proven by an approved charge or explicitly
-recorded as `intentionally uncharged`. Webhooks and fulfillment are healthy,
+approved, fixture matrices and temporary live `$1` canaries pass, real-price
+live Dodo checkouts are verified, and each real-price Purchase gate is either
+proven by a separately approved charge or recorded as `intentionally
+uncharged`. Webhooks and fulfillment are healthy,
 Admaxxer and Meta CAPI show the required events at the evidence level defined by
 the launch ledger, campaigns are active, and the first 24-hour monitoring window
 ends without an unresolved launch-blocking defect.
