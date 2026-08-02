@@ -26,7 +26,10 @@ test('core, bump, and upsell prices stay aligned with the offer', async () => {
 
 test('the offer and checkout remain held until fulfillment acceptance passes', async () => {
   const offer = await readJson('src/content/offers/talking-head-ad-machine.json');
-  const page = await readFile(resolve(root, 'src/pages/talking-head-ad-machine/index.astro'), 'utf8');
+  const page = await readFile(
+    resolve(root, 'src/pages/talking-head-ad-machine/index.astro'),
+    'utf8'
+  );
 
   assert.equal(offer.published, false);
   assert.equal(offer.checkout.enabled, false);
@@ -53,7 +56,7 @@ test('the public proof package exists and carries the synthetic disclosure', asy
   const offer = await readJson('src/content/offers/talking-head-ad-machine.json');
   const comparison = await readFile(
     resolve(root, 'src/components/offers/TalkingHeadComparison.astro'),
-    'utf8',
+    'utf8'
   );
 
   assert.equal(offer.ogImage, '/og-talking-head-ad-machine.jpg');

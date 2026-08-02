@@ -53,9 +53,8 @@ const offer = {
     summaryDescription: `Everything included with ${productName}, delivered to your email after purchase.`,
     guaranteeLabel: '30-day guarantee',
     paymentTrustLabel: 'Secure payment processing',
-    consentCopy:
-      'By continuing, you agree to receive product access and occasional emails about this offer, including a reminder if you leave checkout unfinished. Unsubscribe anytime.',
-    consentVersion: 'v1-2026-07-30',
+    consentCopy: 'We use this email to open secure checkout and deliver anything you purchase.',
+    consentVersion: 'marketing-v1-2026-08-02',
     bump: {
       title: `Add the ${productName} Quickstart Pack`,
       description: 'Get the checklists and copy/paste prompts that make the first result easier.',

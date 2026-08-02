@@ -86,8 +86,8 @@ export async function publishPlan(root: string, production: boolean) {
         : []),
       ...(!integrations.payments.ready
         ? [
-            integrations.payments.provider === 'stripe' && !integrations.resend.ready
-              ? 'Stripe requires complete Resend access-email settings.'
+            integrations.payments.provider === 'stripe' && !integrations.email.ready
+              ? 'Stripe requires complete Postmark access-email settings.'
               : `${providerName} checkout settings are incomplete.`,
           ]
         : []),

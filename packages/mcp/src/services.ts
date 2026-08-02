@@ -66,12 +66,16 @@ export async function integrationStatus(root: string) {
     'STRIPE_PAYMENTS_ENVIRONMENT',
     'STRIPE_WEBHOOK_SECRET',
   ]);
-  const resendVariables = variableStatus(names, ['RESEND_API_KEY', 'RESEND_FROM_EMAIL']);
+  const emailVariables = variableStatus(names, [
+    'POSTMARK_SERVER_TOKEN',
+    'EMAIL_TRANSACTIONAL_FROM',
+    'EMAIL_MARKETING_FROM',
+  ]);
   const cloudflareAuth = names.has('CLOUDFLARE_API_TOKEN') || names.has('CLOUDFLARE_ACCOUNT_ID');
   const dodoReady = Object.values(dodoVariables).every(Boolean);
   const stripeReady = Object.values(stripeVariables).every(Boolean);
-  const resendReady = Object.values(resendVariables).every(Boolean);
-  const selectedPaymentsReady = provider === 'stripe' ? stripeReady && resendReady : dodoReady;
+  const emailReady = Object.values(emailVariables).every(Boolean);
+  const selectedPaymentsReady = provider === 'stripe' ? stripeReady && emailReady : dodoReady;
 
   return {
     payments: {
@@ -80,9 +84,9 @@ export async function integrationStatus(root: string) {
       nextStep:
         provider === 'stripe'
           ? stripeReady
-            ? resendReady
-              ? 'Stripe and its required access email settings are present. Run test-mode validation before accepting money.'
-              : 'Stripe is selected. Connect Resend before enabling checkout so every buyer receives access.'
+            ? emailReady
+              ? 'Stripe and its required Postmark email settings are present. Run test-mode validation before accepting money.'
+              : 'Stripe is selected. Connect Postmark before enabling checkout so every buyer receives access.'
             : 'Stripe is selected. Connect it with the Stripe setup skill; credentials are never displayed here.'
           : dodoReady
             ? 'Dodo settings are present. Run test-mode validation before accepting money.'
@@ -98,19 +102,19 @@ export async function integrationStatus(root: string) {
     stripe: {
       ready: stripeReady,
       variables: stripeVariables,
-      requiresResend: true,
+      requiresEmail: true,
       nextStep: stripeReady
-        ? 'Stripe settings are present. Verify Resend and run test-mode validation before accepting money.'
+        ? 'Stripe settings are present. Verify Postmark and run test-mode validation before accepting money.'
         : 'Connect Stripe with the setup skill. Credentials are never displayed here.',
     },
-    resend: {
-      ready: resendReady,
-      variables: resendVariables,
-      nextStep: resendReady
-        ? 'Resend settings are present. Send a test delivery before launch.'
+    email: {
+      ready: emailReady,
+      variables: emailVariables,
+      nextStep: emailReady
+        ? 'Postmark settings are present. Send a test delivery before launch.'
         : provider === 'stripe'
-          ? 'Connect Resend before enabling Stripe so buyers receive product access.'
-          : 'Connect Resend if you want an additional branded product-delivery email.',
+          ? 'Connect Postmark before enabling Stripe so buyers receive product access.'
+          : 'Connect Postmark for branded product delivery and opted-in broadcasts.',
     },
     cloudflare: {
       ready: Boolean(cloudflare.configFile && cloudflare.projectName && cloudflare.d1Binding),

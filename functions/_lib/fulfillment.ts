@@ -1,12 +1,12 @@
 import { getProductDefinition } from '../_generated/funnels';
 import {
-  cleanString,
   readEnvironmentValue,
   RequestError,
   type D1Database,
   type Environment,
   type PaymentProvider,
 } from './runtime';
+import { createPostmarkEmailProvider } from './email';
 
 interface FulfillmentInput {
   paymentId: string;
@@ -17,20 +17,6 @@ interface FulfillmentInput {
 
 interface LeadRow {
   email: string;
-}
-
-interface ResendResponse {
-  id?: string;
-  message?: string;
-}
-
-function escapeHtml(value: string): string {
-  return value
-    .replaceAll('&', '&amp;')
-    .replaceAll('<', '&lt;')
-    .replaceAll('>', '&gt;')
-    .replaceAll('"', '&quot;')
-    .replaceAll("'", '&#039;');
 }
 
 export async function deliverPurchase(
@@ -79,9 +65,9 @@ export async function deliverPurchase(
     .run();
   if ((lock.meta?.changes ?? 0) !== 1) return;
 
-  const apiKey = readEnvironmentValue(env, 'RESEND_API_KEY');
-  const from = readEnvironmentValue(env, 'RESEND_FROM_EMAIL');
-  if (!apiKey || !from) {
+  const token = readEnvironmentValue(env, 'POSTMARK_SERVER_TOKEN');
+  const from = readEnvironmentValue(env, 'EMAIL_TRANSACTIONAL_FROM');
+  if (!token || !from) {
     if (input.provider === 'stripe') {
       const message = 'Stripe delivery requires the access-email connection.';
       await database
@@ -100,7 +86,7 @@ export async function deliverPurchase(
     await database
       .prepare(
         `UPDATE fulfillments
-         SET status = 'sent', resend_email_id = 'dodo-native', error_message = NULL, updated_at = ?
+         SET status = 'sent', provider_message_id = 'dodo-native', error_message = NULL, updated_at = ?
          WHERE id = ?`
       )
       .bind(new Date().toISOString(), existing.id)
@@ -110,40 +96,34 @@ export async function deliverPurchase(
 
   const product = configured.product;
   const supportEmail = readEnvironmentValue(env, 'SUPPORT_EMAIL') || configured.funnel.supportEmail;
-  const safeName = escapeHtml(product.name);
-  const safeBody = escapeHtml(product.deliveryBody);
-  const safeUrl = escapeHtml(product.accessUrl);
-  const safeSupport = escapeHtml(supportEmail);
 
   try {
-    const response = await fetch('https://api.resend.com/emails', {
-      method: 'POST',
-      headers: {
-        Authorization: `Bearer ${apiKey}`,
-        'Content-Type': 'application/json',
-        'Idempotency-Key': `fulfillment/${input.paymentId}/${input.productKey}`,
-      },
-      body: JSON.stringify({
-        from,
-        to: [lead.email],
-        subject: product.deliverySubject,
-        text: `${product.deliveryBody}\n\nOpen your purchase: ${product.accessUrl}\n\nNeed help? ${supportEmail}`,
-        html: `<div style="font-family:Arial,sans-serif;max-width:600px;margin:auto;padding:32px;color:#111827"><p style="font-size:13px;font-weight:700;text-transform:uppercase;letter-spacing:.12em;color:#2563eb">Purchase access</p><h1 style="font-size:32px;line-height:1.1">${safeName}</h1><p style="font-size:18px;line-height:1.6;color:#4b5563">${safeBody}</p><p style="margin:28px 0"><a href="${safeUrl}" style="display:inline-block;background:#2563eb;color:white;text-decoration:none;font-size:18px;font-weight:700;padding:16px 22px;border-radius:12px">Open your purchase</a></p><p style="font-size:14px;color:#6b7280">Need help? Reply to this email or contact ${safeSupport}.</p></div>`,
-      }),
-      signal: AbortSignal.timeout(10_000),
+    const provider = createPostmarkEmailProvider({
+      token,
+      transactionalFrom: from,
+      marketingFrom: readEnvironmentValue(env, 'EMAIL_MARKETING_FROM') || from,
     });
-    const result = (await response.json()) as ResendResponse;
-    if (!response.ok || !result.id) {
-      throw new Error(cleanString(result.message, 300) || `Resend returned ${response.status}.`);
-    }
+    const result = await provider.sendTransactional({
+      to: lead.email,
+      templateAlias:
+        readEnvironmentValue(env, 'EMAIL_PURCHASE_TEMPLATE_ALIAS') || 'purchase-access',
+      templateModel: {
+        product_name: product.name,
+        delivery_subject: product.deliverySubject,
+        delivery_body: product.deliveryBody,
+        access_url: product.accessUrl,
+        support_email: supportEmail,
+      },
+      idempotencyKey: `fulfillment:${input.paymentId}:${input.productKey}`,
+    });
 
     await database
       .prepare(
         `UPDATE fulfillments
-         SET status = 'sent', resend_email_id = ?, error_message = NULL, updated_at = ?
+         SET status = 'sent', provider_message_id = ?, error_message = NULL, updated_at = ?
          WHERE id = ?`
       )
-      .bind(result.id, new Date().toISOString(), existing.id)
+      .bind(result.messageId, new Date().toISOString(), existing.id)
       .run();
   } catch (error) {
     await database

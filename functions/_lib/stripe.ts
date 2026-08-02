@@ -78,9 +78,9 @@ export function getStripeConfig(env: Environment): {
 }
 
 export function assertStripeFulfillmentConfig(env: Environment): void {
-  const apiKey = readEnvironmentValue(env, 'RESEND_API_KEY');
-  const from = readEnvironmentValue(env, 'RESEND_FROM_EMAIL');
-  if (!apiKey || !from) {
+  const token = readEnvironmentValue(env, 'POSTMARK_SERVER_TOKEN');
+  const from = readEnvironmentValue(env, 'EMAIL_TRANSACTIONAL_FROM');
+  if (!token || !from) {
     throw new RequestError(
       'Stripe checkout needs the access-email connection before it can accept payments.',
       503,

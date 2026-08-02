@@ -1,4 +1,0 @@
-interface:
-  display_name: 'Configure Resend'
-  short_description: 'Configure reliable purchase and access delivery'
-  default_prompt: 'Use $configure-resend to send buyers the correct access after payment.'

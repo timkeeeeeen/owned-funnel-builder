@@ -8,7 +8,7 @@ It includes:
 - a visual Keystatic editor for changing copy without touching code;
 - email-first Dodo or Stripe checkout, with Dodo as the default;
 - one order bump and up to two one-click upsells;
-- verified file delivery: Dodo-native access or required branded Resend delivery with Stripe;
+- verified file delivery: Dodo-native access or required branded Postmark delivery with Stripe;
 - Cloudflare Pages, Functions, and D1 setup;
 - bundled agent skills and a safe local MCP;
 - desktop, tablet, mobile, accessibility, and checkout release checks.
@@ -25,7 +25,7 @@ You do not need to learn Git, a terminal, YAML, environment variables, or Cloudf
 
 The agent will ask normal business questions: what you sell, who it is for, the price, what buyers receive, and what proof you have. It can open the visual editor when you want to change words yourself.
 
-When the agent asks you to connect services, it opens a private setup screen on your computer. Choose Dodo or Stripe and paste the requested keys there. Dodo can deliver files itself; Stripe also asks for Resend so buyers receive their access link. The file is excluded from GitHub and the setup screen never prints the values.
+When the agent asks you to connect services, it opens a private setup screen on your computer. Choose Dodo or Stripe and connect Postmark for purchase access and opted-in updates. Dodo can deliver files itself; Stripe requires Postmark so buyers receive their access link. The file is excluded from GitHub and the setup screen never prints the values.
 
 When you are ready, say:
 
@@ -79,7 +79,8 @@ The private service setup workflow is:
 npm run setup
 npm run setup:cloudflare
 npm run setup:dodo # or: npm run setup:stripe
-npm run setup:resend:test
+npm run setup:email:test
+npm run email:send
 npm run publish
 ```
 
@@ -103,9 +104,9 @@ Dodo Payments is the supported default, and Stripe is a first-class option. Ever
 - a secure checkout fallback when one-click charging is unavailable;
 - idempotent server-side payment verification;
 - signed provider webhooks that drive fulfillment and Admaxxer revenue attribution;
-- one Dodo entitlement per purchased product, or one required Resend access email per Stripe purchase;
+- one Dodo entitlement per purchased product, or one required Postmark access email per Stripe purchase;
 
-Provider webhooks are the fulfillment source of truth. Dodo sends fresh download links by email and through its customer portal. Stripe sends each configured access link through Resend. In both modes, email failures never create a second charge and retry keys prevent duplicate access emails.
+Provider webhooks are the fulfillment source of truth. Dodo sends fresh download links by email and through its customer portal. Stripe sends each configured access link through Postmark. In both modes, email failures never create a second charge and retry keys prevent duplicate access emails. Marketing email uses Postmark's separate broadcast stream and only includes explicitly opted-in, non-suppressed subscribers.
 
 Stripe Checkout saves the first card for off-session reuse. An eligible upsell charges that saved method server-side; authentication, a declined saved method, or a missing method opens secure hosted Stripe Checkout instead.
 

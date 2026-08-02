@@ -17,8 +17,8 @@ const secretKey = requireSetting(settings, 'STRIPE_SECRET_KEY');
 const environment = requireSetting(settings, 'STRIPE_PAYMENTS_ENVIRONMENT');
 const databaseName = requireSetting(settings, 'FUNNEL_D1_DATABASE');
 const siteUrl = requireSetting(settings, 'PUBLIC_SITE_URL').replace(/\/$/, '');
-requireSetting(settings, 'RESEND_API_KEY');
-requireSetting(settings, 'RESEND_FROM_EMAIL');
+requireSetting(settings, 'POSTMARK_SERVER_TOKEN');
+requireSetting(settings, 'EMAIL_TRANSACTIONAL_FROM');
 
 validateStripeSetupCredentials(secretKey, environment);
 

@@ -21,7 +21,7 @@
 - Declines, SCA, and missing methods open hosted Checkout instead of retrying automatically.
 - Checkout URLs are HTTPS on `checkout.stripe.com`.
 - Webhooks use the unchanged raw body, a current `Stripe-Signature`, matching live mode, and a durable event key.
-- Stripe payments cannot start without a verified Resend configuration and real access URL.
+- Stripe payments cannot start without a verified Postmark configuration and real access URL.
 - Logs omit secret keys, webhook secrets, flow tokens, card details, and full webhook payloads.
 
 Use test mode and fixtures by default. Never create a live PaymentIntent or Checkout Session without the owner's explicit approval.

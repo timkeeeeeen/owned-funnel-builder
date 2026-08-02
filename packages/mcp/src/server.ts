@@ -199,12 +199,12 @@ export function createServer(): McpServer {
   server.registerTool(
     'configuration_status',
     {
-      title: 'Check payments, Resend, and Cloudflare setup',
+      title: 'Check payments, Postmark, and Cloudflare setup',
       description:
         'Reports whether required settings exist without reading or displaying any secret values.',
       inputSchema: {
         service: z
-          .enum(['all', 'payments', 'dodo', 'stripe', 'resend', 'cloudflare'])
+          .enum(['all', 'payments', 'dodo', 'stripe', 'email', 'cloudflare'])
           .default('all'),
       },
       annotations: { readOnlyHint: true, openWorldHint: false },
@@ -285,7 +285,7 @@ export function createServer(): McpServer {
             'What simple add-on would be easy to include at checkout?',
             'What two upgrades would help the buyer get a bigger or faster result?',
             'Where should customers receive their access?',
-            'Which payment service do you want to use: Dodo or Stripe? Do you already have the required Resend, Cloudflare, and domain accounts?',
+            'Which payment service do you want to use: Dodo or Stripe? Do you already have the required Postmark, Cloudflare, and domain accounts?',
           ],
           project: status,
           nextTool: status.offerCount > 0 ? 'funnel_list' : 'funnel_create',
@@ -450,7 +450,7 @@ export function createServer(): McpServer {
               ? [
                   'Open Stripe in your own browser and start in test mode.',
                   'Ask the configure-stripe skill to guide secure setup.',
-                  'Connect Resend and replace every placeholder access link before enabling Stripe.',
+                  'Connect Postmark and replace every placeholder access link before enabling Stripe.',
                   'Create or reuse the main, bump, and upsell Products and Prices and verify the signed webhook.',
                   'Run a test checkout, saved-card upsell, and hosted fallback without making a live charge.',
                 ]
@@ -474,7 +474,7 @@ export function createServer(): McpServer {
     {
       title: 'Prepare delivery email',
       description:
-        'Checks whether Resend settings exist and explains the safe next steps. This tool never accepts, reads, or displays an email key.',
+        'Checks whether Postmark settings exist and explains the safe next steps. This tool never accepts, reads, or displays an email token.',
       inputSchema: {},
       annotations: { readOnlyHint: true, openWorldHint: false },
     },
@@ -482,13 +482,13 @@ export function createServer(): McpServer {
       try {
         const status = await integrationStatus(await root());
         return response({
-          ...status.resend,
+          ...status.email,
           changedNothing: true,
           safeSteps: [
-            'Open Resend in your own browser.',
-            'Ask the configure-resend skill to guide domain verification and secure secret storage.',
+            'Open Postmark in your own browser.',
+            'Ask the configure-email skill to guide domain verification and secure secret storage.',
             'Replace every placeholder access link and support email.',
-            'Send a test access email.',
+            'Send a Postmark sandbox or black-hole test email.',
             'Confirm core, bump, and accepted upsells each deliver the correct item.',
           ],
           privacy: status.privacy,

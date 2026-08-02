@@ -23,8 +23,8 @@
     "summaryDescription": "The complete builder, visual copy editor, checkout funnel, publishing workflow, agent skills, and lifetime access.",
     "guaranteeLabel": "30-day guarantee",
     "paymentTrustLabel": "Secure payment processing",
-    "consentCopy": "By continuing, you agree to receive product access and occasional emails about this offer, including a reminder if you leave checkout unfinished. Unsubscribe anytime.",
-    "consentVersion": "v1-2026-07-30",
+    "consentCopy": "We use this email to open secure checkout and deliver anything you purchase.",
+    "consentVersion": "marketing-v1-2026-08-02",
     "bump": {
       "title": "Yes — add the Conversion Copy Swipe File for $19",
       "description": "Get the headlines, section prompts, objection answers, and offer angles that make a blank page much easier to turn into persuasive copy.",
@@ -198,7 +198,7 @@
       },
       {
         "title": "Configure delivery",
-        "description": "Configures Dodo-native access or required Stripe delivery through Resend, with idempotent email that stays separate from payment receipts."
+        "description": "Configures Dodo-native access or required Stripe delivery through Postmark, with idempotent email that stays separate from payment receipts."
       },
       {
         "title": "Publish and audit",
@@ -239,7 +239,7 @@
     },
     {
       "title": "Verified access delivery",
-      "description": "Use Dodo-native entitlements and customer-portal downloads, or choose Stripe with required branded access delivery through Resend."
+      "description": "Use Dodo-native entitlements and customer-portal downloads, or choose Stripe with required branded access delivery through Postmark."
     },
     {
       "title": "Cloudflare Pages and D1 setup",
@@ -247,7 +247,7 @@
     },
     {
       "title": "Agent skills and local launch tools",
-      "description": "Focused context for copy, design, editing, Dodo, Stripe, Resend, Cloudflare, and auditing—plus safe tools for creating, previewing, publishing, and rolling back funnels."
+      "description": "Focused context for copy, design, editing, Dodo, Stripe, Postmark, Cloudflare, and auditing—plus safe tools for creating, previewing, publishing, and rolling back funnels."
     }
   ],
   "gates": {
@@ -384,7 +384,7 @@
     },
     {
       "question": "What accounts do I need?",
-      "answer": "You need GitHub for safe source backup, Cloudflare for hosting and the small D1 database, either Dodo Payments or Stripe for checkout, and a coding agent that can work with a repository. Resend is optional with Dodo and required with Stripe so buyers receive access. Your agent walks you through each connection."
+      "answer": "You need GitHub for safe source backup, Cloudflare for hosting and the small D1 database, either Dodo Payments or Stripe for checkout, Postmark for email, and a coding agent that can work with a repository. Postmark is optional with Dodo native delivery and required with Stripe so buyers receive access. Your agent walks you through each connection."
     },
     {
       "question": "Does it include order bumps and upsells?",
@@ -392,7 +392,7 @@
     },
     {
       "question": "Can I use Stripe instead of Dodo?",
-      "answer": "Yes. Dodo remains the default, but Stripe is included as a first-class option. The setup connects hosted Stripe Checkout, saves the first card for one-click upsells, falls back to hosted checkout when authentication is required, verifies signed webhooks, and delivers access through Resend."
+      "answer": "Yes. Dodo remains the default, but Stripe is included as a first-class option. The setup connects hosted Stripe Checkout, saves the first card for one-click upsells, falls back to hosted checkout when authentication is required, verifies signed webhooks, and delivers access through Postmark."
     },
     {
       "question": "Will every page look the same?",

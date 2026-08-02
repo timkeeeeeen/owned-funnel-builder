@@ -15,11 +15,20 @@ if (provider === 'dodo') {
   requireSetting(settings, 'STRIPE_SECRET_KEY');
   requireSetting(settings, 'STRIPE_PAYMENTS_ENVIRONMENT');
   requireSetting(settings, 'STRIPE_WEBHOOK_SECRET');
-  requireSetting(settings, 'RESEND_API_KEY');
-  requireSetting(settings, 'RESEND_FROM_EMAIL');
+  requireSetting(settings, 'POSTMARK_SERVER_TOKEN');
+  requireSetting(settings, 'EMAIL_TRANSACTIONAL_FROM');
 }
-if (Boolean(settings.RESEND_API_KEY) !== Boolean(settings.RESEND_FROM_EMAIL)) {
-  throw new Error('Resend needs both its API key and From address, or neither one.');
+if (Boolean(settings.POSTMARK_SERVER_TOKEN) !== Boolean(settings.EMAIL_TRANSACTIONAL_FROM)) {
+  throw new Error(
+    'Email needs both its Postmark token and transactional From address, or neither one.'
+  );
+}
+if (settings.POSTMARK_SERVER_TOKEN) {
+  requireSetting(settings, 'EMAIL_MARKETING_FROM');
+  requireSetting(settings, 'EMAIL_OPERATOR_SECRET');
+  requireSetting(settings, 'EMAIL_UNSUBSCRIBE_SECRET');
+  requireSetting(settings, 'POSTMARK_WEBHOOK_USERNAME');
+  requireSetting(settings, 'POSTMARK_WEBHOOK_PASSWORD');
 }
 
 const wrangler = new URL('../node_modules/.bin/wrangler', import.meta.url).pathname;
