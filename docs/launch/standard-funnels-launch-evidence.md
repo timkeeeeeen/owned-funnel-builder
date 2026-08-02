@@ -5,7 +5,7 @@ Status: implementation-ready; provider and production gates remain open
 ## Reviewed source
 
 - Branch: `codex/owned-funnel-launch`
-- Source commit: `ee9437b`
+- Source commit: `625dca3`
 - Offers: Owned Funnel Builder, Talking-Head Ad Machine, Vibe Code Anything
 - Dodo production catalog: 11 real paid stages; temporary live canary catalog:
   11 separate `$1 USD` products, not yet created
