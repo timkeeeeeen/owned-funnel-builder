@@ -83,8 +83,9 @@ remain owned by their existing repositories.
 - Buyer: one of the approved consultant, coach, solo-expert, or agency-owner
   audience variants who wants a public authority gap identified.
 - Offer: free durable Authority Snapshot followed by the optional $5 Game Plan
-  from Maestro. The $5 product must state its exact deliverables, delivery
-  timing, refund terms, and proof permissions from the canonical Blueprint
+  from Maestro. The paid deliverable is a focused personalized 30-day
+  publishing plan with five retained first drafts; delivery, refund terms, and
+  proof permissions still require a readback from the canonical Blueprint
   records before this row is approved.
 - Ad primary text (draft): “Find the visible authority gap in your public
   presence, then decide whether a focused 30-day plan would help. Start with a
@@ -105,8 +106,9 @@ remain owned by their existing repositories.
 - Buyer: a product builder with an app idea who wants a buildability report
   before committing to implementation.
 - Offer: free Buildability Report followed by the $29 Complete Build Pack;
-  exact stages, credit amount, delivery timing, refund terms, and low-fit
-  behavior must come from the App Idea canonical records.
+  eight checkpointed build stages, portable export, and an equal $29 Maestro
+  credit when the buyer chooses the Maestro path. Delivery timing, refund
+  terms, and low-fit behavior must come from the App Idea canonical records.
 - Ad primary text (draft): “Have an app idea but not a build plan? Get a free
   Buildability Report, then choose the $29 Complete Build Pack only if the
   idea is worth taking further.”
