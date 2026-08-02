@@ -49,6 +49,8 @@ geography/audiences/budgets, Meta activation window, CAPI connection, and each
 live `$1` canary/card entry. A row cannot become green because a script tag,
 checkout return, or environment variable merely exists.
 
+The consolidated owner handoff is [`owner-launch-inputs.md`](./owner-launch-inputs.md).
+
 ## Live `$1` canary matrix
 
 These are temporary non-public live products, not replacements for the approved
