@@ -21,12 +21,22 @@ interface PaymentEventData {
   metadata?: unknown;
   customer?: { customer_id?: unknown; email?: unknown } | null;
   customer_id?: unknown;
+  product_cart?: unknown;
+}
+
+interface OfferProductRow {
+  dodo_product_id: string;
+  price_amount: number;
+  currency: string;
 }
 
 interface WebhookPayload {
   type?: unknown;
   data?: PaymentEventData;
 }
+
+type DodoWebhookResult = 'processed' | 'busy';
+const WEBHOOK_STALE_AFTER_MS = 5 * 60 * 1000;
 
 function metadataRecord(value: unknown): Record<string, string> {
   if (!value || typeof value !== 'object' || Array.isArray(value)) return {};
@@ -65,6 +75,85 @@ async function markPaymentFailed(
   }
 }
 
+async function recordPaymentRevocation(
+  database: D1Database,
+  data: PaymentEventData,
+  webhookId: string,
+  eventType: 'refund.succeeded' | 'dispute.accepted' | 'dispute.lost'
+): Promise<void> {
+  const paymentId = cleanString(data.payment_id, 180);
+  if (!paymentId) throw new Error('The revocation event is missing the payment ID.');
+
+  await database
+    .prepare(
+      `INSERT OR IGNORE INTO payment_revocations (
+        payment_id, event_type, provider_event_id, created_at
+      ) VALUES (?, ?, ?, ?)`
+    )
+    .bind(paymentId, eventType, webhookId, new Date().toISOString())
+    .run();
+  await database
+    .prepare(
+      `UPDATE fulfillments
+       SET status = 'failed', error_message = ?, updated_at = ?
+       WHERE payment_id = ? AND status IN ('pending', 'sending', 'sent')`
+    )
+    .bind(`Payment access revoked after ${eventType}.`, new Date().toISOString(), paymentId)
+    .run();
+}
+
+async function assertPaymentMatchesCatalog(
+  database: D1Database,
+  data: PaymentEventData,
+  metadata: Record<string, string>
+): Promise<void> {
+  const productKeys = [metadata.product_key, metadata.bump_product_key].filter(Boolean);
+  const products = await Promise.all(
+    productKeys.map((productKey) =>
+      database
+        .prepare(
+          `SELECT dodo_product_id, price_amount, currency
+           FROM offer_products WHERE product_key = ?`
+        )
+        .bind(productKey)
+        .first<OfferProductRow>()
+    )
+  );
+  const cart = Array.isArray(data.product_cart)
+    ? data.product_cart.map((item) => {
+        if (!item || typeof item !== 'object' || Array.isArray(item)) return null;
+        const product = item as { product_id?: unknown; quantity?: unknown };
+        return {
+          productId: cleanString(product.product_id, 180),
+          quantity: product.quantity,
+        };
+      })
+    : null;
+  const expectedProductIds = products.map((product) => cleanString(product?.dodo_product_id, 180));
+  const cartMatches =
+    products.every(Boolean) &&
+    cart?.length === expectedProductIds.length &&
+    cart.every(
+      (item) =>
+        item !== null &&
+        item.quantity === 1 &&
+        expectedProductIds.includes(item.productId)
+    ) &&
+    new Set(cart.filter(Boolean).map((item) => item?.productId)).size === expectedProductIds.length;
+  const expectedAmount = products.reduce(
+    (total, product) => total + (product?.price_amount ?? Number.NaN),
+    0
+  );
+  const amountMatches = data.total_amount === expectedAmount;
+  const currency = cleanString(data.currency, 3).toUpperCase();
+  const currencyMatches =
+    Boolean(currency) &&
+    products.every((product) => cleanString(product?.currency, 3).toUpperCase() === currency);
+  if (!cartMatches || !Number.isSafeInteger(expectedAmount) || !amountMatches || !currencyMatches) {
+    throw new Error('The payment does not match the configured Dodo product.');
+  }
+}
+
 async function markPaymentSucceeded(
   env: Environment,
   database: D1Database,
@@ -75,9 +164,17 @@ async function markPaymentSucceeded(
   const leadId = metadata.lead_id;
   const funnelId = metadata.funnel_id;
   const productKey = metadata.product_key;
-  if (!paymentId || !leadId || !funnelId || !productKey) {
+  if (!paymentId) throw new Error('The payment event is missing the payment ID.');
+  const revoked = await database
+    .prepare('SELECT payment_id FROM payment_revocations WHERE payment_id = ?')
+    .bind(paymentId)
+    .first<{ payment_id: string }>();
+  if (revoked) return;
+
+  if (!leadId || !funnelId || !productKey) {
     throw new Error('The payment event is missing funnel metadata.');
   }
+  await assertPaymentMatchesCatalog(database, data, metadata);
 
   const now = new Date().toISOString();
   if (metadata.step_key) {
@@ -126,13 +223,19 @@ async function markPaymentSucceeded(
     });
   }
 
-  await recordAdmaxxerPayment(env, {
+  const attributed = await recordAdmaxxerPayment(env, {
     paymentId,
     totalAmount: data.total_amount,
     currency: data.currency,
     visitorId: metadata.admx_visitor_id,
     email: data.customer?.email,
   });
+  if (
+    !attributed &&
+    ['live', 'live_mode', 'production'].includes(readEnvironmentValue(env, 'DODO_PAYMENTS_ENVIRONMENT'))
+  ) {
+    throw new Error('Live payment attribution is not configured.');
+  }
 }
 
 export async function onRequestPost({ request, env }: PagesContext): Promise<Response> {
@@ -171,48 +274,95 @@ export async function onRequestPost({ request, env }: PagesContext): Promise<Res
     return json({ error: 'Webhook signature is invalid.' }, 401);
   }
 
-  const eventType = cleanString(payload.type, 100);
+  try {
+    const result = await processDodoWebhookPayload(env, env.LEADS, webhookId, payload, rawBody);
+    if (result === 'busy') return json({ error: 'Webhook is already being processed.' }, 503);
+    return json({ received: true });
+  } catch {
+    console.error('Dodo webhook processing failed.', { webhookId });
+    return json({ error: 'Webhook processing failed.' }, 500);
+  }
+}
+
+export async function processDodoWebhookPayload(
+  env: Environment,
+  database: D1Database,
+  webhookId: string,
+  payload: WebhookPayload,
+  rawBody = JSON.stringify(payload)
+): Promise<DodoWebhookResult> {
+  const eventType = cleanString(payload.type, 100) || 'unknown';
   const now = new Date().toISOString();
-  await env.LEADS.prepare(
-    `INSERT OR IGNORE INTO webhook_events (
-      webhook_id, event_type, payload_json, status, created_at
-    ) VALUES (?, ?, ?, 'received', ?)`
-  )
-    .bind(webhookId, eventType || 'unknown', rawBody, now)
+  const inserted = await database
+    .prepare(
+      `INSERT OR IGNORE INTO webhook_events (
+        webhook_id, event_type, payload_json, status, created_at, attempt_started_at
+      ) VALUES (?, ?, ?, 'received', ?, ?)`
+    )
+    .bind(webhookId, eventType, rawBody, now, now)
     .run();
 
-  const existing = await env.LEADS.prepare('SELECT status FROM webhook_events WHERE webhook_id = ?')
-    .bind(webhookId)
-    .first<{ status: string }>();
-  if (existing?.status === 'processed') return json({ received: true });
+  if ((inserted.meta?.changes ?? 0) === 0) {
+    const existing = await database
+      .prepare('SELECT status, attempt_started_at FROM webhook_events WHERE webhook_id = ?')
+      .bind(webhookId)
+      .first<{ status: string; attempt_started_at?: string | null }>();
+    if (existing?.status === 'processed') return 'processed';
+
+    const staleBefore = new Date(Date.now() - WEBHOOK_STALE_AFTER_MS).toISOString();
+    const reclaim = await database
+      .prepare(
+        `UPDATE webhook_events
+         SET status = 'received', attempt_started_at = ?, error_message = NULL, processed_at = NULL
+         WHERE webhook_id = ?
+           AND (status = 'failed' OR (status = 'received' AND attempt_started_at < ?))`
+      )
+      .bind(now, webhookId, staleBefore)
+      .run();
+    if ((reclaim.meta?.changes ?? 0) === 0) return 'busy';
+  }
 
   try {
     const metadata = metadataRecord(payload.data?.metadata);
-    if (eventType === 'payment.succeeded' && payload.data) {
-      await markPaymentSucceeded(env, env.LEADS, payload.data, metadata);
-    } else if (eventType === 'payment.failed') {
-      await markPaymentFailed(env.LEADS, metadata);
+    const source = metadata.source;
+    const isOwnedFunnelEvent = source === 'owned-funnel-builder';
+    const isIntentionalNoOp = source === 'owned-funnel-diagnostic' || !source;
+    if (eventType === 'payment.succeeded' && payload.data && isOwnedFunnelEvent) {
+      await markPaymentSucceeded(env, database, payload.data, metadata);
+    } else if (eventType === 'payment.failed' && isOwnedFunnelEvent) {
+      await markPaymentFailed(database, metadata);
+    } else if (
+      payload.data &&
+      (eventType === 'refund.succeeded' ||
+        eventType === 'dispute.accepted' ||
+        eventType === 'dispute.lost')
+    ) {
+      await recordPaymentRevocation(database, payload.data, webhookId, eventType);
+    } else if (!isOwnedFunnelEvent && !isIntentionalNoOp) {
+      throw new Error('The payment event source is not configured for this funnel.');
     }
 
-    await env.LEADS.prepare(
-      `UPDATE webhook_events
-       SET status = 'processed', error_message = NULL, processed_at = ?
-       WHERE webhook_id = ?`
-    )
+    await database
+      .prepare(
+        `UPDATE webhook_events
+         SET status = 'processed', error_message = NULL, processed_at = ?, attempt_started_at = NULL
+         WHERE webhook_id = ?`
+      )
       .bind(new Date().toISOString(), webhookId)
       .run();
-    return json({ received: true });
+    return 'processed';
   } catch (error) {
     const message = error instanceof Error ? error.message.slice(0, 500) : 'Webhook failed.';
-    await env.LEADS.prepare(
-      `UPDATE webhook_events
-       SET status = 'failed', error_message = ?, processed_at = ?
-       WHERE webhook_id = ?`
-    )
+    await database
+      .prepare(
+        `UPDATE webhook_events
+         SET status = 'failed', error_message = ?, processed_at = ?, attempt_started_at = NULL
+         WHERE webhook_id = ?`
+      )
       .bind(message, new Date().toISOString(), webhookId)
       .run();
     console.error('Dodo webhook processing failed.', { webhookId, eventType });
-    return json({ error: 'Webhook processing failed.' }, 500);
+    throw error;
   }
 }
 
