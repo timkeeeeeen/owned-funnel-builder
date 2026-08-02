@@ -5,7 +5,7 @@ Status: implementation-ready; provider and production gates remain open
 ## Reviewed source
 
 - Branch: `codex/owned-funnel-launch`
-- Source commit: `625dca3`
+- Source commit: `27c71df`
 - Offers: Owned Funnel Builder, Talking-Head Ad Machine, Vibe Code Anything
 - Dodo production catalog: 11 real paid stages; temporary live canary catalog:
   11 separate `$1 USD` products, not yet created
@@ -18,7 +18,7 @@ Status: implementation-ready; provider and production gates remain open
 | Migration preservation | passed | `tests/functions/migrations.test.mts` |
 | Functions build | passed | `npm run check:functions` |
 | Static build | passed | `npm run build` — 29 pages |
-| Functions tests | passed | 36 tests, 0 failures |
+| Functions tests | passed | 40 tests, 0 failures |
 | Focused Astro/type check | passed for changed standard files; repository check blocked | `dodo.ts` and `migrations.test.mts` fixes type-check; `npm run typecheck` still reports 17 pre-existing `packages/mcp` diagnostics because `@modelcontextprotocol/sdk` is unavailable |
 | Live Dodo products/webhook | unverified | Requires Dodo live credentials and account readback |
 | Dodo `$1` canary sequence | unverified | Requires owner approval and card entry |
@@ -32,7 +32,12 @@ Status: implementation-ready; provider and production gates remain open
   no-ops and return success.
 - Active duplicate webhook claims return retryable `503`; failed claims can be
   reclaimed after the five-minute lease.
-- Refund and dispute events record one revocation row per payment/provider event.
+- The live webhook configuration reconciles the exact handled event set in place.
+- Refund and terminal losing-dispute events record one revocation row per
+  payment/provider event, and out-of-order success cannot fulfill a revoked
+  payment.
+- Missing live Admaxxer attribution fails the webhook retryably instead of
+  acknowledging a payment without a Purchase event.
 - Migration `0007` is additive and preserves existing rows.
 
 ## Required next evidence
