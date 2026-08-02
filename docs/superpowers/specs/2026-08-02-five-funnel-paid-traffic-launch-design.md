@@ -653,6 +653,17 @@ No unresolved design contradiction remains. Execution still requires the owner
 decisions listed below and provider/configuration access at the relevant gate;
 those are launch inputs, not reasons to weaken the plans.
 
+### Second-pass implementation review (2026-08-02)
+
+Code review found four implementation-level gaps that temporarily reopen the
+corresponding gates: Blueprint one-time refund/dispute revocation and
+activation Purchase attribution; App Idea fail-closed live product/amount
+binding and durable Admaxxer retry recovery; and standard-funnel exact
+product/amount/currency binding plus revocation of already-delivered access.
+These are being patched on the three launch branches with focused regression
+tests. No provider or production action is authorized until those patches are
+reviewed and the live `$1` canary evidence is attached.
+
 ## Human Approvals
 
 The owner is asked only for decisions or authority that cannot be inferred:
