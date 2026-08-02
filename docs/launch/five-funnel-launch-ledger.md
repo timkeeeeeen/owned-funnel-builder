@@ -27,7 +27,7 @@ stage proof; never use the real-price catalog for this test.
 
 - All three launch branches are clean, pushed, and represented by ready-for-review PRs: standard `505761b`, App Idea `ca11b2427`, Blueprint `865f25917d`.
 - Standard local function suite is green (`42/42`) and its Functions build passes.
-- App Idea targeted commerce tests are green (`3/3`); the reviewed-release ownership hashes were refreshed on `ca11b2427`, and Woodpecker re-verification is required before merge.
+- App Idea targeted commerce tests are green: create-root integration `8/8`, release adapter/manifest/template `36/36`, and agent-pack create `7/7`; reviewed-release ownership hashes were refreshed on `ca11b2427`, and Woodpecker re-verification is required before merge.
 - Blueprint remote focused suite and typecheck are green; lint fixes are on `865f25917d`, and Woodpecker re-verification is required before merge.
 - Production remains on the older Pages deployment; no launch branch has been promoted.
 
