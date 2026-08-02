@@ -28,6 +28,9 @@ interface WebhookPayload {
   data?: PaymentEventData;
 }
 
+type DodoWebhookResult = 'processed' | 'busy';
+const WEBHOOK_STALE_AFTER_MS = 5 * 60 * 1000;
+
 function metadataRecord(value: unknown): Record<string, string> {
   if (!value || typeof value !== 'object' || Array.isArray(value)) return {};
   return Object.fromEntries(
@@ -63,6 +66,29 @@ async function markPaymentFailed(
       .bind(now, metadata.funnel_id)
       .run();
   }
+}
+
+async function recordPaymentRevocation(
+  database: D1Database,
+  data: PaymentEventData,
+  metadata: Record<string, string>,
+  webhookId: string,
+  eventType: 'refund.succeeded' | 'dispute.opened'
+): Promise<void> {
+  const paymentId = cleanString(data.payment_id, 180);
+  if (!paymentId || metadata.source !== 'owned-funnel-builder') {
+    if (metadata.source === 'owned-funnel-diagnostic' || !metadata.source) return;
+    throw new Error('The revocation event source is not configured for this funnel.');
+  }
+
+  await database
+    .prepare(
+      `INSERT OR IGNORE INTO payment_revocations (
+        payment_id, event_type, provider_event_id, created_at
+      ) VALUES (?, ?, ?, ?)`
+    )
+    .bind(paymentId, eventType, webhookId, new Date().toISOString())
+    .run();
 }
 
 async function markPaymentSucceeded(
@@ -171,48 +197,93 @@ export async function onRequestPost({ request, env }: PagesContext): Promise<Res
     return json({ error: 'Webhook signature is invalid.' }, 401);
   }
 
-  const eventType = cleanString(payload.type, 100);
+  try {
+    const result = await processDodoWebhookPayload(env, env.LEADS, webhookId, payload, rawBody);
+    if (result === 'busy') return json({ error: 'Webhook is already being processed.' }, 503);
+    return json({ received: true });
+  } catch {
+    console.error('Dodo webhook processing failed.', { webhookId });
+    return json({ error: 'Webhook processing failed.' }, 500);
+  }
+}
+
+export async function processDodoWebhookPayload(
+  env: Environment,
+  database: D1Database,
+  webhookId: string,
+  payload: WebhookPayload,
+  rawBody = JSON.stringify(payload)
+): Promise<DodoWebhookResult> {
+  const eventType = cleanString(payload.type, 100) || 'unknown';
   const now = new Date().toISOString();
-  await env.LEADS.prepare(
-    `INSERT OR IGNORE INTO webhook_events (
-      webhook_id, event_type, payload_json, status, created_at
-    ) VALUES (?, ?, ?, 'received', ?)`
-  )
-    .bind(webhookId, eventType || 'unknown', rawBody, now)
+  const inserted = await database
+    .prepare(
+      `INSERT OR IGNORE INTO webhook_events (
+        webhook_id, event_type, payload_json, status, created_at, attempt_started_at
+      ) VALUES (?, ?, ?, 'received', ?, ?)`
+    )
+    .bind(webhookId, eventType, rawBody, now, now)
     .run();
 
-  const existing = await env.LEADS.prepare('SELECT status FROM webhook_events WHERE webhook_id = ?')
-    .bind(webhookId)
-    .first<{ status: string }>();
-  if (existing?.status === 'processed') return json({ received: true });
+  if ((inserted.meta?.changes ?? 0) === 0) {
+    const existing = await database
+      .prepare('SELECT status, attempt_started_at FROM webhook_events WHERE webhook_id = ?')
+      .bind(webhookId)
+      .first<{ status: string; attempt_started_at?: string | null }>();
+    if (existing?.status === 'processed') return 'processed';
+
+    const staleBefore = new Date(Date.now() - WEBHOOK_STALE_AFTER_MS).toISOString();
+    const reclaim = await database
+      .prepare(
+        `UPDATE webhook_events
+         SET status = 'received', attempt_started_at = ?, error_message = NULL, processed_at = NULL
+         WHERE webhook_id = ?
+           AND (status = 'failed' OR (status = 'received' AND attempt_started_at < ?))`
+      )
+      .bind(now, webhookId, staleBefore)
+      .run();
+    if ((reclaim.meta?.changes ?? 0) === 0) return 'busy';
+  }
 
   try {
     const metadata = metadataRecord(payload.data?.metadata);
-    if (eventType === 'payment.succeeded' && payload.data) {
-      await markPaymentSucceeded(env, env.LEADS, payload.data, metadata);
-    } else if (eventType === 'payment.failed') {
-      await markPaymentFailed(env.LEADS, metadata);
+    const source = metadata.source;
+    const isOwnedFunnelEvent = source === 'owned-funnel-builder';
+    const isIntentionalNoOp = source === 'owned-funnel-diagnostic' || !source;
+    if (eventType === 'payment.succeeded' && payload.data && isOwnedFunnelEvent) {
+      await markPaymentSucceeded(env, database, payload.data, metadata);
+    } else if (eventType === 'payment.failed' && isOwnedFunnelEvent) {
+      await markPaymentFailed(database, metadata);
+    } else if (
+      payload.data &&
+      (eventType === 'refund.succeeded' || eventType === 'dispute.opened')
+    ) {
+      await recordPaymentRevocation(database, payload.data, metadata, webhookId, eventType);
+    } else if (!isOwnedFunnelEvent && !isIntentionalNoOp) {
+      throw new Error('The payment event source is not configured for this funnel.');
     }
 
-    await env.LEADS.prepare(
-      `UPDATE webhook_events
-       SET status = 'processed', error_message = NULL, processed_at = ?
-       WHERE webhook_id = ?`
-    )
+    await database
+      .prepare(
+        `UPDATE webhook_events
+         SET status = 'processed', error_message = NULL, processed_at = ?, attempt_started_at = NULL
+         WHERE webhook_id = ?`
+      )
       .bind(new Date().toISOString(), webhookId)
       .run();
-    return json({ received: true });
+    return 'processed';
   } catch (error) {
     const message = error instanceof Error ? error.message.slice(0, 500) : 'Webhook failed.';
-    await env.LEADS.prepare(
-      `UPDATE webhook_events
-       SET status = 'failed', error_message = ?, processed_at = ?
-       WHERE webhook_id = ?`
-    )
+    await database
+      .prepare(
+        `UPDATE webhook_events
+         SET status = 'failed', error_message = ?, processed_at = ?, attempt_started_at = NULL
+         WHERE webhook_id = ?`
+      )
       .bind(message, new Date().toISOString(), webhookId)
       .run();
     console.error('Dodo webhook processing failed.', { webhookId, eventType });
-    return json({ error: 'Webhook processing failed.' }, 500);
+    throw error;
   }
 }
 

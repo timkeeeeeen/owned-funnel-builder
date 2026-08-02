@@ -14,7 +14,10 @@ import type {
 import { onRequestPost as createCheckout } from '../../functions/api/checkout.ts';
 import { onRequestPost as decideUpsell } from '../../functions/api/funnel/decision.ts';
 import { onRequestGet as getFunnelStatus } from '../../functions/api/funnel/status.ts';
-import { onRequestPost as receiveWebhook } from '../../functions/api/webhooks/dodo.ts';
+import {
+  onRequestPost as receiveWebhook,
+  processDodoWebhookPayload,
+} from '../../functions/api/webhooks/dodo.ts';
 import { onRequestPost as receiveStripeWebhook } from '../../functions/api/webhooks/stripe.ts';
 import { verifyStripeSignature } from '../../functions/_lib/stripe.ts';
 import {
@@ -1220,6 +1223,117 @@ test('webhook rejects missing and invalid signatures before changing payment sta
     },
   });
   assert.equal(invalid.status, 401);
+});
+
+test('diagnostic Dodo payments are acknowledged without funnel processing', async () => {
+  const database = new FakeDatabase((query, values, method) => {
+    if (query.includes('INSERT OR IGNORE INTO webhook_events')) {
+      return { success: true, meta: { changes: 1 } };
+    }
+    if (query.includes('SELECT status FROM webhook_events')) return null;
+    if (query.includes("SET status = 'processed'")) {
+      assert.equal(values[1], 'event_diagnostic_1');
+      return { success: true, meta: { changes: 1 } };
+    }
+    if (method === 'run') return { success: true, meta: { changes: 1 } };
+    return null;
+  });
+
+  const result = await processDodoWebhookPayload({}, database, 'event_diagnostic_1', {
+    type: 'payment.succeeded',
+    data: {
+      payment_id: 'pay_diagnostic_1',
+      metadata: { source: 'owned-funnel-diagnostic' },
+    },
+  });
+
+  assert.equal(result, 'processed');
+  assert.equal(
+    database.calls.some(({ query }) => query.includes('UPDATE funnel_runs')),
+    false
+  );
+});
+
+test('active duplicate Dodo webhooks remain retryable instead of being acknowledged', async () => {
+  const database = new FakeDatabase((query, _values, method) => {
+    if (query.includes('INSERT OR IGNORE INTO webhook_events')) {
+      return { success: true, meta: { changes: 0 } };
+    }
+    if (query.includes('SELECT status, attempt_started_at')) {
+      return { status: 'received', attempt_started_at: new Date().toISOString() };
+    }
+    if (query.includes("SET status = 'received'")) {
+      return { success: true, meta: { changes: 0 } };
+    }
+    if (method === 'run') return { success: true, meta: { changes: 1 } };
+    return null;
+  });
+
+  const result = await processDodoWebhookPayload({}, database, 'event_active_duplicate', {
+    type: 'payment.succeeded',
+    data: { metadata: { source: 'owned-funnel-diagnostic' } },
+  });
+
+  assert.equal(result, 'busy');
+});
+
+test('failed Dodo webhook claims are reclaimed and processed again', async () => {
+  const database = new FakeDatabase((query, values, method) => {
+    if (query.includes('INSERT OR IGNORE INTO webhook_events')) {
+      return { success: true, meta: { changes: 0 } };
+    }
+    if (query.includes('SELECT status, attempt_started_at')) return { status: 'failed' };
+    if (query.includes("SET status = 'received'")) {
+      assert.equal(values[1], 'event_failed_retry');
+      return { success: true, meta: { changes: 1 } };
+    }
+    if (query.includes("SET status = 'processed'")) {
+      assert.equal(values[1], 'event_failed_retry');
+      return { success: true, meta: { changes: 1 } };
+    }
+    if (method === 'run') return { success: true, meta: { changes: 1 } };
+    return null;
+  });
+
+  const result = await processDodoWebhookPayload({}, database, 'event_failed_retry', {
+    type: 'payment.succeeded',
+    data: { metadata: { source: 'owned-funnel-diagnostic' } },
+  });
+
+  assert.equal(result, 'processed');
+});
+
+test('owned Dodo refunds and disputes are recorded once by payment ID', async () => {
+  const revocations: Array<Array<string | number | null>> = [];
+  const database = new FakeDatabase((query, values, method) => {
+    if (query.includes('INSERT OR IGNORE INTO webhook_events')) {
+      return { success: true, meta: { changes: 1 } };
+    }
+    if (query.includes('INSERT OR IGNORE INTO payment_revocations')) {
+      revocations.push(values);
+      return { success: true, meta: { changes: 1 } };
+    }
+    if (query.includes("SET status = 'processed'")) {
+      return { success: true, meta: { changes: 1 } };
+    }
+    if (method === 'run') return { success: true, meta: { changes: 1 } };
+    return null;
+  });
+
+  await processDodoWebhookPayload({}, database, 'event_refund_1', {
+    type: 'refund.succeeded',
+    data: {
+      payment_id: 'pay_owned_1',
+      metadata: { source: 'owned-funnel-builder' },
+    },
+  });
+
+  assert.equal(revocations.length, 1);
+  assert.deepEqual(revocations[0]?.slice(0, 3), [
+    'pay_owned_1',
+    'refund.succeeded',
+    'event_refund_1',
+  ]);
 });
 
 function stripeSignature(secret: string, rawBody: string, timestamp: number): string {
