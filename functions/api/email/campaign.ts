@@ -1,4 +1,4 @@
-import { createPostmarkEmailProvider } from '../../_lib/email';
+import { createPostmarkEmailProvider, PostmarkEmailError } from '../../_lib/email';
 import { createUnsubscribeToken } from '../../_lib/emailTokens';
 import { cleanString, json, readEnvironmentValue, type PagesContext } from '../../_lib/runtime';
 
@@ -29,6 +29,7 @@ const authorized = (context: PagesContext): boolean => {
 export async function onRequestPost(context: PagesContext): Promise<Response> {
   if (!authorized(context)) return json({ error: 'Unauthorized.' }, 401);
   if (!context.env.LEADS) return json({ error: 'Email campaigns are not configured.' }, 503);
+  const database = context.env.LEADS;
 
   let input: CampaignRequest;
   try {
@@ -91,13 +92,22 @@ export async function onRequestPost(context: PagesContext): Promise<Response> {
        FROM email_subscribers AS s
        WHERE s.status = 'subscribed'
          AND (? = '' OR s.offer_slug = ?)
+         AND (
+           ? <> '' OR s.id = (
+             SELECT latest_consent.id
+             FROM email_subscribers AS latest_consent
+             WHERE latest_consent.email = s.email AND latest_consent.status = 'subscribed'
+             ORDER BY latest_consent.consented_at DESC, latest_consent.id DESC
+             LIMIT 1
+           )
+         )
          AND NOT EXISTS (
            SELECT 1 FROM email_suppressions AS x WHERE x.email = s.email
          )
        ORDER BY s.consented_at DESC
        LIMIT 501`
     )
-      .bind(offerSlug, offerSlug)
+      .bind(offerSlug, offerSlug, offerSlug)
       .all<Subscriber>();
   }
   const rows = audience.results ?? [];
@@ -129,7 +139,7 @@ export async function onRequestPost(context: PagesContext): Promise<Response> {
 
   campaignId = action === 'retry' ? campaignId : crypto.randomUUID();
   const now = new Date().toISOString();
-  const recipients = rows.slice(0, 500);
+  let recipients = rows.slice(0, 500);
   if (action !== 'retry')
     await context.env.LEADS.prepare(
       `INSERT INTO email_campaigns (
@@ -167,6 +177,53 @@ export async function onRequestPost(context: PagesContext): Promise<Response> {
     marketingFrom,
     replyTo,
   });
+  const finalAudience = await database.prepare(
+    `SELECT s.id, s.email
+     FROM email_campaign_recipients AS r
+     JOIN email_subscribers AS s ON s.id = r.subscriber_id
+     WHERE r.campaign_id = ?
+       AND r.status = ?
+       AND s.status = 'subscribed'
+       AND NOT EXISTS (
+         SELECT 1 FROM email_suppressions AS x WHERE x.email = s.email
+       )`
+  )
+    .bind(campaignId, action === 'retry' ? 'transient_failure' : 'pending')
+    .all<Subscriber>();
+  const eligibleRecipients = finalAudience.results ?? [];
+  const eligibleIds = new Set(eligibleRecipients.map((subscriber) => subscriber.id));
+  for (const subscriber of recipients) {
+    if (eligibleIds.has(subscriber.id)) continue;
+    await database.prepare(
+      `UPDATE email_campaign_recipients
+       SET status = 'permanent_failure', error_code = 'suppressed_before_send',
+         error_message = 'Recipient was suppressed before delivery.', updated_at = ?
+       WHERE campaign_id = ? AND subscriber_id = ?`
+    )
+      .bind(new Date().toISOString(), campaignId, subscriber.id)
+      .run();
+  }
+  recipients = eligibleRecipients;
+  const updateCampaignStatus = async () => {
+    await database.prepare(
+      `UPDATE email_campaigns
+       SET status = CASE
+         WHEN EXISTS (
+           SELECT 1 FROM email_campaign_recipients
+           WHERE campaign_id = ? AND status IN ('pending', 'transient_failure')
+         ) THEN 'partial'
+         WHEN EXISTS (
+           SELECT 1 FROM email_campaign_recipients
+           WHERE campaign_id = ? AND status = 'permanent_failure'
+         ) THEN 'partial'
+         ELSE 'sent'
+       END,
+       updated_at = ?
+       WHERE id = ?`
+    )
+      .bind(campaignId, campaignId, new Date().toISOString(), campaignId)
+      .run();
+  };
   const origin = new URL(publicSiteUrl).origin;
   const messages = await Promise.all(
     recipients.map(async (subscriber) => ({
@@ -187,7 +244,29 @@ export async function onRequestPost(context: PagesContext): Promise<Response> {
       )}`,
     }))
   );
-  const results = await provider.sendBroadcast(messages);
+  let results;
+  try {
+    results = await provider.sendBroadcast(messages);
+  } catch (error) {
+    const retryable = error instanceof PostmarkEmailError && error.retryable;
+    const status = retryable ? 'transient_failure' : 'permanent_failure';
+    const errorCode = error instanceof PostmarkEmailError ? error.status : 'batch_error';
+    const message = error instanceof Error ? error.message.slice(0, 300) : 'Postmark batch failed.';
+    for (const subscriber of recipients) {
+      await database.prepare(
+        `UPDATE email_campaign_recipients
+         SET status = ?, provider_message_id = NULL, error_code = ?, error_message = ?, updated_at = ?
+         WHERE campaign_id = ? AND subscriber_id = ?`
+      )
+        .bind(status, errorCode, message, new Date().toISOString(), campaignId, subscriber.id)
+        .run();
+    }
+    await updateCampaignStatus();
+    return json(
+      { error: 'Postmark batch delivery failed.', campaignId, retryable },
+      retryable ? 503 : 502
+    );
+  }
   let accepted = 0;
   let failed = 0;
   for (const result of results) {
@@ -209,24 +288,7 @@ export async function onRequestPost(context: PagesContext): Promise<Response> {
       )
       .run();
   }
-  await context.env.LEADS.prepare(
-    `UPDATE email_campaigns
-     SET status = CASE
-       WHEN EXISTS (
-         SELECT 1 FROM email_campaign_recipients
-         WHERE campaign_id = ? AND status IN ('pending', 'transient_failure')
-       ) THEN 'partial'
-       WHEN EXISTS (
-         SELECT 1 FROM email_campaign_recipients
-         WHERE campaign_id = ? AND status = 'permanent_failure'
-       ) THEN 'partial'
-       ELSE 'sent'
-     END,
-     updated_at = ?
-     WHERE id = ?`
-  )
-    .bind(campaignId, campaignId, new Date().toISOString(), campaignId)
-    .run();
+  await updateCampaignStatus();
   return json({ campaignId, accepted, failed, capped: rows.length > 500 });
 }
 

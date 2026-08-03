@@ -20,7 +20,7 @@ import {
   stripeRequest,
   validateStripeCheckoutUrl,
 } from '../_lib/stripe';
-import { MARKETING_CONSENT_COPY } from '../../src/data/emailConsent';
+import { MARKETING_CONSENT_COPY, MARKETING_CONSENT_VERSION } from '../../src/data/emailConsent';
 
 interface CheckoutRequest {
   email?: unknown;
@@ -69,6 +69,14 @@ const ATTRIBUTION_KEYS = new Set([
   'fbclid',
   'ttclid',
   'msclkid',
+]);
+const MARKETING_PLACEMENTS = new Set([
+  'header',
+  'hero',
+  'outcomes',
+  'pricing',
+  'final',
+  'mobile-sticky',
 ]);
 
 function sanitizeAttribution(value: unknown): Record<string, string> {
@@ -162,9 +170,11 @@ export async function onRequestPost(context: PagesContext): Promise<Response> {
     const input = await parseRequest(request);
     const email = cleanString(input.email, 254).toLowerCase();
     offerSlug = cleanString(input.offerSlug, 80);
-    const placement = cleanString(input.placement, 80) || 'unknown';
-    const consentVersion = cleanString(input.consentVersion, 80);
+    const requestedPlacement = cleanString(input.placement, 80);
+    const placement = MARKETING_PLACEMENTS.has(requestedPlacement) ? requestedPlacement : 'unknown';
+    const requestedConsentVersion = cleanString(input.consentVersion, 80);
     const marketingOptIn = input.marketingOptIn === true;
+    const consentVersion = marketingOptIn ? MARKETING_CONSENT_VERSION : '';
     const honeypot = cleanString(input.website, 200);
     const referrer = cleanString(input.referrer, 1024);
     const attribution = sanitizeAttribution(input.attribution);
@@ -178,8 +188,8 @@ export async function onRequestPost(context: PagesContext): Promise<Response> {
     if (!OFFER_SLUG_PATTERN.test(offerSlug) || offerSlug.length > 80) {
       throw new RequestError('Offer is invalid.', 400);
     }
-    if (marketingOptIn && !consentVersion) {
-      throw new RequestError('Marketing consent version is required.', 400);
+    if (marketingOptIn && requestedConsentVersion !== MARKETING_CONSENT_VERSION) {
+      throw new RequestError('Marketing consent version is invalid.', 400);
     }
     if (!env.LEADS) {
       throw new RequestError('Checkout is not configured yet.', 503, 'configuration_storage');

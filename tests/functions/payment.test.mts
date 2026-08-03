@@ -251,6 +251,57 @@ test('checkout creates the configured cart, bump, steps, and first upsell return
   );
 });
 
+test('checkout validates the canonical consent version and sanitizes source placement', async () => {
+  const database = checkoutDatabase({ 'owned-funnel-builder': 'prod_main' });
+  globalThis.fetch = async (input) => {
+    const url = new URL(String(input));
+    if (url.pathname === '/customers') {
+      return Response.json({ items: [{ customer_id: 'customer_owner', email: 'owner@example.com' }] });
+    }
+    return Response.json({
+      checkout_url: 'https://checkout.dodopayments.com/session/test',
+      session_id: 'session_123',
+    });
+  };
+  const environment = {
+    LEADS: database,
+    DODO_PAYMENTS_API_KEY: 'test_key',
+    DODO_PAYMENTS_ENVIRONMENT: 'test_mode',
+  };
+
+  const forged = await createCheckout({
+    request: checkoutRequest({
+      email: 'owner@example.com',
+      offerSlug: 'owned-funnel-builder',
+      placement: 'hero',
+      consentVersion: 'forged-version',
+      marketingOptIn: true,
+    }),
+    env: environment,
+  });
+  assert.equal(forged.status, 400);
+
+  const accepted = await createCheckout({
+    request: checkoutRequest({
+      email: 'owner@example.com',
+      offerSlug: 'owned-funnel-builder',
+      placement: 'forged-placement',
+      consentVersion: 'v1',
+      marketingOptIn: true,
+    }),
+    env: environment,
+  });
+  assert.equal(accepted.status, 200);
+  const leadWrite = database.calls.find((call) => call.query.includes('INSERT INTO checkout_leads'));
+  const subscriberWrite = database.calls.find((call) =>
+    call.query.includes('INSERT INTO email_subscribers')
+  );
+  assert.equal(leadWrite?.values[3], 'unknown');
+  assert.equal(leadWrite?.values[5], 'v1');
+  assert.equal(subscriberWrite?.values[3], 'v1');
+  assert.equal(subscriberWrite?.values[5], 'unknown');
+});
+
 test('checkout fails closed when a configured product has no Dodo mapping', async () => {
   const database = checkoutDatabase({});
   let fetchCalls = 0;
