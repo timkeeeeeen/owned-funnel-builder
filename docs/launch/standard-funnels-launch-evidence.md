@@ -5,7 +5,7 @@ Status: implementation-ready; provider and production gates remain open
 ## Reviewed source
 
 - Branch: `codex/owned-funnel-launch`
-- Code candidate: `559f636` (webhook hardening is included in the reviewed branch)
+- Code candidate: `9fb814d` (merged to `main` as `88631b4`; webhook hardening is included)
 - Offers: Owned Funnel Builder, Talking-Head Ad Machine, Vibe Code Anything
 - Dodo production catalog: 11 real paid stages; temporary live canary catalog:
   11 separate `$1 USD` products, not yet created
@@ -19,12 +19,14 @@ Status: implementation-ready; provider and production gates remain open
 | Functions build | passed | `npm run check:functions` |
 | Static build | passed | `npm run build` — 29 pages |
 | Functions tests | passed | 42 tests, 0 failures |
+| Preview deployment | passed | Cloudflare Pages preview `https://codex-owned-funnel-launch.owned-funnel-builder.pages.dev` (deployment `3ccc552c`) |
+| Preview route/metadata readback | passed | Three funnel routes plus Terms and Privacy returned 200 with canonical and OG metadata |
 | Focused Astro/type check | passed for changed standard files; repository check blocked | `dodo.ts` and `migrations.test.mts` fixes type-check; `npm run typecheck` still reports 17 pre-existing `packages/mcp` diagnostics because `@modelcontextprotocol/sdk` is unavailable |
 | Live Dodo products/webhook | unverified | Requires Dodo live credentials and account readback |
 | Dodo `$1` canary sequence | unverified | Test mode cannot validate one-click upsells; requires one temporary live `$1` product and owner-entered live card for each of the 11 paid stages, with immediate refund/revocation |
 | Admaxxer live website/CAPI | unverified | Production secret name exists; local BWS lacks `ADMAXXER_API_KEY`, and live API/CAPI event readback is still required |
 | Production D1 migration | passed | Cloudflare remote receipt applied `0006_stripe_provider.sql` and `0007_webhook_retry_and_revocations.sql`; schema and product mapping readback passed |
-| Production deployment | unverified | Requires approved release credentials |
+| Production deployment | unverified | Requires Dodo live configuration and approved release promotion |
 
 ## Read-only Cloudflare baseline
 
