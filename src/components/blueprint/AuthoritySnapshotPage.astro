@@ -1,5 +1,4 @@
 ---
-import BlueprintNav from '@/components/blueprint/BlueprintNav.astro';
 import BlueprintFunnelRuntime from '@/components/blueprint/BlueprintFunnelRuntime.astro';
 import ExperienceProofStrip from '@/components/blueprint/ExperienceProofStrip.astro';
 import PreviewNotice from '@/components/blueprint/PreviewNotice.astro';
@@ -13,7 +12,6 @@ interface Props {
 
 const { audience, description = audience.snapshotSubheadline } = Astro.props;
 const snapshot = blueprintProductContract.authoritySnapshot;
-const sample = blueprintProductContract.illustrativeSample;
 const title = `Free Authority Snapshot for ${audience.switchLabel}`;
 ---
 
@@ -25,206 +23,94 @@ const title = `Free Authority Snapshot for ${audience.switchLabel}`;
     data-preview-status={blueprintProductContract.status}
   >
     <PreviewNotice />
-    <BlueprintNav family="authority-snapshot" activeAudience={audience.slug} />
+    <ExperienceProofStrip />
 
-    <main>
-      <section class="px-4 py-12 sm:px-6 sm:py-20" aria-labelledby="snapshot-title">
-        <div class="mx-auto grid max-w-6xl gap-10 lg:grid-cols-[1fr_0.82fr] lg:items-center">
-          <div>
-            <p class="text-sm font-bold uppercase tracking-[0.14em] text-brand">
-              Free · built for {audience.plural}
-            </p>
-            <h1
-              id="snapshot-title"
-              class="mt-4 max-w-4xl text-balance text-4xl font-bold leading-[1.02] tracking-[-0.045em] sm:text-6xl"
-            >
-              {audience.snapshotHeadline}
-            </h1>
-            <p class="mt-5 max-w-2xl text-lg leading-relaxed text-muted-foreground sm:text-xl">
-              {audience.snapshotSubheadline}
-            </p>
-
-            <form
-              data-blueprint-start-form
-              class="mt-8 max-w-2xl rounded-2xl border border-border bg-card p-5 shadow-sm sm:p-6"
-              aria-describedby="snapshot-form-status"
-            >
-              <div class="grid gap-4 sm:grid-cols-2">
-                <label class="block text-sm font-bold" for={`snapshot-linkedin-${audience.slug}`}>
-                  LinkedIn profile
-                  <input
-                    id={`snapshot-linkedin-${audience.slug}`}
-                    name="linkedin"
-                    data-blueprint-input
-                    type="url"
-                    inputmode="url"
-                    autocomplete="url"
-                    placeholder="linkedin.com/in/you"
-                    disabled
-                    required
-                    class="mt-2 min-h-14 w-full rounded-xl border-2 border-border bg-background px-4 text-base disabled:cursor-not-allowed disabled:bg-muted"
-                  />
-                </label>
-                <label class="block text-sm font-bold" for={`snapshot-email-${audience.slug}`}>
-                  Email for your result
-                  <input
-                    id={`snapshot-email-${audience.slug}`}
-                    name="email"
-                    data-blueprint-input
-                    type="email"
-                    inputmode="email"
-                    autocomplete="email"
-                    placeholder="you@company.com"
-                    disabled
-                    required
-                    class="mt-2 min-h-14 w-full rounded-xl border-2 border-border bg-background px-4 text-base disabled:cursor-not-allowed disabled:bg-muted"
-                  />
-                </label>
-              </div>
-              <BlueprintFunnelRuntime
-                audience={audience.slug}
-                mode="snapshot"
-                thankYouPath={`/authority-snapshot/${audience.slug}/thank-you/`}
-              />
-              <button
-                type="submit"
-                disabled
-                data-blueprint-primary-action
-                data-acceptance-cta="snapshot-form"
-                class="mt-4 inline-flex min-h-16 w-full cursor-not-allowed items-center justify-center rounded-xl bg-brand px-6 py-4 text-center text-lg font-bold text-brand-foreground opacity-60"
-              >
-                {snapshot.ctaLabel}
-              </button>
-              <p class="mt-3 text-center text-sm text-muted-foreground">
-                Free · private · nothing is posted to LinkedIn
-              </p>
-              <p
-                id="snapshot-form-status"
-                data-blueprint-runtime-status
-                aria-live="polite"
-                class="mt-3 text-center text-sm font-semibold text-muted-foreground"
-              >
-                Add your profile and email to see your private result.
-              </p>
-            </form>
-          </div>
-
-          <aside
-            class="rounded-2xl border border-border bg-foreground p-6 text-background shadow-xl sm:p-8"
-          >
-            <p class="text-xs font-bold uppercase tracking-[0.14em] text-background/60">
-              Example Snapshot
-            </p>
-            <div class="mt-5 flex items-end gap-2">
-              <span class="text-6xl font-bold tracking-tight">{sample.snapshotScore}</span>
-              <span class="pb-2 text-xl text-background/60">/ 40</span>
-            </div>
-            <div class="mt-7 border-t border-background/20 pt-6">
-              <p class="text-sm font-bold text-brand-soft">The biggest missed opportunity</p>
-              <p class="mt-2 text-xl font-semibold leading-snug">{audience.exampleFinding}</p>
-            </div>
-            <div class="mt-6 rounded-xl bg-background p-5 text-foreground">
-              <p class="text-xs font-bold uppercase tracking-[0.12em] text-brand">First move</p>
-              <p class="mt-2 font-semibold leading-relaxed">{audience.examplePriorities[0]}</p>
-            </div>
-            <p class="mt-4 text-xs leading-relaxed text-background/55">
-              Example only. Your result uses your public profile and content.
-            </p>
-          </aside>
-        </div>
-      </section>
-
-      <ExperienceProofStrip />
-
+    <main class="min-h-screen bg-background px-4 py-10 sm:px-6 sm:py-16">
       <section
-        class="border-b border-border bg-muted px-4 py-16 sm:px-6"
-        aria-labelledby="snapshot-output-title"
+        class="mx-auto grid max-w-5xl gap-10 lg:grid-cols-[1fr_0.82fr] lg:items-center"
+        aria-labelledby="snapshot-title"
       >
-        <div class="mx-auto max-w-6xl">
-          <div class="mx-auto max-w-3xl text-center">
-            <p class="text-sm font-bold uppercase tracking-[0.14em] text-brand">One clear answer</p>
-            <h2
-              id="snapshot-output-title"
-              class="mt-3 text-balance text-3xl font-bold tracking-tight sm:text-5xl"
-            >
-              See why strong work is not turning into visible authority.
-            </h2>
-          </div>
-          <ol class="mt-10 grid gap-4 md:grid-cols-3">
-            <li class="rounded-2xl border border-border bg-card p-6">
-              <span class="text-sm font-bold text-brand">01</span>
-              <h3 class="mt-3 text-xl font-bold">What buyers see</h3>
-              <p class="mt-2 leading-relaxed text-muted-foreground">
-                A simple read of the message and proof visible on your LinkedIn.
-              </p>
-            </li>
-            <li class="rounded-2xl border border-border bg-card p-6">
-              <span class="text-sm font-bold text-brand">02</span>
-              <h3 class="mt-3 text-xl font-bold">What is getting lost</h3>
-              <p class="mt-2 leading-relaxed text-muted-foreground">
-                The single clearest gap stopping the right buyer from understanding your value.
-              </p>
-            </li>
-            <li class="rounded-2xl border border-border bg-card p-6">
-              <span class="text-sm font-bold text-brand">03</span>
-              <h3 class="mt-3 text-xl font-bold">What to fix first</h3>
-              <p class="mt-2 leading-relaxed text-muted-foreground">
-                One practical move and a starter post built from what is already public.
-              </p>
-            </li>
-          </ol>
-        </div>
-      </section>
-
-      <section class="px-4 py-16 sm:px-6" aria-labelledby="snapshot-proof-title">
-        <div class="mx-auto grid max-w-5xl gap-8 lg:grid-cols-[0.75fr_1.25fr] lg:items-center">
-          <div>
-            <p class="text-5xl font-bold tracking-tight">300+</p>
-            <p class="mt-2 font-semibold">agencies helped through Tim’s earlier programs</p>
-          </div>
-          <figure class="rounded-2xl border border-border bg-card p-6 sm:p-8">
-            <blockquote class="text-xl font-semibold leading-relaxed">
-              “{blueprintProductContract.testimonials[0].quote}”
-            </blockquote>
-            <figcaption class="mt-4 text-sm text-muted-foreground">
-              {blueprintProductContract.testimonials[0].author} · {
-                blueprintProductContract.testimonials[0].role
-              }
-            </figcaption>
-            <p class="mt-4 text-xs leading-relaxed text-muted-foreground">
-              Earlier coaching result. It is not a result from this new Snapshot.
-            </p>
-          </figure>
-        </div>
-      </section>
-
-      <section class="bg-foreground px-4 py-16 text-background sm:px-6">
-        <div class="mx-auto max-w-4xl text-center">
-          <h2 class="text-balance text-3xl font-bold sm:text-5xl">Find the first thing to fix.</h2>
-          <p class="mx-auto mt-4 max-w-2xl text-lg text-background/70">
-            Two details. One private result. No generic audit report.
+        <div>
+          <p class="text-sm font-bold uppercase tracking-[0.14em] text-brand">
+            Free Authority Snapshot for {audience.plural}
           </p>
+          <h1
+            id="snapshot-title"
+            class="mt-4 max-w-3xl text-balance text-4xl font-bold leading-[1.02] tracking-[-0.045em] sm:text-6xl"
+          >
+            {audience.snapshotHeadline}
+          </h1>
+          <p class="mt-5 max-w-2xl text-lg leading-relaxed text-muted-foreground sm:text-xl">
+            {audience.snapshotSubheadline}
+          </p>
+          <p class="mt-6 max-w-xl text-sm leading-relaxed text-muted-foreground">
+            Built from Tim Keen’s experience helping 300+ agencies through earlier programs. Your
+            result is private, and nothing is posted to LinkedIn.
+          </p>
+        </div>
+
+        <form
+          data-blueprint-start-form
+          class="rounded-2xl border border-border bg-card p-5 shadow-xl sm:p-7"
+          aria-describedby="snapshot-form-status"
+        >
+          <p class="text-xl font-bold">See the first thing to fix.</p>
+          <div class="mt-5 grid gap-4">
+            <label class="block text-sm font-bold" for={`snapshot-linkedin-${audience.slug}`}>
+              LinkedIn profile
+              <input
+                id={`snapshot-linkedin-${audience.slug}`}
+                name="linkedin"
+                data-blueprint-input
+                type="url"
+                inputmode="url"
+                autocomplete="url"
+                placeholder="linkedin.com/in/you"
+                disabled
+                required
+                class="mt-2 min-h-14 w-full rounded-xl border-2 border-border bg-background px-4 text-base disabled:cursor-not-allowed disabled:bg-muted"
+              />
+            </label>
+            <label class="block text-sm font-bold" for={`snapshot-email-${audience.slug}`}>
+              Email for your result
+              <input
+                id={`snapshot-email-${audience.slug}`}
+                name="email"
+                data-blueprint-input
+                type="email"
+                inputmode="email"
+                autocomplete="email"
+                placeholder="you@company.com"
+                disabled
+                required
+                class="mt-2 min-h-14 w-full rounded-xl border-2 border-border bg-background px-4 text-base disabled:cursor-not-allowed disabled:bg-muted"
+              />
+            </label>
+          </div>
+          <BlueprintFunnelRuntime
+            audience={audience.slug}
+            mode="snapshot"
+            thankYouPath={`/authority-snapshot/${audience.slug}/thank-you/`}
+          />
           <button
-            type="button"
+            type="submit"
             disabled
-            data-acceptance-cta="snapshot-mobile"
-            class="mt-7 inline-flex min-h-16 w-full cursor-not-allowed items-center justify-center rounded-xl bg-brand px-6 py-4 text-lg font-bold text-brand-foreground opacity-60 sm:w-auto sm:min-w-80"
+            data-blueprint-primary-action
+            data-acceptance-cta="snapshot-form"
+            class="mt-4 inline-flex min-h-16 w-full cursor-not-allowed items-center justify-center rounded-xl bg-brand px-6 py-4 text-center text-lg font-bold text-brand-foreground opacity-60"
           >
             {snapshot.ctaLabel}
           </button>
-        </div>
+          <p
+            id="snapshot-form-status"
+            data-blueprint-runtime-status
+            aria-live="polite"
+            class="mt-3 text-center text-sm font-semibold text-muted-foreground"
+          >
+            Add your profile and email to see your private result.
+          </p>
+        </form>
       </section>
     </main>
-
-    <footer class="px-4 py-8 text-sm text-muted-foreground sm:px-6">
-      <div class="mx-auto flex max-w-6xl flex-wrap items-center justify-between gap-4">
-        <p>© Modern Agency Sales</p>
-        <div class="flex gap-4">
-          <a href="/privacy/" class="underline">Privacy</a><a href="/terms/" class="underline"
-            >Terms</a
-          >
-        </div>
-      </div>
-    </footer>
   </div>
 </OfferLayout>
