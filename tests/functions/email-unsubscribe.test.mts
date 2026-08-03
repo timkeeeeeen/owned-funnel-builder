@@ -37,7 +37,9 @@ class Statement implements D1PreparedStatement {
 class UnsubscribeDatabase implements D1Database {
   subscriberStatus = 'subscribed';
   suppressions = 0;
+  queries: string[] = [];
   prepare(query: string): D1PreparedStatement {
+    this.queries.push(query);
     return new Statement(query, (_statement, values, method) => {
       if (query.includes('SELECT email FROM email_subscribers')) {
         return values[0] === 'subscriber-1' ? { email: 'person@example.com' } : null;
@@ -116,6 +118,10 @@ test('unsubscribe immediately suppresses marketing and is idempotent', async () 
   assert.equal(duplicate.status, 200);
   assert.equal(database.subscriberStatus, 'unsubscribed');
   assert.equal(database.suppressions, 2);
+  const suppressionWrite = database.queries.find((query) =>
+    query.includes('INSERT INTO email_suppressions')
+  );
+  assert.match(suppressionWrite ?? '', /WHERE email_suppressions\.reason = 'unsubscribe'/);
 });
 
 test('visible unsubscribe links open a confirmation page without mutating consent', async () => {

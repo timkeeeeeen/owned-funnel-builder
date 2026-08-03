@@ -61,7 +61,8 @@ export async function onRequestPost(context: PagesContext): Promise<Response> {
       `INSERT INTO email_suppressions (email, reason, source, suppressed_at, updated_at)
        VALUES (?, 'unsubscribe', 'link', ?, ?)
        ON CONFLICT(email) DO UPDATE SET reason = 'unsubscribe', source = 'link',
-         suppressed_at = excluded.suppressed_at, updated_at = excluded.updated_at`
+         suppressed_at = excluded.suppressed_at, updated_at = excluded.updated_at
+       WHERE email_suppressions.reason = 'unsubscribe'`
     )
     .bind(subscriber.email, now, now)
     .run();
