@@ -32,6 +32,7 @@ class Statement implements D1PreparedStatement {
 class WebhookDatabase implements D1Database {
   fingerprints = new Set<string>();
   suppressions = 0;
+  suppression: { reason: string; source: string } | null = null;
   subscriberUpdates = 0;
   softBounces = 0;
   queries: string[] = [];
@@ -47,6 +48,19 @@ class WebhookDatabase implements D1Database {
       if (query.includes('INSERT INTO email_suppressions')) {
         if (query.includes("'soft_bounce'") && this.softBounces < 3) {
           return { success: true, meta: { changes: 0 } };
+        }
+        const reason = query.includes("'soft_bounce'") ? 'soft_bounce' : String(values[1]);
+        const preserveExistingReason =
+          query.includes("excluded.reason = 'unsubscribe'") &&
+          reason === 'unsubscribe' &&
+          this.suppression?.reason !== 'unsubscribe';
+        const onlyUpdateSoftBounce =
+          query.includes("WHERE email_suppressions.reason = 'soft_bounce'") &&
+          this.suppression?.reason !== 'soft_bounce';
+        if (!this.suppression) {
+          this.suppression = { reason, source: 'postmark' };
+        } else if (!preserveExistingReason && !onlyUpdateSoftBounce) {
+          this.suppression = { reason, source: 'postmark' };
         }
         this.suppressions += 1;
         return { success: true, meta: { changes: 1 } };
@@ -163,4 +177,63 @@ test('Postmark unsubscribe and spam complaint suppress marketing immediately', a
     assert.equal(response.status, 200);
     assert.equal(database.suppressions, 1);
   }
+});
+
+test('Postmark retains permanent and operator suppressions across later events', async () => {
+  const database = new WebhookDatabase();
+  const post = async (payload: Record<string, unknown>) => {
+    const response = await receivePostmarkWebhook({
+      request: request(payload),
+      env: environment(database),
+    });
+    assert.equal(response.status, 200);
+  };
+
+  await post({
+    RecordType: 'Bounce',
+    Type: 'HardBounce',
+    Email: 'person@example.com',
+    MessageID: 'hard-bounce',
+    MessageStream: 'broadcast',
+    BouncedAt: '2026-08-02T12:00:00.000Z',
+  });
+  await post({
+    RecordType: 'SubscriptionChange',
+    Recipient: 'person@example.com',
+    MessageID: 'unsubscribe',
+    MessageStream: 'broadcast',
+    SuppressSending: true,
+    ChangedAt: '2026-08-03T12:00:00.000Z',
+  });
+  assert.deepEqual(database.suppression, { reason: 'hard_bounce', source: 'postmark' });
+
+  for (let index = 1; index <= 3; index += 1) {
+    await post({
+      RecordType: 'Bounce',
+      Type: 'SoftBounce',
+      Email: 'person@example.com',
+      MessageID: `soft-bounce-${index}`,
+      MessageStream: 'broadcast',
+      BouncedAt: `2026-08-0${index + 3}T12:00:00.000Z`,
+    });
+  }
+  assert.deepEqual(database.suppression, { reason: 'hard_bounce', source: 'postmark' });
+
+  const operatorDatabase = new WebhookDatabase();
+  operatorDatabase.suppression = { reason: 'manual', source: 'operator' };
+  for (let index = 1; index <= 3; index += 1) {
+    const response = await receivePostmarkWebhook({
+      request: request({
+        RecordType: 'Bounce',
+        Type: 'SoftBounce',
+        Email: 'operator@example.com',
+        MessageID: `operator-soft-bounce-${index}`,
+        MessageStream: 'broadcast',
+        BouncedAt: `2026-08-0${index + 3}T12:00:00.000Z`,
+      }),
+      env: environment(operatorDatabase),
+    });
+    assert.equal(response.status, 200);
+  }
+  assert.deepEqual(operatorDatabase.suppression, { reason: 'manual', source: 'operator' });
 });

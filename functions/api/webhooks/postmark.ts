@@ -96,7 +96,12 @@ export async function onRequestPost(context: PagesContext): Promise<Response> {
     await context.env.LEADS.prepare(
       `INSERT INTO email_suppressions (email, reason, source, suppressed_at, updated_at)
        VALUES (?, ?, 'postmark', ?, ?)
-       ON CONFLICT(email) DO UPDATE SET reason = excluded.reason, source = 'postmark',
+       ON CONFLICT(email) DO UPDATE SET
+         reason = CASE
+           WHEN excluded.reason = 'unsubscribe' AND reason <> 'unsubscribe' THEN reason
+           ELSE excluded.reason
+         END,
+         source = 'postmark',
          suppressed_at = excluded.suppressed_at, updated_at = excluded.updated_at`
     )
       .bind(email, reason, occurredAt, now)
@@ -126,7 +131,8 @@ export async function onRequestPost(context: PagesContext): Promise<Response> {
          SELECT 1 FROM email_subscribers WHERE email = ? AND soft_bounce_count >= 3
        )
        ON CONFLICT(email) DO UPDATE SET reason = 'soft_bounce', source = 'postmark',
-         suppressed_at = excluded.suppressed_at, updated_at = excluded.updated_at`
+         suppressed_at = excluded.suppressed_at, updated_at = excluded.updated_at
+       WHERE email_suppressions.reason = 'soft_bounce'`
     )
       .bind(email, occurredAt, now, email)
       .run();
