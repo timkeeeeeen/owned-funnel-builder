@@ -1,5 +1,5 @@
 {
-  "published": false,
+  "published": true,
   "slug": "talking-head-ad-machine",
   "productName": "Talking-Head Ad Machine",
   "eyebrow": "A local-first editing workspace for Codex and Claude Code",
@@ -13,7 +13,7 @@
   "checkoutUrl": "/talking-head-ad-machine/#get-it",
   "checkout": {
     "provider": "provider-checkout",
-    "enabled": false,
+    "enabled": true,
     "eyebrow": "Secure checkout",
     "title": "Where should we send your Ad Machine?",
     "description": "Enter your best email. We will open secure checkout and deliver the core ZIP plus any purchased modules after purchase.",

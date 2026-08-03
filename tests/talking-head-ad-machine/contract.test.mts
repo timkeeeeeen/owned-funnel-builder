@@ -24,17 +24,17 @@ test('core, bump, and upsell prices stay aligned with the offer', async () => {
   assert.equal(funnel.upsells[0].price, '$37');
 });
 
-test('the offer and checkout remain held until fulfillment acceptance passes', async () => {
+test('the offer and checkout are enabled for launch after fulfillment acceptance', async () => {
   const offer = await readJson('src/content/offers/talking-head-ad-machine.json');
   const page = await readFile(
     resolve(root, 'src/pages/talking-head-ad-machine/index.astro'),
     'utf8'
   );
 
-  assert.equal(offer.published, false);
-  assert.equal(offer.checkout.enabled, false);
-  assert.match(page, /Checkout held for final test-mode fulfillment/);
-  assert.match(page, /aria-disabled=\{!checkoutReady/);
+  assert.equal(offer.published, true);
+  assert.equal(offer.checkout.enabled, true);
+  assert.match(page, /checkoutReady \? offer\.ctaLabel/);
+  assert.match(page, /data-offer-checkout-trigger=\{checkoutReady \? '' : undefined\}/);
   assert.match(page, /noindex=\{!offer\.published\}/);
 });
 
