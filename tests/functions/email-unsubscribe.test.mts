@@ -5,6 +5,7 @@ import {
   createUnsubscribeToken,
   verifyUnsubscribeToken,
 } from '../../functions/_lib/emailTokens.ts';
+import * as unsubscribeHandlers from '../../functions/api/email/unsubscribe.ts';
 import { onRequestPost as unsubscribe } from '../../functions/api/email/unsubscribe.ts';
 import type { D1Database, D1PreparedStatement, D1RunResult } from '../../functions/_lib/runtime.ts';
 
@@ -115,4 +116,36 @@ test('unsubscribe immediately suppresses marketing and is idempotent', async () 
   assert.equal(duplicate.status, 200);
   assert.equal(database.subscriberStatus, 'unsubscribed');
   assert.equal(database.suppressions, 2);
+});
+
+test('visible unsubscribe links open a confirmation page without mutating consent', async () => {
+  const database = new UnsubscribeDatabase();
+  const secret = 'unsubscribe-secret-at-least-32-characters';
+  const token = await createUnsubscribeToken({
+    subscriberId: 'subscriber-1',
+    secret,
+    nowSeconds: Math.floor(Date.now() / 1000),
+  });
+  const getHandler = (
+    unsubscribeHandlers as unknown as {
+      onRequestGet?: (context: {
+        request: Request;
+        env: { LEADS: D1Database; EMAIL_UNSUBSCRIBE_SECRET: string };
+      }) => Promise<Response>;
+    }
+  ).onRequestGet;
+
+  assert.equal(typeof getHandler, 'function');
+  if (!getHandler) return;
+  const response = await getHandler({
+    request: new Request(
+      `https://funnels.example/api/email/unsubscribe?token=${encodeURIComponent(token)}`
+    ),
+    env: { LEADS: database, EMAIL_UNSUBSCRIBE_SECRET: secret },
+  });
+
+  assert.equal(response.status, 200);
+  assert.match(await response.text(), /Confirm unsubscribe/i);
+  assert.equal(database.subscriberStatus, 'subscribed');
+  assert.equal(database.suppressions, 0);
 });

@@ -240,6 +240,11 @@ test('checkout creates the configured cart, bump, steps, and first upsell return
     database.calls.filter((call) => call.query.includes('INSERT INTO email_subscribers')).length,
     1
   );
+  const clearedSuppression = database.calls.find((call) =>
+    call.query.includes('DELETE FROM email_suppressions')
+  );
+  assert.match(clearedSuppression?.query ?? '', /reason = 'unsubscribe'/);
+  assert.deepEqual(clearedSuppression?.values, ['owner@example.com']);
   assert.equal(
     database.calls.filter((call) => call.query.includes('INSERT INTO funnel_step_runs')).length,
     2

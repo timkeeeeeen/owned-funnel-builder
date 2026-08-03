@@ -267,6 +267,11 @@ export async function onRequestPost(context: PagesContext): Promise<Response> {
         )
         .run();
       if (!subscriberResult.success) throw new Error('Marketing opt-in could not be recorded.');
+      await env.LEADS.prepare(
+        "DELETE FROM email_suppressions WHERE email = ? AND reason = 'unsubscribe'"
+      )
+        .bind(email)
+        .run();
     }
 
     const funnelResult = await env.LEADS.prepare(
