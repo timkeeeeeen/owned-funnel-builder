@@ -134,10 +134,7 @@ async function assertPaymentMatchesCatalog(
     products.every(Boolean) &&
     cart?.length === expectedProductIds.length &&
     cart.every(
-      (item) =>
-        item !== null &&
-        item.quantity === 1 &&
-        expectedProductIds.includes(item.productId)
+      (item) => item !== null && item.quantity === 1 && expectedProductIds.includes(item.productId)
     ) &&
     new Set(cart.filter(Boolean).map((item) => item?.productId)).size === expectedProductIds.length;
   const expectedAmount = products.reduce(
@@ -232,7 +229,9 @@ async function markPaymentSucceeded(
   });
   if (
     !attributed &&
-    ['live', 'live_mode', 'production'].includes(readEnvironmentValue(env, 'DODO_PAYMENTS_ENVIRONMENT'))
+    ['live', 'live_mode', 'production'].includes(
+      readEnvironmentValue(env, 'DODO_PAYMENTS_ENVIRONMENT')
+    )
   ) {
     throw new Error('Live payment attribution is not configured.');
   }

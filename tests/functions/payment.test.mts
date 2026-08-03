@@ -1399,7 +1399,10 @@ test('refund before Dodo success prevents fulfillment', async () => {
     },
   });
 
-  assert.equal(database.calls.some(({ query }) => query.includes('UPDATE funnel_runs')), false);
+  assert.equal(
+    database.calls.some(({ query }) => query.includes('UPDATE funnel_runs')),
+    false
+  );
   assert.equal(
     database.calls.some(({ query }) => query.includes('INSERT OR IGNORE INTO fulfillments')),
     false
@@ -1451,7 +1454,10 @@ test('Dodo payment fulfillment fails closed on product, amount, currency, or car
       }),
       /does not match the configured Dodo product/
     );
-    assert.equal(database.calls.some(({ query }) => query.includes('fulfillments')), false);
+    assert.equal(
+      database.calls.some(({ query }) => query.includes('fulfillments')),
+      false
+    );
   }
 });
 
@@ -1560,7 +1566,10 @@ test('missing Admaxxer configuration retries live Dodo payments', async () => {
     ),
     /Live payment attribution is not configured/
   );
-  assert.equal(database.calls.some(({ query }) => query.includes("SET status = 'processed'")), false);
+  assert.equal(
+    database.calls.some(({ query }) => query.includes("SET status = 'processed'")),
+    false
+  );
   assert.equal(
     database.calls.some(
       ({ query }) => query.includes("SET status = 'failed'") && query.includes('webhook_events')

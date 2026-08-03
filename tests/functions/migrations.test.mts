@@ -64,10 +64,7 @@ test('0006 and 0007 preserve representative funnel data and add retry state', as
   const provider = database
     .prepare('SELECT payment_provider FROM checkout_leads WHERE id = ?')
     .get('lead-1') as { payment_provider: string };
-  assert.equal(
-    provider.payment_provider,
-    'dodo'
-  );
+  assert.equal(provider.payment_provider, 'dodo');
   const webhookColumns = database.prepare('PRAGMA table_info(webhook_events)').all();
   assert.ok(webhookColumns.some((column) => column.name === 'attempt_started_at'));
   const revocationColumns = database.prepare('PRAGMA table_info(payment_revocations)').all();
