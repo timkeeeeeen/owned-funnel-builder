@@ -13,6 +13,7 @@ import type {
   Environment,
 } from '../../functions/_lib/runtime.ts';
 import { onRequestPost as createCheckout } from '../../functions/api/checkout.ts';
+import { MARKETING_CONSENT_VERSION } from '../../src/data/emailConsent.ts';
 import { onRequestPost as decideUpsell } from '../../functions/api/funnel/decision.ts';
 import { onRequestGet as getFunnelStatus } from '../../functions/api/funnel/status.ts';
 import {
@@ -176,6 +177,22 @@ function checkoutDatabase(products: Record<string, string>): FakeDatabase {
   });
 }
 
+test('offer checkout metadata uses the canonical marketing consent version', async () => {
+  assert.equal(MARKETING_CONSENT_VERSION, 'marketing-v1-2026-08-02');
+  for (const offer of [
+    'owned-funnel-builder',
+    'talking-head-ad-machine',
+    'vibe-code-anything',
+  ]) {
+    const file = await readFile(
+      new URL(`../../src/content/offers/${offer}.json`, import.meta.url),
+      'utf8'
+    );
+    const metadata = JSON.parse(file) as { checkout: { consentVersion: string } };
+    assert.equal(metadata.checkout.consentVersion, MARKETING_CONSENT_VERSION);
+  }
+});
+
 test('checkout creates the configured cart, bump, steps, and first upsell return path', async () => {
   const database = checkoutDatabase({
     'owned-funnel-builder': 'prod_main',
@@ -202,7 +219,7 @@ test('checkout creates the configured cart, bump, steps, and first upsell return
       email: 'OWNER@example.com',
       offerSlug: 'owned-funnel-builder',
       placement: 'hero',
-      consentVersion: 'v1',
+      consentVersion: MARKETING_CONSENT_VERSION,
       marketingOptIn: true,
       bumpAccepted: true,
       attribution: { utm_source: 'newsletter', ignored: 'nope' },
@@ -286,7 +303,7 @@ test('checkout validates the canonical consent version and sanitizes source plac
       email: 'owner@example.com',
       offerSlug: 'owned-funnel-builder',
       placement: 'forged-placement',
-      consentVersion: 'v1',
+      consentVersion: MARKETING_CONSENT_VERSION,
       marketingOptIn: true,
     }),
     env: environment,
@@ -297,8 +314,8 @@ test('checkout validates the canonical consent version and sanitizes source plac
     call.query.includes('INSERT INTO email_subscribers')
   );
   assert.equal(leadWrite?.values[3], 'unknown');
-  assert.equal(leadWrite?.values[5], 'v1');
-  assert.equal(subscriberWrite?.values[3], 'v1');
+  assert.equal(leadWrite?.values[5], MARKETING_CONSENT_VERSION);
+  assert.equal(subscriberWrite?.values[3], MARKETING_CONSENT_VERSION);
   assert.equal(subscriberWrite?.values[5], 'unknown');
 });
 

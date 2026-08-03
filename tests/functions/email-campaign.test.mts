@@ -89,11 +89,11 @@ class CampaignDatabase implements D1Database {
       if (query.includes('INSERT INTO email_campaign_recipients')) this.recipientWrites += 1;
       if (query.includes('UPDATE email_campaign_recipients')) {
         this.recipientUpdates.push(
-          query.includes("error_code = 'suppressed_before_send'")
-            ? { status: 'permanent_failure', errorCode: 'suppressed_before_send' }
+          query.includes("error_code = NULL")
+            ? { status: 'permanent_failure', errorCode: null }
             : query.includes('provider_message_id = NULL')
-              ? { status: String(values[0]), errorCode: values[1] }
-              : { status: String(values[0]), errorCode: values[2] }
+              ? { status: String(values[0]), errorCode: values[1] as number | null }
+              : { status: String(values[0]), errorCode: values[2] as number | null }
         );
       }
       if (method === 'run') return { success: true, meta: { changes: 1 } };
@@ -225,12 +225,19 @@ test('campaign rechecks suppression eligibility before its Postmark batch', asyn
   };
 
   const response = await campaign({ request: request('send'), env: environment(database) });
+  const body = (await response.json()) as Record<string, unknown>;
 
   assert.equal(response.status, 200);
   assert.equal(providerBody.length, 1);
+  assert.equal(body.failed, 1);
   assert.ok(
     database.recipientUpdates.some(
-      (update) => update.status === 'permanent_failure' && update.errorCode === 'suppressed_before_send'
+      (update) => update.status === 'permanent_failure' && update.errorCode === null
+    )
+  );
+  assert.ok(
+    database.queries.some((query) =>
+      query.includes("error_message = 'Recipient was suppressed before delivery.'")
     )
   );
 });
@@ -246,6 +253,7 @@ test('campaign records a terminal state when the Postmark batch request throws',
   assert.equal(response.status, 502);
   assert.equal(database.recipientUpdates.length, 2);
   assert.ok(database.recipientUpdates.every((update) => update.status === 'permanent_failure'));
+  assert.ok(database.recipientUpdates.every((update) => update.errorCode === null));
 });
 
 test('global campaigns send only the newest subscribed consent per normalized email', async () => {

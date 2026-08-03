@@ -192,11 +192,11 @@ export async function onRequestPost(context: PagesContext): Promise<Response> {
     .all<Subscriber>();
   const eligibleRecipients = finalAudience.results ?? [];
   const eligibleIds = new Set(eligibleRecipients.map((subscriber) => subscriber.id));
-  for (const subscriber of recipients) {
-    if (eligibleIds.has(subscriber.id)) continue;
+  const excludedRecipients = recipients.filter((subscriber) => !eligibleIds.has(subscriber.id));
+  for (const subscriber of excludedRecipients) {
     await database.prepare(
       `UPDATE email_campaign_recipients
-       SET status = 'permanent_failure', error_code = 'suppressed_before_send',
+       SET status = 'permanent_failure', error_code = NULL,
          error_message = 'Recipient was suppressed before delivery.', updated_at = ?
        WHERE campaign_id = ? AND subscriber_id = ?`
     )
@@ -250,7 +250,7 @@ export async function onRequestPost(context: PagesContext): Promise<Response> {
   } catch (error) {
     const retryable = error instanceof PostmarkEmailError && error.retryable;
     const status = retryable ? 'transient_failure' : 'permanent_failure';
-    const errorCode = error instanceof PostmarkEmailError ? error.status : 'batch_error';
+    const errorCode = error instanceof PostmarkEmailError ? error.status : null;
     const message = error instanceof Error ? error.message.slice(0, 300) : 'Postmark batch failed.';
     for (const subscriber of recipients) {
       await database.prepare(
@@ -268,7 +268,7 @@ export async function onRequestPost(context: PagesContext): Promise<Response> {
     );
   }
   let accepted = 0;
-  let failed = 0;
+  let failed = excludedRecipients.length;
   for (const result of results) {
     if (result.status === 'accepted') accepted += 1;
     else failed += 1;
