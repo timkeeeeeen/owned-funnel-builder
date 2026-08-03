@@ -102,7 +102,8 @@ export async function onRequestPost(context: PagesContext): Promise<Response> {
            ELSE excluded.reason
          END,
          source = 'postmark',
-         suppressed_at = excluded.suppressed_at, updated_at = excluded.updated_at`
+         suppressed_at = excluded.suppressed_at, updated_at = excluded.updated_at
+       WHERE excluded.reason <> 'unsubscribe' OR email_suppressions.reason = 'unsubscribe'`
     )
       .bind(email, reason, occurredAt, now)
       .run();

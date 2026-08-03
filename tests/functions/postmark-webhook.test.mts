@@ -32,7 +32,12 @@ class Statement implements D1PreparedStatement {
 class WebhookDatabase implements D1Database {
   fingerprints = new Set<string>();
   suppressions = 0;
-  suppression: { reason: string; source: string } | null = null;
+  suppression: {
+    reason: string;
+    source: string;
+    suppressedAt: string;
+    updatedAt: string;
+  } | null = null;
   subscriberUpdates = 0;
   softBounces = 0;
   queries: string[] = [];
@@ -54,13 +59,24 @@ class WebhookDatabase implements D1Database {
           query.includes("excluded.reason = 'unsubscribe'") &&
           reason === 'unsubscribe' &&
           this.suppression?.reason !== 'unsubscribe';
+        const preserveExistingSuppression =
+          query.includes("WHERE excluded.reason <> 'unsubscribe'") &&
+          reason === 'unsubscribe' &&
+          this.suppression?.reason !== 'unsubscribe';
         const onlyUpdateSoftBounce =
           query.includes("WHERE email_suppressions.reason = 'soft_bounce'") &&
           this.suppression?.reason !== 'soft_bounce';
+        const suppressedAt = String(values[query.includes("'soft_bounce'") ? 1 : 2]);
+        const updatedAt = String(values[query.includes("'soft_bounce'") ? 2 : 3]);
         if (!this.suppression) {
-          this.suppression = { reason, source: 'postmark' };
-        } else if (!preserveExistingReason && !onlyUpdateSoftBounce) {
-          this.suppression = { reason, source: 'postmark' };
+          this.suppression = { reason, source: 'postmark', suppressedAt, updatedAt };
+        } else if (!preserveExistingSuppression && !onlyUpdateSoftBounce) {
+          this.suppression = {
+            reason: preserveExistingReason ? this.suppression.reason : reason,
+            source: 'postmark',
+            suppressedAt,
+            updatedAt,
+          };
         }
         this.suppressions += 1;
         return { success: true, meta: { changes: 1 } };
@@ -205,7 +221,7 @@ test('Postmark retains permanent and operator suppressions across later events',
     SuppressSending: true,
     ChangedAt: '2026-08-03T12:00:00.000Z',
   });
-  assert.deepEqual(database.suppression, { reason: 'hard_bounce', source: 'postmark' });
+  assert.equal(database.suppression?.reason, 'hard_bounce');
 
   for (let index = 1; index <= 3; index += 1) {
     await post({
@@ -217,10 +233,15 @@ test('Postmark retains permanent and operator suppressions across later events',
       BouncedAt: `2026-08-0${index + 3}T12:00:00.000Z`,
     });
   }
-  assert.deepEqual(database.suppression, { reason: 'hard_bounce', source: 'postmark' });
+  assert.equal(database.suppression?.reason, 'hard_bounce');
 
   const operatorDatabase = new WebhookDatabase();
-  operatorDatabase.suppression = { reason: 'manual', source: 'operator' };
+  operatorDatabase.suppression = {
+    reason: 'manual',
+    source: 'operator',
+    suppressedAt: '2026-08-01T12:00:00.000Z',
+    updatedAt: '2026-08-01T12:00:00.000Z',
+  };
   for (let index = 1; index <= 3; index += 1) {
     const response = await receivePostmarkWebhook({
       request: request({
@@ -235,5 +256,36 @@ test('Postmark retains permanent and operator suppressions across later events',
     });
     assert.equal(response.status, 200);
   }
-  assert.deepEqual(operatorDatabase.suppression, { reason: 'manual', source: 'operator' });
+  assert.deepEqual(operatorDatabase.suppression, {
+    reason: 'manual',
+    source: 'operator',
+    suppressedAt: '2026-08-01T12:00:00.000Z',
+    updatedAt: '2026-08-01T12:00:00.000Z',
+  });
+
+  const operatorUnsubscribeDatabase = new WebhookDatabase();
+  operatorUnsubscribeDatabase.suppression = {
+    reason: 'manual',
+    source: 'operator',
+    suppressedAt: '2026-08-01T12:00:00.000Z',
+    updatedAt: '2026-08-01T12:00:00.000Z',
+  };
+  const response = await receivePostmarkWebhook({
+    request: request({
+      RecordType: 'SubscriptionChange',
+      Recipient: 'operator@example.com',
+      MessageID: 'operator-unsubscribe',
+      MessageStream: 'broadcast',
+      SuppressSending: true,
+      ChangedAt: '2026-08-06T12:00:00.000Z',
+    }),
+    env: environment(operatorUnsubscribeDatabase),
+  });
+  assert.equal(response.status, 200);
+  assert.deepEqual(operatorUnsubscribeDatabase.suppression, {
+    reason: 'manual',
+    source: 'operator',
+    suppressedAt: '2026-08-01T12:00:00.000Z',
+    updatedAt: '2026-08-01T12:00:00.000Z',
+  });
 });
