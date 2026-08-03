@@ -10,3 +10,36 @@ const scriptUrl =
     <script is:inline defer data-website-id={websiteId} data-domain={domain} src={scriptUrl} />
   )
 }
+
+{
+  !websiteId || !domain ? (
+    <script is:inline>
+      {`(() => {
+  const loadAdmaxxer = async () => {
+    try {
+      const response = await fetch('/api/admaxxer-config', {
+        headers: { Accept: 'application/json' },
+        credentials: 'same-origin',
+      });
+      if (!response.ok) return;
+      const config = await response.json();
+      if (!config?.enabled || !config.websiteId || !config.domain) return;
+      const script = document.createElement('script');
+      script.defer = true;
+      script.src = config.scriptUrl;
+      script.dataset.websiteId = config.websiteId;
+      script.dataset.domain = config.domain;
+      document.head.appendChild(script);
+    } catch {
+      // Tracking must never affect the funnel or checkout.
+    }
+  };
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', () => void loadAdmaxxer(), { once: true });
+  } else {
+    void loadAdmaxxer();
+  }
+})()`}
+    </script>
+  ) : null
+}
