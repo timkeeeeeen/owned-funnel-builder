@@ -7,6 +7,23 @@ const responseHeaders = {
   'X-Content-Type-Options': 'nosniff',
 };
 
+export async function onRequestGet(context: PagesContext): Promise<Response> {
+  const secret = readEnvironmentValue(context.env, 'EMAIL_UNSUBSCRIBE_SECRET');
+  const token = cleanString(new URL(context.request.url).searchParams.get('token'), 2048);
+  const verified = secret && token ? await verifyUnsubscribeToken({ token, secret }) : null;
+  if (!verified) {
+    return new Response('This unsubscribe link is invalid or expired.', {
+      status: 400,
+      headers: responseHeaders,
+    });
+  }
+
+  return new Response(
+    '<!doctype html><meta name="viewport" content="width=device-width"><title>Confirm unsubscribe</title><main style="max-width:40rem;margin:10vh auto;padding:2rem;font-family:system-ui"><h1>Confirm unsubscribe</h1><p>Marketing emails will stop. Purchase and account messages are unaffected.</p><form method="post"><button type="submit">Unsubscribe</button></form></main>',
+    { status: 200, headers: responseHeaders }
+  );
+}
+
 export async function onRequestPost(context: PagesContext): Promise<Response> {
   const database = context.env.LEADS;
   const secret = readEnvironmentValue(context.env, 'EMAIL_UNSUBSCRIBE_SECRET');
@@ -44,7 +61,8 @@ export async function onRequestPost(context: PagesContext): Promise<Response> {
       `INSERT INTO email_suppressions (email, reason, source, suppressed_at, updated_at)
        VALUES (?, 'unsubscribe', 'link', ?, ?)
        ON CONFLICT(email) DO UPDATE SET reason = 'unsubscribe', source = 'link',
-         suppressed_at = excluded.suppressed_at, updated_at = excluded.updated_at`
+         suppressed_at = excluded.suppressed_at, updated_at = excluded.updated_at
+       WHERE email_suppressions.reason = 'unsubscribe'`
     )
     .bind(subscriber.email, now, now)
     .run();

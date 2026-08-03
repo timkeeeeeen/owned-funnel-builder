@@ -13,6 +13,7 @@ import type {
   Environment,
 } from '../../functions/_lib/runtime.ts';
 import { onRequestPost as createCheckout } from '../../functions/api/checkout.ts';
+import { MARKETING_CONSENT_VERSION } from '../../src/data/emailConsent.ts';
 import { onRequestPost as decideUpsell } from '../../functions/api/funnel/decision.ts';
 import { onRequestGet as getFunnelStatus } from '../../functions/api/funnel/status.ts';
 import {
@@ -176,6 +177,22 @@ function checkoutDatabase(products: Record<string, string>): FakeDatabase {
   });
 }
 
+test('offer checkout metadata uses the canonical marketing consent version', async () => {
+  assert.equal(MARKETING_CONSENT_VERSION, 'marketing-v1-2026-08-02');
+  for (const offer of [
+    'owned-funnel-builder',
+    'talking-head-ad-machine',
+    'vibe-code-anything',
+  ]) {
+    const file = await readFile(
+      new URL(`../../src/content/offers/${offer}.json`, import.meta.url),
+      'utf8'
+    );
+    const metadata = JSON.parse(file) as { checkout: { consentVersion: string } };
+    assert.equal(metadata.checkout.consentVersion, MARKETING_CONSENT_VERSION);
+  }
+});
+
 test('checkout creates the configured cart, bump, steps, and first upsell return path', async () => {
   const database = checkoutDatabase({
     'owned-funnel-builder': 'prod_main',
@@ -202,7 +219,7 @@ test('checkout creates the configured cart, bump, steps, and first upsell return
       email: 'OWNER@example.com',
       offerSlug: 'owned-funnel-builder',
       placement: 'hero',
-      consentVersion: 'v1',
+      consentVersion: MARKETING_CONSENT_VERSION,
       marketingOptIn: true,
       bumpAccepted: true,
       attribution: { utm_source: 'newsletter', ignored: 'nope' },
@@ -240,10 +257,66 @@ test('checkout creates the configured cart, bump, steps, and first upsell return
     database.calls.filter((call) => call.query.includes('INSERT INTO email_subscribers')).length,
     1
   );
+  const clearedSuppression = database.calls.find((call) =>
+    call.query.includes('DELETE FROM email_suppressions')
+  );
+  assert.match(clearedSuppression?.query ?? '', /reason = 'unsubscribe'/);
+  assert.deepEqual(clearedSuppression?.values, ['owner@example.com']);
   assert.equal(
     database.calls.filter((call) => call.query.includes('INSERT INTO funnel_step_runs')).length,
     2
   );
+});
+
+test('checkout validates the canonical consent version and sanitizes source placement', async () => {
+  const database = checkoutDatabase({ 'owned-funnel-builder': 'prod_main' });
+  globalThis.fetch = async (input) => {
+    const url = new URL(String(input));
+    if (url.pathname === '/customers') {
+      return Response.json({ items: [{ customer_id: 'customer_owner', email: 'owner@example.com' }] });
+    }
+    return Response.json({
+      checkout_url: 'https://checkout.dodopayments.com/session/test',
+      session_id: 'session_123',
+    });
+  };
+  const environment = {
+    LEADS: database,
+    DODO_PAYMENTS_API_KEY: 'test_key',
+    DODO_PAYMENTS_ENVIRONMENT: 'test_mode',
+  };
+
+  const forged = await createCheckout({
+    request: checkoutRequest({
+      email: 'owner@example.com',
+      offerSlug: 'owned-funnel-builder',
+      placement: 'hero',
+      consentVersion: 'forged-version',
+      marketingOptIn: true,
+    }),
+    env: environment,
+  });
+  assert.equal(forged.status, 400);
+
+  const accepted = await createCheckout({
+    request: checkoutRequest({
+      email: 'owner@example.com',
+      offerSlug: 'owned-funnel-builder',
+      placement: 'forged-placement',
+      consentVersion: MARKETING_CONSENT_VERSION,
+      marketingOptIn: true,
+    }),
+    env: environment,
+  });
+  assert.equal(accepted.status, 200);
+  const leadWrite = database.calls.find((call) => call.query.includes('INSERT INTO checkout_leads'));
+  const subscriberWrite = database.calls.find((call) =>
+    call.query.includes('INSERT INTO email_subscribers')
+  );
+  assert.equal(leadWrite?.values[3], 'unknown');
+  assert.equal(leadWrite?.values[5], MARKETING_CONSENT_VERSION);
+  assert.equal(subscriberWrite?.values[3], MARKETING_CONSENT_VERSION);
+  assert.equal(subscriberWrite?.values[5], 'unknown');
 });
 
 test('checkout fails closed when a configured product has no Dodo mapping', async () => {
