@@ -19,6 +19,11 @@ checkout when the canary operator is present.
 - Approval for thirteen temporary live `$1` products and the immediate
   refund/revocation procedure.
 
+The Cloudflare production project already has encrypted bindings named for the
+Dodo, Admaxxer, D1, return-URL, and public-site settings. Their values and live
+mode were not read; the operator still needs a provider/account readback before
+using them for a production canary.
+
 ## Operator sequence after inputs arrive
 
 1. Read back live Dodo products, exact prices/currencies, webhook event set,
@@ -45,4 +50,3 @@ checkout when the canary operator is present.
 | Blueprint CMO Game Plan | 1 |
 | App Idea Complete Build Pack | 1 |
 | **Total** | **13** |
-
