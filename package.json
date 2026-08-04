@@ -20,6 +20,7 @@
     "generate:funnels": "node scripts/generate-funnel-catalog.mjs",
     "prebuild": "npm run generate:funnels",
     "build": "node scripts/clean-dist.mjs && astro build",
+    "postbuild": "node --test tests/build/offer-template-output.test.mjs",
     "deploy": "npm run publish",
     "preview": "astro preview",
     "astro": "astro",

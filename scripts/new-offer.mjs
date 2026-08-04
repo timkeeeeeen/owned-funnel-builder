@@ -2,18 +2,38 @@ import { existsSync, mkdirSync, writeFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 
 const rawArgs = process.argv.slice(2);
-const dryRun = rawArgs.includes('--dry-run');
-const args = rawArgs.filter((arg) => arg !== '--dry-run');
+let dryRun = false;
+let template = 'default';
+const args = [];
+
+for (let index = 0; index < rawArgs.length; index += 1) {
+  const arg = rawArgs[index];
+  if (arg === '--dry-run') {
+    dryRun = true;
+  } else if (arg === '--template') {
+    template = rawArgs[index + 1] ?? '';
+    index += 1;
+  } else {
+    args.push(arg);
+  }
+}
+
 const [slug, productName, headline] = args;
 
 function fail(message) {
   console.error(`\n${message}\n`);
-  console.error('Usage: npm run offer:new -- <slug> "<Product name>" "<Headline>" [--dry-run]\n');
+  console.error(
+    'Usage: npm run offer:new -- <slug> "<Product name>" "<Headline>" [--template <default|video-lead>] [--dry-run]\n'
+  );
   process.exit(1);
 }
 
 if (!slug || !productName || !headline) {
   fail('A slug, product name, and headline are required.');
+}
+
+if (!['default', 'video-lead'].includes(template)) {
+  fail(`Unknown offer template: ${template}`);
 }
 
 if (!/^[a-z][a-z0-9]*(?:-[a-z0-9]+)*$/.test(slug)) {
@@ -30,6 +50,7 @@ const headlineLead = headlineWords.join(' ');
 
 const offer = {
   published: false,
+  template,
   slug,
   productName,
   eyebrow: 'A low-ticket shortcut for people who want the outcome without the usual setup',

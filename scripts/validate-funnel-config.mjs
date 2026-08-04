@@ -14,8 +14,17 @@ const publishing = process.argv.includes('--publish');
 const problems = [];
 const offerSlugs = new Set(offers.map((offer) => offer.slug));
 for (const offer of offers) {
-  if (!funnels.some((funnel) => funnel.offerSlug === offer.slug)) {
+  const checkoutFunnelSlug = offer.checkoutFunnelSlug || offer.slug;
+  const checkoutFunnel = funnels.find((funnel) => funnel.offerSlug === checkoutFunnelSlug);
+  if (!checkoutFunnel) {
     problems.push(`${offer.slug}: add a matching checkout funnel.`);
+  }
+  if (
+    checkoutFunnel &&
+    (offer.priceAmount !== checkoutFunnel.base.priceAmount ||
+      offer.currency !== checkoutFunnel.base.currency)
+  ) {
+    problems.push(`${checkoutFunnelSlug}: landing-page and checkout prices must match.`);
   }
   if (offer.published && !offer.checkout?.enabled) {
     problems.push(`${offer.slug}: checkout is turned off on a published page.`);
@@ -61,12 +70,6 @@ for (const funnel of funnels) {
     ) {
       problems.push(`${product.productKey}: replace the example customer access link.`);
     }
-  }
-  if (
-    offer &&
-    (offer.priceAmount !== funnel.base.priceAmount || offer.currency !== funnel.base.currency)
-  ) {
-    problems.push(`${funnel.offerSlug}: landing-page and checkout prices must match.`);
   }
   if (publishing && offer?.published && /@example\.com$/i.test(funnel.supportEmail ?? '')) {
     problems.push(`${funnel.offerSlug}: replace the example support email.`);

@@ -1,3 +1,5 @@
+import type { OfferTemplate } from '@/data/offerTemplates';
+
 export interface OfferItem {
   title: string;
   description: string;
@@ -149,7 +151,9 @@ export interface OfferSectionCopy {
 
 export interface Offer {
   published: boolean;
+  template?: OfferTemplate;
   slug: string;
+  checkoutFunnelSlug?: string;
   productName: string;
   eyebrow: string;
   headline: string;
