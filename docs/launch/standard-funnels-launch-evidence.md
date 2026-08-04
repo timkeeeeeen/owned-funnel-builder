@@ -66,6 +66,16 @@ Status: standard pages live; provider canaries and paid-traffic gates remain ope
   replace a live Dodo payment, fulfillment, Admaxxer Purchase, or Meta CAPI
   canary.
 
+### Host verification note (2026-08-04)
+
+- Fresh local `validate:config`, `check:functions`, and `build` attempts were
+  terminated by Node heap exhaustion while recursively scanning the shared,
+  heavily loaded workspace. They emitted no source assertion or compiler error.
+- The focused Functions suite remains queued behind `host-test-slot`; this is a
+  host-capacity result, not evidence that the funnel contract failed.
+- Earlier isolated function/build evidence remains recorded above; a clean
+  remote or Woodpecker run is required before treating this host note as green.
+
 ### Production mapping readback (IDs redacted to suffix)
 
 | Product key | Dodo ID suffix | Amount | Currency |
