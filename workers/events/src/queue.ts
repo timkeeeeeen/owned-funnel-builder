@@ -14,7 +14,7 @@ export type QueueMessage = {
 export type QueueBatch = { queue?: string; messages: QueueMessage[] };
 export type DestinationSender = (
   payload: Record<string, unknown>,
-  context: { eventKey: string; destination: DestinationName; buyerContext?: Record<string, unknown> }
+  context: { eventKey: string; destination: DestinationName; buyerContext?: Record<string, unknown>; privacySubjectId?: string | null }
 ) => Promise<unknown>;
 export type DestinationTransform = (
   event: Record<string, unknown>
@@ -499,7 +499,7 @@ async function processMessage(env: QueueEnv, message: QueueMessage, isDlq: boole
   }
   const row = await env.TRACKING_DB.prepare(
     `SELECT e.envelope_json, e.privacy_subject_id, e.buyer_context_json, e.privacy_state_json,
-            d.tenant_id, d.site_id
+            d.attempt_count, d.tenant_id, d.site_id
        FROM tracking_events e JOIN tracking_deliveries d ON d.event_key = e.event_key
        WHERE e.event_key = ? AND d.destination = ? LIMIT 1`
   )
@@ -511,6 +511,7 @@ async function processMessage(env: QueueEnv, message: QueueMessage, isDlq: boole
       site_id: string;
       buyer_context_json: string;
       privacy_state_json: string;
+      attempt_count: number;
     }>();
   if (!row) {
     await persistDlq(env, body, 'event_not_found', attempts);
@@ -525,10 +526,17 @@ async function processMessage(env: QueueEnv, message: QueueMessage, isDlq: boole
     message.ack();
     return;
   }
+  const durableAttempts = Number(row.attempt_count);
+  if (!Number.isSafeInteger(durableAttempts) || durableAttempts > MAX_RETRIES) {
+    await persistDlq(env, body, 'max_retries_exhausted', durableAttempts || attempts);
+    await markFailure(env, eventKey, destination, 'permanent', new Error('max_retries_exhausted'), deliveryLease);
+    message.ack();
+    return;
+  }
   const sender = env.DESTINATION_SENDERS?.[destination] ??
     (destination === 'meta'
       ? (payload: Record<string, unknown>, context: { buyerContext?: Record<string, unknown> }) => sendMeta(payload as never, env, context.buyerContext)
-      : (payload: Record<string, unknown>) => sendTinybird(payload as never, env));
+      : (payload: Record<string, unknown>, context: { privacySubjectId?: string | null }) => sendTinybird(payload as never, env, context.privacySubjectId));
   const event = JSON.parse(row.envelope_json) as Record<string, unknown>;
   const identity =
     event.identity && typeof event.identity === 'object'
@@ -589,9 +597,16 @@ async function processMessage(env: QueueEnv, message: QueueMessage, isDlq: boole
     if (await pauseDelivery(env, eventKey, destination, deliveryLease, budgetReason)) message.ack();
     return;
   }
+  let buyerContext: Record<string, unknown> | undefined;
+  try {
+    const parsed = JSON.parse(row.buyer_context_json || '{}');
+    if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) buyerContext = parsed as Record<string, unknown>;
+  } catch { buyerContext = undefined; }
   const transform = env.DESTINATION_TRANSFORMS?.[destination];
   const transformedPayload = transform ? await transform(event) : event;
-  const serializedPayload = JSON.stringify(transformedPayload);
+  const serializedPayload = JSON.stringify(destination === 'meta'
+    ? { payload: transformedPayload, buyer_context: buyerContext ?? {}, privacy_subject_id: row.privacy_subject_id }
+    : transformedPayload);
   const transformVersion =
     typeof env.TRACKING_DESTINATION_TRANSFORM_VERSION === 'string'
       ? env.TRACKING_DESTINATION_TRANSFORM_VERSION
@@ -650,14 +665,9 @@ async function processMessage(env: QueueEnv, message: QueueMessage, isDlq: boole
     return;
   }
   try {
-    let buyerContext: Record<string, unknown> | undefined;
-    try {
-      const parsed = JSON.parse(row.buyer_context_json || '{}');
-      if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) buyerContext = parsed as Record<string, unknown>;
-    } catch { buyerContext = undefined; }
-    const result = await sender(transformedPayload, { eventKey, destination, buyerContext }) as DeliveryResult | undefined;
+    const result = await sender(transformedPayload, { eventKey, destination, buyerContext, privacySubjectId: row.privacy_subject_id }) as DeliveryResult | undefined;
     if (result && result.state !== 'accepted') {
-      const terminal = result.state === 'retryable' && attempts >= MAX_RETRIES;
+      const terminal = result.state === 'retryable' && durableAttempts >= MAX_RETRIES;
       await markFailure(env, eventKey, destination, terminal ? 'permanent' : result.state, new Error(result.state), deliveryLease);
       if (terminal) { await persistDlq(env, body, 'max_retries_exhausted', attempts); message.ack(); }
       else if (result.state === 'retryable') message.retry({ delaySeconds: result.retryAfterSeconds ?? Math.min(300, 2 ** attempts * 5) });
@@ -667,7 +677,7 @@ async function processMessage(env: QueueEnv, message: QueueMessage, isDlq: boole
     if (await completeDelivered(env, eventKey, destination, deliveryLease)) message.ack();
   } catch (error) {
     const ambiguous = error instanceof Error && /ambiguous|timeout|network/i.test(error.message);
-    const terminal = !ambiguous && attempts >= MAX_RETRIES;
+    const terminal = !ambiguous && durableAttempts >= MAX_RETRIES;
     await markFailure(
       env,
       eventKey,

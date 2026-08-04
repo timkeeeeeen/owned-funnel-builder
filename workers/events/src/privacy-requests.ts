@@ -11,11 +11,13 @@ export async function createPrivacyRequest(env: Record<string, unknown> & { TRAC
   if (!request.verified) throw new TypeError('privacy_verification_required');
   const id = crypto.randomUUID(), now = new Date().toISOString();
   const tenant = String(env.TRACKING_TENANT_ID ?? 'default'), site = String(env.TRACKING_SITE_ID ?? 'default');
-  await env.TRACKING_DB.batch([
-    env.TRACKING_DB.prepare(`INSERT INTO tracking_suppression_tombstones (suppression_key, tenant_id, site_id, visitor_id, reason, created_at) VALUES (?, ?, ?, ?, ?, ?) ON CONFLICT(suppression_key) DO NOTHING`).bind(`request:${id}`, tenant, site, request.subjectId, `privacy_${request.action}`, now),
-    env.TRACKING_DB.prepare(`INSERT INTO tracking_privacy_requests (request_id, tenant_id, site_id, subject_id, action, state, created_at, updated_at) VALUES (?, ?, ?, ?, ?, 'tombstone_committed', ?, ?)`).bind(id, tenant, site, request.subjectId, request.action, now, now),
-    env.TRACKING_DB.prepare(`INSERT INTO tracking_deletion_requests (request_id, tenant_id, subject_key, request_type, state, verification_state, created_at, audit_json) VALUES (?, ?, ?, ?, 'tombstone_committed', 'verified', ?, ?)`).bind(id, tenant, request.subjectId, request.action, now, JSON.stringify({ source: 'worker', request_id: id })),
-  ]);
+  const tombstone = request.action === 'deletion' || request.action === 'opt_out';
+  const statements = [
+    ...(tombstone ? [env.TRACKING_DB.prepare(`INSERT INTO tracking_suppression_tombstones (suppression_key, tenant_id, site_id, visitor_id, reason, created_at) VALUES (?, ?, ?, ?, ?, ?) ON CONFLICT(suppression_key) DO NOTHING`).bind(`request:${id}`, tenant, site, request.subjectId, `privacy_${request.action}`, now)] : []),
+    env.TRACKING_DB.prepare(`INSERT INTO tracking_privacy_requests (request_id, tenant_id, site_id, subject_id, action, state, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)`).bind(id, tenant, site, request.subjectId, request.action, tombstone ? 'tombstone_committed' : 'pending', now, now),
+    env.TRACKING_DB.prepare(`INSERT INTO tracking_deletion_requests (request_id, tenant_id, subject_key, request_type, state, verification_state, created_at, audit_json) VALUES (?, ?, ?, ?, ?, 'verified', ?, ?)`).bind(id, tenant, request.subjectId, request.action, tombstone ? 'tombstone_committed' : 'pending', now, JSON.stringify({ source: 'worker', request_id: id })),
+  ];
+  await env.TRACKING_DB.batch(statements);
   const tinybirdUrl = typeof env.TINYBIRD_TOMBSTONE_APPEND_URL === 'string' ? env.TINYBIRD_TOMBSTONE_APPEND_URL : '';
   const tinybirdToken = typeof env.TINYBIRD_TOMBSTONE_APPEND_TOKEN === 'string' ? env.TINYBIRD_TOMBSTONE_APPEND_TOKEN : '';
   if (tinybirdUrl || tinybirdToken) {

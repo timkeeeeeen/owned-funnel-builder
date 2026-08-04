@@ -49,6 +49,12 @@ export async function runCleanup(
         '$.identity.meta_hash', '$.buyer_context') WHERE received_at < ?`
     ).bind(sensitiveCutoff).run();
     await database.prepare(
+      `UPDATE tracking_events SET buyer_context_json = '{}' WHERE received_at < ?`
+    ).bind(sensitiveCutoff).run();
+    await database.prepare(
+      `UPDATE tracking_context_exchanges SET buyer_context_json = '{}' WHERE issued_at < ?`
+    ).bind(sensitiveCutoff).run();
+    await database.prepare(
       `DELETE FROM tracking_buyer_context WHERE rowid IN (
          SELECT rowid FROM tracking_buyer_context WHERE captured_at < ? LIMIT ?)`
     ).bind(sensitiveCutoff, batchSize).run();
@@ -71,7 +77,7 @@ export async function runCleanup(
       .prepare(
         `DELETE FROM tracking_deliveries WHERE rowid IN (
            SELECT rowid FROM tracking_deliveries
-           WHERE updated_at < ? AND state IN ('delivered', 'permanent') LIMIT ?)`
+           WHERE updated_at < ? AND state IN ('delivered', 'permanent', 'suppressed') LIMIT ?)`
       )
       .bind(cutoff, batchSize)
       .run();

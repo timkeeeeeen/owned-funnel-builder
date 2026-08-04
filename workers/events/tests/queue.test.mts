@@ -220,7 +220,7 @@ test('destination payload hash is durable before the provider call', async () =>
     } as never
   );
   assert.equal(transformedSeen, true);
-  assert.equal(hashSeen, await sha256(JSON.stringify(transformed)));
+  assert.equal(hashSeen, await sha256(JSON.stringify({ payload: transformed, buyer_context: {}, privacy_subject_id: null })));
   assert.deepEqual(actions, ['ack']);
 });
 
@@ -757,6 +757,34 @@ test('privacy tombstone suppresses a reclaimed delivery before provider send', a
     ).state,
     'suppressed'
   );
+});
+
+test('queue fails closed when a persisted event has no funnel routing key', async () => {
+  const database = await trackingDatabase();
+  const eventKey = '3'.repeat(64);
+  seedDelivery(database, eventKey, '{"event_name":"PageView","identity":{}}');
+  const actions: string[] = [];
+  await processQueue({ queue: 'events', messages: [{ body: { event_key: eventKey, destination: 'meta', schema_version: '1' }, ack: () => actions.push('ack'), retry: () => actions.push('retry') }] }, { TRACKING_DB: d1(database), DESTINATION_SENDERS: { meta: async () => { throw new Error('must_not_send'); } } } as never);
+  assert.deepEqual(actions, ['ack']);
+  assert.equal((database.prepare('SELECT state FROM tracking_deliveries WHERE event_key = ?').get(eventKey) as { state: string }).state, 'permanent');
+});
+
+test('scheduled re-enqueue cannot reset the durable retry ceiling', async () => {
+  const database = await trackingDatabase();
+  const eventKey = '4'.repeat(64);
+  seedDelivery(database, eventKey, '{"event_name":"PageView","identity":{"funnel_id":"owned-funnel-builder"}}');
+  database.prepare(`UPDATE tracking_deliveries SET state = 'retryable', attempt_count = 5 WHERE event_key = ?`).run(eventKey);
+  const actions: string[] = [];
+  await processQueue({ queue: 'events', messages: [{ body: { event_key: eventKey, destination: 'meta', schema_version: '1' }, ack: () => actions.push('ack'), retry: () => actions.push('retry') }] }, { TRACKING_DB: d1(database), DESTINATION_SENDERS: { meta: async () => ({ state: 'retryable' }) } } as never);
+  assert.deepEqual(actions, ['ack']);
+  assert.equal((database.prepare('SELECT state FROM tracking_deliveries WHERE event_key = ?').get(eventKey) as { state: string }).state, 'permanent');
+});
+
+test('cleanup scrubs persisted buyer context after the seven-day deadline', async () => {
+  const database = await trackingDatabase();
+  database.prepare(`INSERT INTO tracking_events (event_key, tenant_id, site_id, event_name, event_id, source_system, occurred_at, received_at, envelope_json, privacy_state_json, bot_state, created_at, canonical_payload_hash, buyer_context_json) VALUES ('${'5'.repeat(64)}', 'tenant_demo', 'site_demo', 'PageView', 'cleanup_buyer', 'event_worker', '2020-01-01T00:00:00.000Z', '2020-01-01T00:00:00.000Z', '{}', '{}', 'human', '2020-01-01T00:00:00.000Z', '${'a'.repeat(64)}', '{"email":"raw"}')`).run();
+  await runCleanup({ TRACKING_DB: d1(database) }, new Date('2026-08-04T12:00:00.000Z'));
+  assert.equal((database.prepare(`SELECT buyer_context_json FROM tracking_events WHERE event_id = 'cleanup_buyer'`).get() as { buyer_context_json: string }).buyer_context_json, '{}');
 });
 
 test('queue consumer retries transient outcomes and preserves delivery identity', async () => {

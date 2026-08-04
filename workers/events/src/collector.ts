@@ -50,7 +50,7 @@ export type CollectorEnv = Record<string, unknown> & {
   EVENTS_QUEUE?: QueueLike;
   TRACKING_CONTEXT_SIGN?: TrackingContextSigner;
   TRACKING_CONTEXT_VERIFY?: TrackingContextVerifier;
-  TRACKING_FLOW_BINDING_VERIFY?: (flowBinding: string, funnelId: string) => Promise<boolean> | boolean;
+  TRACKING_FLOW_BINDING_VERIFY?: (flowBinding: string, funnelId: string, paymentIds: string[]) => Promise<boolean> | boolean;
 };
 
 export type ExecutionContextLike = { waitUntil?(promise: Promise<unknown>): void };
@@ -313,9 +313,10 @@ async function verifyEventContext(
     const consumed = await env.TRACKING_DB.prepare(
       `UPDATE tracking_context_exchanges
        SET consumed_at = ?, consumed_event_id = ?, consumed_flow_binding = flow_binding
-       WHERE context_hash = ? AND expires_at > ? AND consumed_at IS NULL`
+       WHERE context_hash = ? AND expires_at > ?
+         AND (consumed_at IS NULL OR consumed_event_id = ?)`
     )
-      .bind(new Date().toISOString(), event.event_id, contextHash, new Date().toISOString())
+      .bind(new Date().toISOString(), event.event_id, contextHash, new Date().toISOString(), event.event_id)
       .run();
     if (Number(consumed.meta?.changes ?? 0) !== 1) return null;
   }
@@ -1031,7 +1032,7 @@ async function browserClaims(request: Request, env: CollectorEnv): Promise<Respo
   if (typeof env.TRACKING_FLOW_BINDING_VERIFY !== 'function')
     return jsonError('tracking_unavailable', 503, request, env);
   try {
-    if (!(await env.TRACKING_FLOW_BINDING_VERIFY(flowBinding, funnelSlug)))
+    if (!(await env.TRACKING_FLOW_BINDING_VERIFY(flowBinding, funnelSlug, paymentIds)))
       return jsonError('invalid_flow', 403, request, env);
   } catch {
     return jsonError('tracking_unavailable', 503, request, env);

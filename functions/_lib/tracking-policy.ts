@@ -178,8 +178,9 @@ function sensitive(path: string): boolean {
   return /(?:fbclid|fbp|fbc|ip|user_agent|email|phone|token|external_id)/i.test(path);
 }
 
-function identityAuthority(section: string): boolean {
-  return section === 'visitor' || section === 'session' || section === 'identity';
+function identityAuthority(section: string, key: string): boolean {
+  // funnel_id is a validated, non-PII routing key; buyer identity remains policy-redacted.
+  return section === 'visitor' || section === 'session' || (section === 'identity' && key !== 'funnel_id');
 }
 
 function bucket(value: string | number | boolean): string | number {
@@ -201,8 +202,12 @@ export function projectPermittedFields(
     const values = output[section] as Record<string, string | number | boolean> | undefined;
     if (!values) continue;
     for (const key of Object.keys(values)) {
+      if (section === 'identity' && key === 'funnel_id') {
+        if (typeof values[key] !== 'string' || !/^[A-Za-z0-9][A-Za-z0-9:_-]{0,179}$/.test(values[key])) delete values[key];
+        continue;
+      }
       const rule = policy.find((candidate) => candidate.field === `${section}.${key}`);
-      if (!rule || identityAuthority(section) || !allowed(rule, event, decisions) || (sensitive(`${section}.${key}`) && rule.redaction !== 'hmac')) {
+      if (!rule || identityAuthority(section, key) || !allowed(rule, event, decisions) || (sensitive(`${section}.${key}`) && rule.redaction !== 'hmac')) {
         delete values[key];
       } else if (rule.redaction === 'omit') {
         delete values[key];

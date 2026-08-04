@@ -11,6 +11,11 @@ exchange rows are expiry- and one-time-consume-bound; kill-switch work remains
 paused; and live publish dry-runs select the production Wrangler environment.
 
 Added migration `0008_security_fix_wave.sql` and adjusted focused fixtures.
+The follow-up also preserves the validated funnel routing key through policy
+projection, removes raw checkout buyer context from source outbox envelopes,
+binds Tinybird subjects to persisted privacy IDs, uses durable delivery attempt
+counts, scrubs persisted context at cleanup, and keeps access/correction
+requests pending without creating deletion tombstones.
 No provider, deployment, campaign, payment, refund, or Woodpecker mutation was
 performed.
 

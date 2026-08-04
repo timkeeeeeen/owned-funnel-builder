@@ -100,7 +100,7 @@ export async function onRequestPost({ request, env }: PagesContext): Promise<Res
   const flowVerifier = env.TRACKING_FLOW_BINDING_VERIFY;
   if (typeof flowVerifier !== 'function') return json({ error: 'tracking_unavailable' }, 503);
   try {
-    if (!(await (flowVerifier as (hash: string, funnel: string) => Promise<boolean>)(flowBinding, funnel))) return json({ error: 'invalid_flow' }, 403);
+    if (!(await (flowVerifier as (hash: string, funnel: string, paymentIds: string[]) => Promise<boolean>)(flowBinding, funnel, paymentIds))) return json({ error: 'invalid_flow' }, 403);
   } catch { return json({ error: 'tracking_unavailable' }, 503); }
   const payload = JSON.stringify({ funnel_slug: funnel, flow_binding: flowBinding, payment_ids: paymentIds });
   const headers = await signHeaders(env, payload);

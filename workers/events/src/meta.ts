@@ -39,8 +39,8 @@ export async function sendMeta(event: CanonicalEvent, env: EventsEnv, context: R
     ...(phone ? { ph: [await sha256(phone)] } : {}),
     ...(text(context.fbp) || text(event.attribution.fbp) ? { fbp: text(context.fbp) || text(event.attribution.fbp) } : {}),
     ...(text(context.fbc) || text(event.attribution.fbc) ? { fbc: text(context.fbc) || text(event.attribution.fbc) } : {}),
-    ...(text(context.ip) ? { client_ip_address: text(context.ip) } : {}),
-    ...(text(context.user_agent) ? { client_user_agent: text(context.user_agent) } : {}),
+    ...(text(context.ip || context.client_ip_address) ? { client_ip_address: text(context.ip || context.client_ip_address) } : {}),
+    ...(text(context.user_agent || context.client_user_agent) ? { client_user_agent: text(context.user_agent || context.client_user_agent) } : {}),
   };
   const payload = { data: [{ event_name: event.event_name, event_time: Math.floor(Date.parse(event.occurred_at) / 1000), event_id: event.event_id, action_source: 'website', event_source_url: sourceUrl, ...(Object.keys(custom_data).length ? { custom_data } : {}), ...(Object.keys(user_data).length ? { user_data } : {}) }], ...(env.META_OPERATOR_VALIDATION === true && text(env.META_TEST_EVENT_CODE) ? { test_event_code: text(env.META_TEST_EVENT_CODE) } : {}) };
   try {

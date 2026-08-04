@@ -142,6 +142,15 @@ test('field redaction omits raw values and only retains approved hmac or buckets
   );
 });
 
+test('projection preserves only the validated funnel routing key', () => {
+  const input = event() as CanonicalEvent;
+  input.identity = { funnel_id: 'owned-funnel-builder', lead_id: 'lead_private' };
+  const projected = projectPermittedFields(input, decisions(['analytics']), []);
+  assert.deepEqual(projected.identity, { funnel_id: 'owned-funnel-builder' });
+  input.identity = { funnel_id: 'not valid/' };
+  assert.deepEqual(projectPermittedFields(input, decisions(['analytics']), []).identity, {});
+});
+
 test('control validation rejects incomplete safety fields and empty field scopes', async () => {
   const [privacyPolicy, fieldPolicy, trustedHosts, sourceRuntimeManifest, rolloutState, providerCapabilities] = await Promise.all(
     [

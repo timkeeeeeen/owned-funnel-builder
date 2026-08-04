@@ -308,32 +308,15 @@ export async function onRequestPost(context: PagesContext): Promise<Response> {
       2
     ).toUpperCase();
     const scope = sourceScope(env, requestUrl);
-    const buyerContext = {
-      ...(trackingCookie(request, 'fbp') ? { fbp: trackingCookie(request, 'fbp') } : {}),
-      ...(trackingCookie(request, 'fbc') ? { fbc: trackingCookie(request, 'fbc') } : {}),
-      ...(cleanString(request.headers.get('cf-connecting-ip'), 64)
-        ? { client_ip_address: cleanString(request.headers.get('cf-connecting-ip'), 64) }
-        : {}),
-      ...(cleanString(request.headers.get('user-agent'), 512)
-        ? { client_user_agent: cleanString(request.headers.get('user-agent'), 512) }
-        : {}),
-      ...(safeSourceUrl(request.headers.get('referer') ?? '', requestUrl.origin)
-        ? { source_url: safeSourceUrl(request.headers.get('referer') ?? '', requestUrl.origin) }
-        : {}),
-      attribution,
-      captured_at: now,
-      meta_identity_version: 'meta-v1',
-      ...(await verifiedBuyerIdentity(request, env, scope)),
-    };
+    const contextHash = cleanString(env.TRACKING_CONTEXT_HASH, 128) || flowTokenHash;
     const leadSourceEventId = `lead:${leadId}`;
     const leadPayload = {
       schema_version: '1',
       event_id: leadSourceEventId,
       event_name: 'Lead',
       occurred_at: now,
-      flow_token_hash: flowTokenHash,
+      context_hash: contextHash,
       identity: { lead_id: leadId, funnel_id: funnelId },
-      buyer_context: buyerContext,
     };
     const leadStatement = env.LEADS.prepare(
       `INSERT INTO checkout_leads (
@@ -483,9 +466,8 @@ export async function onRequestPost(context: PagesContext): Promise<Response> {
         event_id: initiateEventId,
         event_name: 'InitiateCheckout',
         occurred_at: new Date().toISOString(),
-        flow_token_hash: flowTokenHash,
+        context_hash: contextHash,
         identity: { lead_id: leadId, funnel_id: funnelId },
-        buyer_context: buyerContext,
       };
       const initiateResult = await env.LEADS.batch([
         env.LEADS.prepare(
@@ -612,9 +594,8 @@ export async function onRequestPost(context: PagesContext): Promise<Response> {
       event_id: initiateEventId,
       event_name: 'InitiateCheckout',
       occurred_at: new Date().toISOString(),
-      flow_token_hash: flowTokenHash,
+      context_hash: contextHash,
       identity: { lead_id: leadId, funnel_id: funnelId },
-      buyer_context: buyerContext,
     };
     const initiateResult = await env.LEADS.batch([
       env.LEADS.prepare(
