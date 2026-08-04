@@ -135,7 +135,6 @@ async function markStripePaymentSucceeded(
   const flow = await database.prepare('SELECT token_hash FROM funnel_runs WHERE id = ?').bind(funnelId).first<{ token_hash: string }>();
   const contextHash = cleanString(flow?.token_hash, 64);
   if (!/^[a-f0-9]{64}$/i.test(contextHash)) throw new Error('Payment context is unavailable.');
-  const now = new Date().toISOString();
   const sourceEventId = `purchase:${paymentId}`;
   const payload = {
     schema_version: '1', source_system: 'pages', source_event_id: sourceEventId,
