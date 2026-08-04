@@ -62,6 +62,8 @@ Status: standard pages live; provider canaries and paid-traffic gates remain ope
   `admx_OHYmH6sbXbCbSf42sWVh659w` on `shop.maestrogtm.com`.
 - An unsigned `POST` to `/api/webhooks/dodo` is rejected; no browser Purchase
   event is emitted by the landing pages.
+- Invalid checkout POSTs returned HTTP 400 for all three offer slugs, and a
+  representative Facebook UTM/`fbclid` URL stayed on the canonical route.
 - These checks prove route availability and boundary behavior only; they do not
   replace a live Dodo payment, fulfillment, Admaxxer Purchase, or Meta CAPI
   canary.
