@@ -1,9 +1,5 @@
 export type PrivacyPurpose =
-  | 'necessary'
-  | 'analytics'
-  | 'advertising'
-  | 'identity_enrichment'
-  | 'sale_share';
+  'necessary' | 'analytics' | 'advertising' | 'identity_enrichment' | 'sale_share';
 
 export type PrivacyDecision = { purpose: PrivacyPurpose; allowed: boolean; policyVersion: string };
 
@@ -27,12 +23,16 @@ const GPC_HEADER = 'sec-gpc';
 const GPC_PURPOSES = new Set<PrivacyPurpose>(['advertising', 'identity_enrichment', 'sale_share']);
 const KNOWN_REGIONS = new Set(['US', 'EEA', 'UK', 'CA', 'AU', 'NZ', 'CH']);
 
-function currentChoices(stored: StoredPrivacyChoice[], region: string): Map<PrivacyPurpose, StoredPrivacyChoice> {
+function currentChoices(
+  stored: StoredPrivacyChoice[],
+  region: string
+): Map<PrivacyPurpose, StoredPrivacyChoice> {
   const latest = new Map<PrivacyPurpose, StoredPrivacyChoice>();
   for (const choice of stored) {
     if (choice.region !== region || Number.isNaN(Date.parse(choice.effectiveAt))) continue;
     const prior = latest.get(choice.purpose);
-    if (!prior || Date.parse(choice.effectiveAt) >= Date.parse(prior.effectiveAt)) latest.set(choice.purpose, choice);
+    if (!prior || Date.parse(choice.effectiveAt) >= Date.parse(prior.effectiveAt))
+      latest.set(choice.purpose, choice);
   }
   return latest;
 }

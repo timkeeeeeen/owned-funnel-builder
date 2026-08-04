@@ -16,8 +16,14 @@ function exactOrigin(origin: string | null, allowlist: readonly string[]): boole
   return origin !== null && origin !== 'null' && allowlist.includes(origin);
 }
 
-function validPreflight(request: CorsRequest): boolean {
-  if (request.preflightMethod !== undefined && request.preflightMethod !== null && request.preflightMethod !== 'POST') return false;
+function validPreflight(request: CorsRequest | undefined): boolean {
+  if (!request || request.host === undefined || request.allowedHost === undefined) return false;
+  if (
+    request.preflightMethod !== undefined &&
+    request.preflightMethod !== null &&
+    request.preflightMethod !== 'POST'
+  )
+    return false;
   if (request.requestedHeaders === undefined || request.requestedHeaders === null) return true;
   return request.requestedHeaders
     .split(',')
@@ -29,11 +35,12 @@ function validPreflight(request: CorsRequest): boolean {
 export function corsHeaders(
   origin: string | null,
   allowedOrigins: readonly string[] | string,
-  request: CorsRequest = {}
+  request: CorsRequest
 ): Headers {
   const headers = new Headers({ Vary: 'Origin' });
   if (
     !exactOrigin(origin, origins(allowedOrigins)) ||
+    !request ||
     (request.allowedHost !== undefined && request.host !== request.allowedHost) ||
     !validPreflight(request)
   ) {
@@ -62,7 +69,8 @@ export function sameOriginNoCors(
   expectedOrigin: string,
   expectedHost: string
 ): boolean {
-  if (request.method !== 'POST' || request.headers.has('access-control-request-method')) return false;
+  if (request.method !== 'POST' || request.headers.has('access-control-request-method'))
+    return false;
   if (request.headers.get('origin') !== expectedOrigin) return false;
   if (new URL(request.url).host !== expectedHost) return false;
   const fetchSite = request.headers.get('sec-fetch-site');
@@ -75,5 +83,8 @@ export function verifyCsrfNonce(
   expectedOrigin: string,
   expectedHost: string
 ): boolean {
-  return sameOriginNoCors(request, expectedOrigin, expectedHost) && request.headers.get('x-csrf-nonce') === expectedNonce;
+  return (
+    sameOriginNoCors(request, expectedOrigin, expectedHost) &&
+    request.headers.get('x-csrf-nonce') === expectedNonce
+  );
 }

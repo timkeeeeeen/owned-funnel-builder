@@ -41,7 +41,10 @@ function cookieAttributes(maxAge: number): string {
 }
 
 /** Signs with the already-imported Worker secret; the verifier never handles raw key material. */
-export async function issueSignedCookie(input: SignedCookieInput, signingKey: CryptoKey): Promise<string> {
+export async function issueSignedCookie(
+  input: SignedCookieInput,
+  signingKey: CryptoKey
+): Promise<string> {
   if (
     !/^[A-Za-z0-9_-]{1,64}$/.test(input.keyId) ||
     !input.value ||
@@ -101,7 +104,9 @@ export async function verifySignedCookie(
 
   let decoded: Partial<CookieContext> & { value?: unknown };
   try {
-    decoded = JSON.parse(new TextDecoder().decode(payloadBytes)) as Partial<CookieContext> & { value?: unknown };
+    decoded = JSON.parse(new TextDecoder().decode(payloadBytes)) as Partial<CookieContext> & {
+      value?: unknown;
+    };
   } catch {
     return null;
   }
@@ -114,7 +119,12 @@ export async function verifySignedCookie(
   ) {
     return null;
   }
-  if (Object.keys(decoded).some((key) => !['value', 'tenantId', 'siteId', 'environment'].includes(key))) return null;
+  if (
+    Object.keys(decoded).some(
+      (key) => !['value', 'tenantId', 'siteId', 'environment'].includes(key)
+    )
+  )
+    return null;
   const valid = await crypto.subtle.verify(
     'HMAC',
     verifyKey,
@@ -128,7 +138,10 @@ export function deleteTrackingCookie(name: TrackingCookieName): string {
   return `${name}=; ${cookieAttributes(0)}`;
 }
 
-export function trackingCookieNames(decisions: { analytics: boolean; advertising: boolean }): TrackingCookieName[] {
+export function trackingCookieNames(decisions: {
+  analytics: boolean;
+  advertising: boolean;
+}): TrackingCookieName[] {
   return decisions.analytics || decisions.advertising
     ? ['ma_privacy', 'ma_vid', 'ma_sid']
     : ['ma_privacy'];

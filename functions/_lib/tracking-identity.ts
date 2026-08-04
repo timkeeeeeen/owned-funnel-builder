@@ -1,4 +1,4 @@
-import type { D1Database, D1PreparedStatement } from './runtime.ts';
+import type { D1Database, D1PreparedStatement, D1RunResult } from './runtime.ts';
 
 export type IdentityClaim = {
   tenantId: string;
@@ -49,7 +49,11 @@ function aliasMessage(input: AliasInput): string {
 }
 
 export async function deriveAliasKey(input: AliasInput, key: CryptoKey): Promise<string> {
-  const signature = await crypto.subtle.sign('HMAC', key, new TextEncoder().encode(aliasMessage(input)));
+  const signature = await crypto.subtle.sign(
+    'HMAC',
+    key,
+    new TextEncoder().encode(aliasMessage(input))
+  );
   return `v1.${base64url(new Uint8Array(signature))}`;
 }
 
@@ -58,14 +62,20 @@ export async function deriveAliasKeysForRotation(
   keys: { current: { id: string; key: CryptoKey }; previous?: { id: string; key: CryptoKey } }
 ): Promise<Array<{ id: string; aliasKey: string }>> {
   const keyring = keys.previous ? [keys.current, keys.previous] : [keys.current];
-  return Promise.all(keyring.map(async ({ id, key }) => ({ id, aliasKey: await deriveAliasKey(input, key) })));
+  return Promise.all(
+    keyring.map(async ({ id, key }) => ({ id, aliasKey: await deriveAliasKey(input, key) }))
+  );
 }
 
 type AliasRecord = { personId: string; verificationClass: IdentityClaim['verificationClass'] };
 
 /** Test double for the Worker D1 claim transaction; production injects its D1-backed store. */
 export class InMemoryIdentityClaimStore implements IdentityClaimStore {
-  readonly conflicts: Array<{ aliasKey: string; leftPersonId: string | null; rightPersonId: string | null }> = [];
+  readonly conflicts: Array<{
+    aliasKey: string;
+    leftPersonId: string | null;
+    rightPersonId: string | null;
+  }> = [];
   readonly redirects = new Map<string, string>();
   private readonly aliases = new Map<string, AliasRecord>();
   private readonly revoked = new Set<string>();
@@ -98,7 +108,8 @@ export class InMemoryIdentityClaimStore implements IdentityClaimStore {
 
   private resolveOne(input: IdentityClaim): IdentityClaimResult {
     const existing = this.aliases.get(input.aliasKey);
-    if (this.revoked.has(input.aliasKey)) return this.conflict(input.aliasKey, existing?.personId ?? null, input.personId ?? null);
+    if (this.revoked.has(input.aliasKey))
+      return this.conflict(input.aliasKey, existing?.personId ?? null, input.personId ?? null);
     if (!existing) {
       if (input.verificationClass === 'asserted' && !input.personId)
         return this.conflict(input.aliasKey, null, null);
@@ -106,16 +117,24 @@ export class InMemoryIdentityClaimStore implements IdentityClaimStore {
       this.aliases.set(input.aliasKey, { personId, verificationClass: input.verificationClass });
       return { personId, state: input.personId ? 'linked' : 'created' };
     }
-    if (!input.personId || input.personId === existing.personId) return { personId: existing.personId, state: 'linked' };
+    if (!input.personId || input.personId === existing.personId)
+      return { personId: existing.personId, state: 'linked' };
     if (input.verificationClass === 'asserted' || existing.verificationClass === 'asserted')
       return this.conflict(input.aliasKey, existing.personId, input.personId);
     const [winner, loser] = [existing.personId, input.personId].sort();
-    this.aliases.set(input.aliasKey, { personId: winner!, verificationClass: input.verificationClass });
+    this.aliases.set(input.aliasKey, {
+      personId: winner!,
+      verificationClass: input.verificationClass,
+    });
     this.redirects.set(loser!, winner!);
     return { personId: winner!, state: 'linked' };
   }
 
-  private conflict(aliasKey: string, leftPersonId: string | null, rightPersonId: string | null): IdentityClaimResult {
+  private conflict(
+    aliasKey: string,
+    leftPersonId: string | null,
+    rightPersonId: string | null
+  ): IdentityClaimResult {
     this.conflicts.push({ aliasKey, leftPersonId, rightPersonId });
     return { personId: null, state: 'conflict' };
   }
@@ -162,34 +181,45 @@ export class D1IdentityClaimStore implements IdentityClaimStore {
   }
 
   async resolve(input: IdentityClaim): Promise<IdentityClaimResult> {
-    for (let attempt = 0; attempt < 2; attempt += 1) {
+    for (let attempt = 0; attempt < 3; attempt += 1) {
       const alias = await this.alias(input.tenantId, input.aliasKey);
       if (!alias) {
         try {
-          return await this.create(input);
+          const created = await this.create(input);
+          if (created) return created;
         } catch (error) {
-          if (attempt === 1) throw error;
-          continue;
+          if (attempt === 2) throw error;
         }
+        continue;
       }
       if (alias.revoked_at) return this.quarantine(input, alias.person_id, input.personId);
-      if (alias.tenant_id !== input.tenantId) return this.quarantine(input, alias.person_id, input.personId);
+      if (alias.tenant_id !== input.tenantId)
+        return this.quarantine(input, alias.person_id, input.personId);
       if (!alias.person_id) {
         if (!input.personId) return this.quarantine(input, null, null);
         if (await this.personBelongsToOtherTenant(input.tenantId, input.personId)) {
           return this.quarantine(input, null, input.personId);
         }
-        await this.database.batch([
+        const [updated] = await this.database.batch([
           this.statement(
             `UPDATE tracking_aliases
              SET person_id = ?, verification_class = ?, hmac_key_id = ?, updated_at = ?
-             WHERE tenant_id = ? AND alias_key = ? AND person_id IS NULL`,
-            [input.personId, input.verificationClass, input.hmacKeyId ?? this.currentHmacKeyId, this.now(), input.tenantId, input.aliasKey]
+             WHERE tenant_id = ? AND alias_key = ? AND person_id IS NULL AND revoked_at IS NULL`,
+            [
+              input.personId,
+              input.verificationClass,
+              input.hmacKeyId ?? this.currentHmacKeyId,
+              this.now(),
+              input.tenantId,
+              input.aliasKey,
+            ]
           ),
         ]);
-        return { personId: input.personId, state: 'linked' };
+        if (changed(updated)) return { personId: input.personId, state: 'linked' };
+        continue;
       }
-      if (!input.personId || input.personId === alias.person_id) return { personId: alias.person_id, state: 'linked' };
+      if (!input.personId || input.personId === alias.person_id)
+        return { personId: alias.person_id, state: 'linked' };
       if (
         input.verificationClass === 'asserted' ||
         alias.verification_class === 'asserted' ||
@@ -199,23 +229,32 @@ export class D1IdentityClaimStore implements IdentityClaimStore {
       }
       const winner = [alias.person_id, input.personId].sort()[0]!;
       const loser = winner === alias.person_id ? input.personId : alias.person_id;
-      await this.database.batch([
+      const [, updated] = await this.database.batch([
         this.statement(
           'INSERT INTO tracking_people (person_id, tenant_id, created_at, updated_at) VALUES (?, ?, ?, ?) ON CONFLICT(tenant_id, person_id) DO NOTHING',
           [winner, input.tenantId, this.now(), this.now()]
         ),
         this.statement(
+          `UPDATE tracking_aliases
+           SET person_id = ?, verification_class = ?, hmac_key_id = ?, updated_at = ?
+           WHERE tenant_id = ? AND alias_key = ? AND person_id = ? AND verification_class = ? AND revoked_at IS NULL`,
+          [
+            winner,
+            input.verificationClass,
+            input.hmacKeyId ?? this.currentHmacKeyId,
+            this.now(),
+            input.tenantId,
+            input.aliasKey,
+            alias.person_id,
+            alias.verification_class,
+          ]
+        ),
+        this.statement(
           'INSERT INTO tracking_person_redirects (tenant_id, from_person_id, to_person_id, reason, created_at) VALUES (?, ?, ?, ?, ?) ON CONFLICT(tenant_id, from_person_id) DO UPDATE SET to_person_id = excluded.to_person_id',
           [input.tenantId, loser, winner, 'identity_alias_stable_winner', this.now()]
         ),
-        this.statement(
-          `UPDATE tracking_aliases
-           SET person_id = ?, verification_class = ?, hmac_key_id = ?, updated_at = ?
-           WHERE tenant_id = ? AND alias_key = ?`,
-          [winner, input.verificationClass, input.hmacKeyId ?? this.currentHmacKeyId, this.now(), input.tenantId, input.aliasKey]
-        ),
       ]);
-      return { personId: winner, state: 'linked' };
+      if (changed(updated)) return { personId: winner, state: 'linked' };
     }
     return this.quarantine(input, null, input.personId);
   }
@@ -227,7 +266,11 @@ export class D1IdentityClaimStore implements IdentityClaimStore {
     const current = aliases[0];
     for (const candidate of aliases) {
       if (await this.alias(input.tenantId, candidate.aliasKey)) {
-        const result = await this.resolve({ ...input, aliasKey: candidate.aliasKey, hmacKeyId: candidate.hmacKeyId });
+        const result = await this.resolve({
+          ...input,
+          aliasKey: candidate.aliasKey,
+          hmacKeyId: candidate.hmacKeyId,
+        });
         if (!result.personId || !current || candidate.aliasKey === current.aliasKey) return result;
         const currentResult = await this.resolve({
           ...input,
@@ -251,8 +294,9 @@ export class D1IdentityClaimStore implements IdentityClaimStore {
       .first<AliasRow>();
   }
 
-  private async create(input: IdentityClaim): Promise<IdentityClaimResult> {
-    if (input.verificationClass === 'asserted' && !input.personId) return this.quarantine(input, null, null);
+  private async create(input: IdentityClaim): Promise<IdentityClaimResult | null> {
+    if (input.verificationClass === 'asserted' && !input.personId)
+      return this.quarantine(input, null, null);
     const personId = input.personId ?? `${input.tenantId}:${crypto.randomUUID()}`;
     if (input.personId) {
       if (await this.personBelongsToOtherTenant(input.tenantId, input.personId)) {
@@ -260,7 +304,7 @@ export class D1IdentityClaimStore implements IdentityClaimStore {
       }
     }
     const now = this.now();
-    await this.database.batch([
+    const [, alias] = await this.database.batch([
       this.statement(
         'INSERT INTO tracking_people (person_id, tenant_id, created_at, updated_at) VALUES (?, ?, ?, ?) ON CONFLICT(tenant_id, person_id) DO NOTHING',
         [personId, input.tenantId, now, now]
@@ -269,7 +313,7 @@ export class D1IdentityClaimStore implements IdentityClaimStore {
         `INSERT INTO tracking_aliases
           (alias_key, tenant_id, identifier_type, issuer_namespace, normalization_version,
            keyed_digest, hmac_key_id, person_id, verification_class, provenance_json, created_at, updated_at)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) ON CONFLICT(tenant_id, alias_key) DO NOTHING`,
         [
           input.aliasKey,
           input.tenantId,
@@ -286,7 +330,7 @@ export class D1IdentityClaimStore implements IdentityClaimStore {
         ]
       ),
     ]);
-    return { personId, state: input.personId ? 'linked' : 'created' };
+    return changed(alias) ? { personId, state: input.personId ? 'linked' : 'created' } : null;
   }
 
   private async personBelongsToOtherTenant(tenantId: string, personId: string): Promise<boolean> {
@@ -297,13 +341,25 @@ export class D1IdentityClaimStore implements IdentityClaimStore {
     return (rows.results ?? []).some((row) => row.tenant_id !== tenantId);
   }
 
-  private async quarantine(input: IdentityClaim, leftPersonId: string | null, rightPersonId: string | null): Promise<IdentityClaimResult> {
+  private async quarantine(
+    input: IdentityClaim,
+    leftPersonId: string | null,
+    rightPersonId: string | null
+  ): Promise<IdentityClaimResult> {
     await this.database.batch([
       this.statement(
         `INSERT INTO tracking_identity_conflicts
           (conflict_id, tenant_id, alias_key, left_person_id, right_person_id, state, details_json, created_at)
          VALUES (?, ?, ?, ?, ?, 'quarantined', ?, ?)`,
-        [identityConflictId(), input.tenantId, input.aliasKey, leftPersonId, rightPersonId, JSON.stringify({ verificationClass: input.verificationClass }), this.now()]
+        [
+          identityConflictId(),
+          input.tenantId,
+          input.aliasKey,
+          leftPersonId,
+          rightPersonId,
+          JSON.stringify({ verificationClass: input.verificationClass }),
+          this.now(),
+        ]
       ),
     ]);
     return { personId: null, state: 'conflict' };
@@ -312,6 +368,40 @@ export class D1IdentityClaimStore implements IdentityClaimStore {
   private statement(query: string, values: Array<string | number | null>): D1PreparedStatement {
     return this.database.prepare(query).bind(...values);
   }
+
+  async retireAliasesForKey(
+    tenantId: string,
+    siteId: string,
+    hmacKeyId: string,
+    reason: string
+  ): Promise<number> {
+    const aliases = await this.database
+      .prepare('SELECT alias_key FROM tracking_aliases WHERE tenant_id = ? AND hmac_key_id = ?')
+      .bind(tenantId, hmacKeyId)
+      .all<{ alias_key: string }>();
+    const rows = aliases.results ?? [];
+    if (!rows.length) return 0;
+    const now = this.now();
+    const results = await this.database.batch(
+      rows.flatMap(({ alias_key }) => [
+        this.statement(
+          `INSERT INTO tracking_suppression_tombstones
+            (suppression_key, tenant_id, site_id, alias_key, hmac_key_id, reason, created_at)
+           VALUES (?, ?, ?, ?, ?, ?, ?)`,
+          [identityConflictId(), tenantId, siteId, alias_key, hmacKeyId, reason, now]
+        ),
+        this.statement(
+          'DELETE FROM tracking_aliases WHERE tenant_id = ? AND alias_key = ? AND hmac_key_id = ?',
+          [tenantId, alias_key, hmacKeyId]
+        ),
+      ])
+    );
+    return results.filter((_, index) => index % 2 === 1).filter(changed).length;
+  }
+}
+
+function changed(result: D1RunResult | undefined): boolean {
+  return (result?.meta?.changes ?? 0) > 0;
 }
 
 export class IdentityStoreUnavailableError extends Error {
@@ -320,7 +410,10 @@ export class IdentityStoreUnavailableError extends Error {
   }
 }
 
-export function resolveIdentityClaim(input: IdentityClaim, store?: IdentityClaimStore): Promise<IdentityClaimResult> {
+export function resolveIdentityClaim(
+  input: IdentityClaim,
+  store?: IdentityClaimStore
+): Promise<IdentityClaimResult> {
   if (!store) return Promise.reject(new IdentityStoreUnavailableError());
   return store.transaction((tx) => tx.resolve(input));
 }
