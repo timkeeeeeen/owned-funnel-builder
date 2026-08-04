@@ -163,7 +163,7 @@ export async function persistCanonicalEvent(
           destination,
           timestamp,
           timestamp,
-          canonicalPayloadHash,
+          '',
         ]
       )
     ),

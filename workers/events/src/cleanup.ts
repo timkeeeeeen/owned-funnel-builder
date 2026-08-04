@@ -15,48 +15,103 @@ export async function runCleanup(
   const database = env.TRACKING_DB as D1Database | undefined;
   if (!database) return { expiredEvents: 0, expiredDeliveries: 0, watermark: now.toISOString() };
   const retentionDays = numberEnv(env, 'TRACKING_RETENTION_DAYS', 395);
+  const batchSize = numberEnv(env, 'TRACKING_CLEANUP_BATCH_SIZE', 100);
   const cutoff = new Date(now.getTime() - retentionDays * 86_400_000).toISOString();
   let expiredEvents = 0;
   let expiredDeliveries = 0;
   try {
     await database
-      .prepare(`DELETE FROM tracking_nonces WHERE expires_at < ?`)
-      .bind(now.toISOString())
+      .prepare(
+        `DELETE FROM tracking_nonces WHERE rowid IN (
+           SELECT rowid FROM tracking_nonces WHERE expires_at < ? LIMIT ?)`
+      )
+      .bind(now.toISOString(), batchSize)
       .run();
     const dlq = await database
-      .prepare(`DELETE FROM tracking_dlq_records WHERE created_at < ?`)
-      .bind(cutoff)
+      .prepare(
+        `DELETE FROM tracking_dlq_records WHERE rowid IN (
+           SELECT rowid FROM tracking_dlq_records WHERE created_at < ? LIMIT ?)`
+      )
+      .bind(cutoff, batchSize)
       .run();
     expiredDeliveries += dlq.meta?.changes ?? 0;
     const delivery = await database
       .prepare(
-        `DELETE FROM tracking_deliveries
-         WHERE updated_at < ? AND state IN ('delivered', 'permanent')`
+        `DELETE FROM tracking_deliveries WHERE rowid IN (
+           SELECT rowid FROM tracking_deliveries
+           WHERE updated_at < ? AND state IN ('delivered', 'permanent') LIMIT ?)`
       )
-      .bind(cutoff)
+      .bind(cutoff, batchSize)
       .run();
     expiredDeliveries += delivery.meta?.changes ?? 0;
     await database
       .prepare(
-        `DELETE FROM tracking_outbox
-         WHERE updated_at < ? AND state IN ('delivered', 'permanent', 'suppressed')`
+        `DELETE FROM tracking_outbox WHERE rowid IN (
+           SELECT rowid FROM tracking_outbox
+           WHERE updated_at < ? AND state IN ('delivered', 'permanent', 'suppressed') LIMIT ?)`
       )
-      .bind(cutoff)
+      .bind(cutoff, batchSize)
       .run();
     const events = await database
       .prepare(
-        `DELETE FROM tracking_events
-         WHERE occurred_at < ?
-           AND NOT EXISTS (SELECT 1 FROM tracking_deliveries WHERE event_key = tracking_events.event_key)
-           AND NOT EXISTS (SELECT 1 FROM tracking_outbox WHERE event_key = tracking_events.event_key)`
+        `DELETE FROM tracking_events WHERE rowid IN (
+           SELECT rowid FROM tracking_events AS expired
+           WHERE occurred_at < ?
+             AND NOT EXISTS (SELECT 1 FROM tracking_deliveries WHERE event_key = expired.event_key)
+             AND NOT EXISTS (SELECT 1 FROM tracking_outbox WHERE event_key = expired.event_key)
+           LIMIT ?)`
       )
-      .bind(cutoff)
+      .bind(cutoff, batchSize)
       .run();
     expiredEvents = events.meta?.changes ?? 0;
   } catch (error) {
     console.warn(redactError(error));
   }
   return { expiredEvents, expiredDeliveries, watermark: now.toISOString() };
+}
+
+export async function recordScheduledMetrics(
+  env: Record<string, unknown>,
+  startedAt: Date,
+  completedAt = new Date()
+): Promise<void> {
+  const database = env.TRACKING_DB as D1Database | undefined;
+  if (!database) return;
+  const previous = await database
+    .prepare(
+      `SELECT metric_value FROM tracking_runtime_metrics
+       WHERE metric_key = 'cron_last_completed_at' LIMIT 1`
+    )
+    .first<{ metric_value: number }>();
+  const oldest = await database
+    .prepare(
+      `SELECT MIN(updated_at) AS oldest FROM tracking_deliveries
+       WHERE state NOT IN ('delivered', 'permanent', 'suppressed')`
+    )
+    .first<{ oldest: string | null }>();
+  const completedSeconds = Math.floor(completedAt.getTime() / 1000);
+  const oldestAge = oldest?.oldest
+    ? Math.max(0, Math.floor((completedAt.getTime() - Date.parse(oldest.oldest)) / 1000))
+    : 0;
+  const missed =
+    previous && previous.metric_value < Math.floor(startedAt.getTime() / 1000) - 120 ? 1 : 0;
+  const observedAt = completedAt.toISOString();
+  const metric = (key: string, value: number) =>
+    database
+      .prepare(
+        `INSERT INTO tracking_runtime_metrics
+         (metric_key, metric_value, observed_at, details_json) VALUES (?, ?, ?, '{}')
+         ON CONFLICT(metric_key) DO UPDATE SET metric_value = excluded.metric_value,
+           observed_at = excluded.observed_at, details_json = excluded.details_json`
+      )
+      .bind(key, value, observedAt);
+  const results = await database.batch([
+    metric('cleanup_watermark_ms', completedAt.getTime()),
+    metric('cron_last_completed_at', completedSeconds),
+    metric('cron_missed', missed),
+    metric('oldest_unresolved_age_seconds', oldestAge),
+  ]);
+  if (results.some((result) => !result.success)) throw new Error('scheduled_metrics_write_failed');
 }
 
 export async function reclaimExpiredLeases(

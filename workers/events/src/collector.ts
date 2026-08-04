@@ -1048,16 +1048,28 @@ async function operatorRoute(request: Request, env: CollectorEnv): Promise<Respo
     const tenantId = textEnv(env, 'TRACKING_TENANT_ID', 'default');
     const siteId = textEnv(env, 'TRACKING_SITE_ID', 'default');
     const now = new Date().toISOString();
+    const funnelId =
+      typeof input.funnel_id === 'string' && /^[A-Za-z0-9:_-]{1,128}$/.test(input.funnel_id)
+        ? input.funnel_id
+        : null;
+    const destination =
+      input.destination === 'meta' || input.destination === 'tinybird' ? input.destination : null;
+    const controlKey =
+      funnelId || destination ? `scope:${funnelId ?? '*'}:${destination ?? '*'}` : 'global';
+    const auditAbsent = `NOT EXISTS (
+      SELECT 1 FROM tracking_operator_audits
+      WHERE tenant_id = ? AND site_id = ? AND idempotency_key = ?)`;
     const statements = [
       env.TRACKING_DB.prepare(
         `INSERT INTO tracking_runtime_controls
          (control_key, tenant_id, site_id, paused, actor, reason, request_id,
-          second_approver, updated_at)
-         VALUES ('global', ?, ?, ?, ?, ?, ?, ?, ?)
+          second_approver, updated_at, funnel_id, destination)
+         SELECT ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ? WHERE ${auditAbsent}
          ON CONFLICT(control_key) DO UPDATE SET paused = excluded.paused,
            actor = excluded.actor, reason = excluded.reason, request_id = excluded.request_id,
            second_approver = excluded.second_approver, updated_at = excluded.updated_at`
       ).bind(
+        controlKey,
         tenantId,
         siteId,
         input.enabled ? 1 : 0,
@@ -1065,8 +1077,59 @@ async function operatorRoute(request: Request, env: CollectorEnv): Promise<Respo
         metadata.reason,
         metadata.requestId,
         metadata.secondApprover,
-        now
+        now,
+        funnelId,
+        destination,
+        tenantId,
+        siteId,
+        metadata.idempotencyKey
       ),
+    ];
+    if (!input.enabled) {
+      statements.push(
+        env.TRACKING_DB.prepare(
+          `UPDATE tracking_deliveries SET state = 'retryable', outcome = NULL,
+           last_error = NULL, updated_at = ?
+           WHERE tenant_id = ? AND site_id = ? AND state = 'paused'
+             AND (? IS NULL OR destination = ?)
+             AND (? IS NULL OR event_key IN (
+               SELECT event_key FROM tracking_events
+               WHERE json_extract(envelope_json, '$.identity.funnel_id') = ?))
+             AND ${auditAbsent}`
+        ).bind(
+          now,
+          tenantId,
+          siteId,
+          destination,
+          destination,
+          funnelId,
+          funnelId,
+          tenantId,
+          siteId,
+          metadata.idempotencyKey
+        ),
+        env.TRACKING_DB.prepare(
+          `UPDATE tracking_outbox SET state = 'retryable', next_attempt_at = ?,
+           last_error = NULL, updated_at = ?
+           WHERE state = 'paused' AND event_key IN (
+             SELECT event_key FROM tracking_deliveries
+             WHERE tenant_id = ? AND site_id = ? AND state = 'retryable'
+               AND (? IS NULL OR destination = ?))
+             AND ${auditAbsent}`
+        ).bind(
+          now,
+          now,
+          tenantId,
+          siteId,
+          destination,
+          destination,
+          tenantId,
+          siteId,
+          metadata.idempotencyKey
+        )
+      );
+    }
+    statements.push(
       env.TRACKING_DB.prepare(
         `INSERT INTO tracking_operator_audits
          (audit_id, tenant_id, site_id, operation, actor, reason, request_id,
@@ -1084,20 +1147,8 @@ async function operatorRoute(request: Request, env: CollectorEnv): Promise<Respo
         metadata.idempotencyKey,
         metadata.secondApprover,
         now
-      ),
-    ];
-    if (!input.enabled) {
-      statements.push(
-        env.TRACKING_DB.prepare(
-          `UPDATE tracking_deliveries SET state = 'retryable', outcome = NULL,
-           last_error = NULL, updated_at = ? WHERE state = 'paused'`
-        ).bind(now),
-        env.TRACKING_DB.prepare(
-          `UPDATE tracking_outbox SET state = 'retryable', next_attempt_at = ?,
-           last_error = NULL, updated_at = ? WHERE state = 'paused'`
-        ).bind(now, now)
-      );
-    }
+      )
+    );
     const results = await env.TRACKING_DB.batch(statements);
     if (results.some((result) => !result.success))
       return jsonError('operator_write_failed', 503, request, env);
@@ -1112,8 +1163,90 @@ async function operatorRoute(request: Request, env: CollectorEnv): Promise<Respo
       input.destination === 'meta' || input.destination === 'tinybird' ? input.destination : '';
     if (!eventKey || !destination) return jsonError('invalid_request', 400, request, env);
     if (!env.EVENTS_QUEUE) return jsonError('tracking_unavailable', 503, request, env);
-    await env.EVENTS_QUEUE.send({ event_key: eventKey, destination, schema_version: '1' });
-    return jsonResponse({ accepted: true, event_key: eventKey, destination });
+    const tenantId = textEnv(env, 'TRACKING_TENANT_ID', 'default');
+    const siteId = textEnv(env, 'TRACKING_SITE_ID', 'default');
+    const delivery = await env.TRACKING_DB.prepare(
+      `SELECT d.state, e.event_name, e.occurred_at, e.privacy_subject_id,
+              json_extract(e.envelope_json, '$.identity.funnel_id') AS funnel_id
+       FROM tracking_deliveries d JOIN tracking_events e ON e.event_key = d.event_key
+       WHERE d.event_key = ? AND d.destination = ? AND d.tenant_id = ? AND d.site_id = ?`
+    )
+      .bind(eventKey, destination, tenantId, siteId)
+      .first<{
+        state: string;
+        event_name: string;
+        occurred_at: string;
+        privacy_subject_id: string | null;
+        funnel_id: string | null;
+      }>();
+    if (!delivery) return jsonError('delivery_not_found', 404, request, env);
+    if (delivery.state !== 'outcome_unknown' && delivery.state !== 'replay_pending')
+      return jsonError('delivery_not_replayable', 409, request, env);
+    if (delivery.event_name === 'Purchase' && !metadata.secondApprover)
+      return jsonError('second_approver_required', 409, request, env);
+    if (delivery.privacy_subject_id) {
+      const tombstone = await env.TRACKING_DB.prepare(
+        `SELECT 1 AS found FROM tracking_suppression_tombstones
+         WHERE tenant_id = ? AND site_id = ? AND visitor_id = ? LIMIT 1`
+      )
+        .bind(tenantId, siteId, delivery.privacy_subject_id)
+        .first();
+      if (tombstone) return jsonError('privacy_tombstone', 409, request, env);
+    }
+    const retentionDays = Math.max(1, Number(env.TRACKING_RETENTION_DAYS) || 395);
+    if (Date.parse(delivery.occurred_at) < Date.now() - retentionDays * 86_400_000)
+      return jsonError('event_expired', 410, request, env);
+    const paused = await env.TRACKING_DB.prepare(
+      `SELECT 1 AS found FROM tracking_runtime_controls
+       WHERE tenant_id = ? AND site_id = ? AND paused = 1
+         AND (destination IS NULL OR destination = ?)
+         AND (funnel_id IS NULL OR funnel_id = ?) LIMIT 1`
+    )
+      .bind(tenantId, siteId, destination, delivery.funnel_id)
+      .first();
+    if (paused) return jsonError('delivery_paused', 409, request, env);
+    const now = new Date().toISOString();
+    const auditAbsent = `NOT EXISTS (
+      SELECT 1 FROM tracking_operator_audits
+      WHERE tenant_id = ? AND site_id = ? AND idempotency_key = ?)`;
+    const results = await env.TRACKING_DB.batch([
+      env.TRACKING_DB.prepare(
+        `UPDATE tracking_deliveries
+         SET state = 'replay_pending', outcome = 'audited_replay', last_error = NULL,
+             lease_owner = NULL, lease_deadline = NULL, lease_until = NULL, updated_at = ?
+         WHERE event_key = ? AND destination = ? AND state = 'outcome_unknown'
+           AND ${auditAbsent}`
+      ).bind(now, eventKey, destination, tenantId, siteId, metadata.idempotencyKey),
+      env.TRACKING_DB.prepare(
+        `UPDATE tracking_outbox SET state = 'retryable', next_attempt_at = ?,
+           last_error = NULL, updated_at = ? WHERE event_key = ? AND ${auditAbsent}`
+      ).bind(now, now, eventKey, tenantId, siteId, metadata.idempotencyKey),
+      env.TRACKING_DB.prepare(
+        `INSERT INTO tracking_operator_audits
+         (audit_id, tenant_id, site_id, operation, actor, reason, request_id,
+          idempotency_key, second_approver, event_key, destination, created_at)
+         VALUES (?, ?, ?, 'replay_claim', ?, ?, ?, ?, ?, ?, ?, ?)
+         ON CONFLICT(tenant_id, site_id, idempotency_key) DO NOTHING`
+      ).bind(
+        crypto.randomUUID(),
+        tenantId,
+        siteId,
+        metadata.actor,
+        metadata.reason,
+        metadata.requestId,
+        metadata.idempotencyKey,
+        metadata.secondApprover,
+        eventKey,
+        destination,
+        now
+      ),
+    ]);
+    if (results.some((result) => !result.success))
+      return jsonError('operator_write_failed', 503, request, env);
+    const claimed = Number(results[0]?.meta?.changes ?? 0) === 1;
+    if (claimed)
+      await env.EVENTS_QUEUE.send({ event_key: eventKey, destination, schema_version: '1' });
+    return jsonResponse({ accepted: true, claimed, event_key: eventKey, destination });
   }
   return jsonError('not_found', 404, request, env);
 }

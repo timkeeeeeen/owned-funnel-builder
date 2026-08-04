@@ -5,6 +5,10 @@ import { test } from 'node:test';
 import { default as worker } from '../src/index.ts';
 import { sourceEnvelopeToCanonical, sourceRuntimeReady } from '../src/collector.ts';
 import { issueSignedCookie } from '../../../functions/_lib/tracking-cookie.ts';
+import { REQUIRED_TRACKING_MIGRATIONS } from '../src/safety.ts';
+
+const TEST_MIGRATION_SET_SHA = '5'.repeat(64);
+const TEST_RELEASE_SHA = '6'.repeat(40);
 
 type Bind = string | number | null;
 
@@ -39,6 +43,18 @@ function d1(database: DatabaseSync) {
 async function env() {
   const database = new DatabaseSync(':memory:');
   database.exec(await BunlessMigration());
+  database
+    .prepare(
+      `INSERT INTO tracking_runtime_release_state
+       (state_key, migration_names_json, migration_set_sha, release_sha, lock_state, updated_at)
+       VALUES ('active', ?, ?, ?, 'ready', ?)`
+    )
+    .run(
+      JSON.stringify(REQUIRED_TRACKING_MIGRATIONS),
+      TEST_MIGRATION_SET_SHA,
+      TEST_RELEASE_SHA,
+      new Date().toISOString()
+    );
   const key = await crypto.subtle.importKey(
     'raw',
     new TextEncoder().encode('collector-cookie-signing-key'),
@@ -58,6 +74,8 @@ async function env() {
     TRACKING_POLICY_VERSION: '2026-08',
     TRACKING_REGION: 'US',
     TRACKING_FAIL_CLOSED: false,
+    TRACKING_MIGRATION_SET_SHA: TEST_MIGRATION_SET_SHA,
+    TRACKING_RELEASE_SHA: TEST_RELEASE_SHA,
     TRACKING_CONTEXT_SIGNING_KEY_CURRENT: 'production-shaped-context-secret-key-2026',
     TRACKING_CONTEXT_SIGNING_KEY_ID_CURRENT: 'current',
     TRACKING_CONTEXT_VERIFY: (hash: string) =>
@@ -81,6 +99,7 @@ async function BunlessMigration(): Promise<string> {
     new URL('../migrations/0002_tracking_scope_hardening.sql', import.meta.url),
     new URL('../migrations/0003_csrf_nonce_bindings.sql', import.meta.url),
     new URL('../migrations/0004_delivery_safety.sql', import.meta.url),
+    new URL('../migrations/0005_runtime_safety.sql', import.meta.url),
   ];
   const chunks = [] as string[];
   for (const file of files)
@@ -208,6 +227,28 @@ test('bootstrap requires exact host/origin and returns non-cacheable signed cook
     {} as never
   );
   assert.equal(wrongHost.status, 403);
+});
+
+test('fetch fails closed while the migration lock or release SHA readback is not green', async () => {
+  const bindings = await env();
+  const mismatch = await worker.fetch(
+    request('/v1/bootstrap'),
+    { ...bindings, TRACKING_RELEASE_SHA: '7'.repeat(40) } as never,
+    {} as never
+  );
+  assert.equal(mismatch.status, 503);
+  bindings.__database.prepare('DELETE FROM tracking_runtime_release_state').run();
+  const response = await worker.fetch(request('/v1/bootstrap'), bindings as never, {} as never);
+  assert.equal(response.status, 503);
+  assert.deepEqual(await response.json(), { error: 'tracking_migrations_not_ready' });
+  assert.equal(
+    (
+      bindings.__database.prepare('SELECT count(*) AS count FROM tracking_csrf_nonces').get() as {
+        count: number;
+      }
+    ).count,
+    0
+  );
 });
 
 test('one privacy action atomically consumes its bound nonce and returns server-effective purposes', async () => {
@@ -890,6 +931,216 @@ test('operator kill switch is durable, attributed, and idempotently audited', as
         .get() as { count: number }
     ).count,
     1
+  );
+  const duplicate = await worker.fetch(
+    request('/internal/operator/kill-switch', {
+      method: 'POST',
+      headers: { authorization: 'Bearer operator-secret' },
+      body: JSON.stringify({
+        enabled: false,
+        actor: 'on-call@example.test',
+        reason: 'must not replace first decision',
+        request_id: 'request_87654321',
+        idempotency_key: 'idem_12345678',
+      }),
+    }),
+    { ...bindings, TRACKING_OPERATOR_TOKEN: 'operator-secret' } as never,
+    {} as never
+  );
+  assert.equal(duplicate.status, 200);
+  assert.equal(
+    (
+      bindings.__database
+        .prepare("SELECT paused FROM tracking_runtime_controls WHERE control_key = 'global'")
+        .get() as { paused: number }
+    ).paused,
+    1
+  );
+  assert.equal(
+    (
+      bindings.__database
+        .prepare('SELECT count(*) AS count FROM tracking_operator_audits')
+        .get() as { count: number }
+    ).count,
+    1
+  );
+});
+
+test('operator replay claims outcome_unknown once and rejects tombstoned or expired events', async () => {
+  const bindings = await env();
+  const now = new Date().toISOString();
+  const seed = (eventKey: string, occurredAt: string, subject: string | null) => {
+    bindings.__database
+      .prepare(
+        `INSERT INTO tracking_events
+         (event_key, tenant_id, site_id, event_name, event_id, source_system, occurred_at,
+          received_at, envelope_json, privacy_state_json, bot_state, created_at,
+          canonical_payload_hash, privacy_subject_id)
+         VALUES (?, 'tenant_demo', 'site_demo', 'Purchase', ?, 'pages', ?, ?,
+                 '{"identity":{"funnel_id":"owned-funnel-builder"}}', '{}', 'human', ?, ?, ?)`
+      )
+      .run(
+        eventKey,
+        `purchase:${eventKey.slice(0, 8)}`,
+        occurredAt,
+        now,
+        now,
+        'a'.repeat(64),
+        subject
+      );
+    bindings.__database
+      .prepare(
+        `INSERT INTO tracking_outbox
+         (event_key, state, next_attempt_at, created_at, updated_at)
+         VALUES (?, 'outcome_unknown', ?, ?, ?)`
+      )
+      .run(eventKey, now, now, now);
+    bindings.__database
+      .prepare(
+        `INSERT INTO tracking_deliveries
+         (delivery_key, tenant_id, site_id, event_key, destination, state, outcome,
+          created_at, updated_at, destination_payload_hash)
+         VALUES (?, 'tenant_demo', 'site_demo', ?, 'meta', 'outcome_unknown',
+                 'outcome_unknown', ?, ?, ?)`
+      )
+      .run(`${eventKey}:meta`, eventKey, now, now, 'b'.repeat(64));
+  };
+  const sends: unknown[] = [];
+  const replay = (eventKey: string, idempotencyKey: string) =>
+    worker.fetch(
+      request('/internal/operator/replay', {
+        method: 'POST',
+        headers: { authorization: 'Bearer operator-secret' },
+        body: JSON.stringify({
+          event_key: eventKey,
+          destination: 'meta',
+          actor: 'on-call@example.test',
+          second_approver: 'reviewer@example.test',
+          reason: 'verified ambiguous provider outcome',
+          request_id: `request_${idempotencyKey}`,
+          idempotency_key: idempotencyKey,
+        }),
+      }),
+      {
+        ...bindings,
+        TRACKING_OPERATOR_TOKEN: 'operator-secret',
+        EVENTS_QUEUE: { send: async (message: unknown) => void sends.push(message) },
+      } as never,
+      {} as never
+    );
+
+  const claimableKey = '7'.repeat(64);
+  seed(claimableKey, now, null);
+  assert.equal((await replay(claimableKey, 'idem_replay_123')).status, 200);
+  assert.equal((await replay(claimableKey, 'idem_replay_123')).status, 200);
+  assert.equal(sends.length, 1);
+  assert.equal(
+    (
+      bindings.__database
+        .prepare('SELECT state FROM tracking_deliveries WHERE event_key = ?')
+        .get(claimableKey) as { state: string }
+    ).state,
+    'replay_pending'
+  );
+  assert.equal(
+    (
+      bindings.__database
+        .prepare(
+          "SELECT count(*) AS count FROM tracking_operator_audits WHERE operation = 'replay_claim'"
+        )
+        .get() as { count: number }
+    ).count,
+    1
+  );
+
+  const tombstonedKey = '8'.repeat(64);
+  seed(tombstonedKey, now, 'privacy_deleted');
+  bindings.__database
+    .prepare(
+      `INSERT INTO tracking_suppression_tombstones
+       (suppression_key, tenant_id, site_id, visitor_id, reason, created_at)
+       VALUES ('deleted_subject', 'tenant_demo', 'site_demo', 'privacy_deleted', 'deletion', ?)`
+    )
+    .run(now);
+  assert.equal((await replay(tombstonedKey, 'idem_replay_456')).status, 409);
+
+  const expiredKey = '9'.repeat(64);
+  seed(expiredKey, '2020-01-01T00:00:00.000Z', null);
+  assert.equal((await replay(expiredKey, 'idem_replay_789')).status, 410);
+});
+
+test('operator resume changes only the requested funnel and destination scope', async () => {
+  const bindings = await env();
+  const now = new Date().toISOString();
+  for (const [eventKey, funnelId] of [
+    ['a'.repeat(64), 'funnel_a'],
+    ['b'.repeat(64), 'funnel_b'],
+  ]) {
+    bindings.__database
+      .prepare(
+        `INSERT INTO tracking_events
+         (event_key, tenant_id, site_id, event_name, event_id, source_system, occurred_at,
+          received_at, envelope_json, privacy_state_json, bot_state, created_at,
+          canonical_payload_hash)
+         VALUES (?, 'tenant_demo', 'site_demo', 'PageView', ?, 'event_worker', ?, ?, ?, '{}',
+                 'human', ?, ?)`
+      )
+      .run(
+        eventKey,
+        `event:${funnelId}`,
+        now,
+        now,
+        JSON.stringify({ identity: { funnel_id: funnelId } }),
+        now,
+        'c'.repeat(64)
+      );
+    bindings.__database
+      .prepare(
+        `INSERT INTO tracking_outbox
+         (event_key, state, next_attempt_at, created_at, updated_at)
+         VALUES (?, 'paused', ?, ?, ?)`
+      )
+      .run(eventKey, now, now, now);
+    bindings.__database
+      .prepare(
+        `INSERT INTO tracking_deliveries
+         (delivery_key, tenant_id, site_id, event_key, destination, state,
+          created_at, updated_at, destination_payload_hash)
+         VALUES (?, 'tenant_demo', 'site_demo', ?, 'meta', 'paused', ?, ?, '')`
+      )
+      .run(`${eventKey}:meta`, eventKey, now, now);
+  }
+  const response = await worker.fetch(
+    request('/internal/operator/kill-switch', {
+      method: 'POST',
+      headers: { authorization: 'Bearer operator-secret' },
+      body: JSON.stringify({
+        enabled: false,
+        funnel_id: 'funnel_a',
+        destination: 'meta',
+        actor: 'on-call@example.test',
+        reason: 'resume reviewed funnel scope',
+        request_id: 'request_scope_123',
+        idempotency_key: 'idem_scope_123',
+      }),
+    }),
+    { ...bindings, TRACKING_OPERATOR_TOKEN: 'operator-secret' } as never,
+    {} as never
+  );
+  assert.equal(response.status, 200);
+  assert.deepEqual(
+    bindings.__database
+      .prepare(
+        `SELECT json_extract(e.envelope_json, '$.identity.funnel_id') AS funnel_id, d.state
+         FROM tracking_deliveries d JOIN tracking_events e ON e.event_key = d.event_key
+         ORDER BY funnel_id`
+      )
+      .all()
+      .map((row) => ({ ...row })),
+    [
+      { funnel_id: 'funnel_a', state: 'retryable' },
+      { funnel_id: 'funnel_b', state: 'paused' },
+    ]
   );
 });
 

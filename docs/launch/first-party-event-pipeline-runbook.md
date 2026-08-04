@@ -77,8 +77,24 @@ D1 batch, including canonical and destination payload hashes. Duplicate event
 IDs reuse the event key only when the canonical hash also matches. Migration
 `0004_delivery_safety.sql` adds the hash, transform, lease-owner, fencing-token,
 durable kill-switch, and operator-audit contract. Public traffic is forbidden
-until the migration runner has applied `0001` through `0004` in lexical order
-under the forward-only lock and recorded the exact reviewed release SHA.
+until the migration runner has applied `0001` through `0005` in lexical order
+under the forward-only lock and recorded the exact reviewed migration-set SHA
+and release SHA in `tracking_runtime_release_state`. Fetch, Queue, and cron all
+fail closed until the D1 row exactly matches both deployment bindings.
+
+Every send consumes durable per-event, global Queue, Meta, and Meta-spend
+budgets. Exhaustion pauses the delivery for operator review. The sender hashes
+the exact transformed provider payload before the provider call, then checks
+the current policy version, region, superseding choice, GPC observation,
+tombstone, kill switch, and per-funnel sender manifest. `outcome_unknown` is
+terminal until a tombstone/retention-checked, idempotently audited operator
+replay transitions it to `replay_pending` with a distinct second approver for
+Purchase.
+
+Cron deletes at most `TRACKING_CLEANUP_BATCH_SIZE` rows per table and records
+the cleanup watermark, oldest unresolved age, missed-run state, and completion
+time in `tracking_runtime_metrics`. Alert when `cron_missed` is 1 or oldest age
+approaches the five-minute SLO.
 
 ## Secret binding contract
 
@@ -88,6 +104,9 @@ band for `TRACKING_CONTEXT_SIGNING_KEY_CURRENT`, optional
 keys, per-source bridge keys, the operator token, and destination credentials.
 Never place those values in Wrangler vars, logs, the runbook, or D1. Context
 signing must fail closed when the current secret is absent.
+The release pipeline must replace `TRACKING_MIGRATION_SET_SHA` and
+`TRACKING_RELEASE_SHA`; committed placeholder values intentionally fail the
+runtime gate and cannot serve or deliver events.
 
 ## Change and rollback procedure
 

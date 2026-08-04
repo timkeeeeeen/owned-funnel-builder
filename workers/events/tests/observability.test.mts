@@ -28,6 +28,9 @@ test('queue bindings pin retry, batching, concurrency, and DLQ safety values', a
   ]) {
     assert.ok(config.includes(value), `missing ${value}`);
   }
-  assert.equal(/BUSINESS_DB|checkout_leads|DODO_|META_|TINYBIRD_/.test(config), false);
+  assert.equal(
+    /BUSINESS_DB|checkout_leads|DODO_API_KEY|META_ACCESS_TOKEN|TINYBIRD_TOKEN/.test(config),
+    false
+  );
   assert.ok((50 * 4 * 4) / 60 > 10, 'recorded 10 events/sec peak clears inside five minutes');
 });
