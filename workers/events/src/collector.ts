@@ -56,6 +56,7 @@ export type CollectorEnv = Record<string, unknown> & {
 export type ExecutionContextLike = { waitUntil?(promise: Promise<unknown>): void };
 
 const EVENT_MAX_BYTES = 64 * 1024;
+export const CONTEXT_EXCHANGE_MAX_AGE_SECONDS = 604_800;
 const BODY_MAX_DEPTH = 8;
 const BODY_MAX_ITEMS = 100;
 const trackingControls = {
@@ -882,7 +883,7 @@ async function contextExchange(request: Request, env: CollectorEnv): Promise<Res
     !validatePrivacySnapshot(exchange.privacy_snapshot)
   )
     return jsonError('invalid_context', 403, request, env);
-  const expiresAt = new Date(Date.now() + 7 * 24 * 60 * 60_000).toISOString();
+  const expiresAt = new Date(Date.now() + CONTEXT_EXCHANGE_MAX_AGE_SECONDS * 1000).toISOString();
   const digest = await crypto.subtle.digest('SHA-256', crypto.getRandomValues(new Uint8Array(32)));
   const contextHash = Array.from(new Uint8Array(digest), (byte) => byte.toString(16).padStart(2, '0')).join('');
   const now = new Date().toISOString();
