@@ -708,8 +708,9 @@ export function sourceEnvelopeToCanonical(
         product_id: envelope.product_id,
         content_ids: [envelope.product_id],
         content_type: 'product',
+        ...(envelope.payment_id ? { payment_id: envelope.payment_id } : {}),
       }
-    : {};
+    : envelope.payment_id ? { payment_id: envelope.payment_id } : {};
   const snapshot = envelope.privacy_snapshot;
   return validateCanonicalEvent({
     schema_version: '1',
