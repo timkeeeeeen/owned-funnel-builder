@@ -27,6 +27,13 @@ test('video-lead comparison reuses the original offer content and checkout', asy
   assert.deepEqual(comparison.included, original.included);
   assert.deepEqual(comparison.proof, original.proof);
   assert.deepEqual(comparison.faqs, original.faqs);
+
+  const comparisonRoute = await readFile(
+    'src/pages/owned-funnel-builder-video-lead.astro',
+    'utf8'
+  );
+  assert.match(comparisonRoute, /getOffer\('owned-funnel-builder-video-lead'\)/);
+  assert.match(comparisonRoute, /<VideoLeadOfferLandingPage offer=\{offer\} \/>/);
 });
 
 test('video-lead template composes the complete dedicated landing page', async () => {
@@ -67,7 +74,11 @@ test('video-lead template composes the complete dedicated landing page', async (
   assert.match(source, /--color-muted: oklch\(96\.8% 0\.003 260\);/);
   assert.match(source, /--color-muted-foreground: oklch\(49% 0\.012 260\);/);
   assert.match(source, /--color-border: oklch\(91\.5% 0\.006 260\);/);
-  assert.match(source, /--color-brand: oklch\(56% 0\.21 255\);/);
+  assert.match(
+    source,
+    /--color-brand: oklch\(54% 0\.21 255\);/,
+    'the comparison brand color must maintain text contrast on its light surfaces'
+  );
   assert.match(source, /--color-brand-foreground: oklch\(100% 0 0\);/);
   assert.match(source, /--color-ring: var\(--color-brand\);/);
   assert.equal((source.match(/linear-gradient\(/g) ?? []).length, 1);
