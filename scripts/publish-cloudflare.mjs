@@ -18,7 +18,7 @@ const wrangler = new URL('../node_modules/.bin/wrangler', import.meta.url).pathn
 if (execute) {
   await promisify(execFile)(
     wrangler,
-    ['pages', 'deploy', 'dist', '--project-name', project, '--commit-hash', sha],
+    ['pages', 'deploy', 'dist', '--project-name', project, '--branch', 'main', '--commit-hash', sha],
     { maxBuffer: 8 * 1024 * 1024 }
   );
   console.log(JSON.stringify({ action: 'pages_deploy', environment, project, mode: 'execute', sha, mutations: true }));

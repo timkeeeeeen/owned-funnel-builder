@@ -22,5 +22,6 @@ test('Pages dry-run probes the installed Wrangler CLI without the removed dry-ru
 test('live Pages execution is explicitly approval- and SHA-bound', async () => {
   const source = await readFile('scripts/publish-cloudflare.mjs', 'utf8');
   assert.match(source, /--execute requires --approval-id and --sha/);
+  assert.match(source, /--branch', 'main'/);
   assert.match(source, /--commit-hash/);
 });
