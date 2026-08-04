@@ -29,23 +29,21 @@ test('video-lead comparison reuses the original offer content and checkout', asy
   assert.deepEqual(comparison.faqs, original.faqs);
 });
 
-test('video-lead adapter keeps offer identity while forwarding the checkout funnel slug', async () => {
-  const adapter = await readFile(
+test('video-lead template composes the complete dedicated landing page', async () => {
+  const source = await readFile(
     'src/components/offers/templates/VideoLeadOfferLandingPage.astro',
     'utf8'
   );
-  const landing = await readFile('src/components/offers/OfferLandingPage.astro', 'utf8');
 
-  assert.match(
-    adapter,
-    /<OfferLandingPage offer=\{offer\} checkoutFunnelSlug=\{offer\.checkoutFunnelSlug\} \/>/
-  );
-  assert.doesNotMatch(adapter, /offer=\{\{ \.\.\.offer, slug:/);
-  assert.match(landing, /checkoutFunnelSlug\?: string;/);
-  assert.match(landing, /const \{ offer, checkoutFunnelSlug = offer\.slug \} = Astro\.props;/);
-  assert.match(landing, /const funnel = getFunnel\(checkoutFunnelSlug\);/);
-  assert.match(
-    landing,
-    /<OfferCheckoutDialog offer=\{\{ \.\.\.offer, slug: checkoutFunnelSlug \}\} checkout=\{offer\.checkout\} \/>/
-  );
+  assert.match(source, /OfferCheckoutDialog/);
+  assert.match(source, /OfferAnalytics/);
+  assert.match(source, /video-lead-theme/);
+  assert.match(source, /data-video-lead="hero"/);
+  assert.match(source, /data-video-lead="included"/);
+  assert.match(source, /data-video-lead="features"/);
+  assert.match(source, /data-video-lead="proof"/);
+  assert.match(source, /data-video-lead="bonus"/);
+  assert.match(source, /data-video-lead="steps"/);
+  assert.match(source, /data-video-lead="faq"/);
+  assert.doesNotMatch(source, /strategy\.perspective|160 Qualified Leads|6,000\+ customers/);
 });
