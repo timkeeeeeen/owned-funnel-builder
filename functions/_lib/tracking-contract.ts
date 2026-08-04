@@ -340,7 +340,7 @@ export function validateCanonicalEvent(input: unknown): CanonicalEvent {
     'commerce',
     'privacy',
   ];
-  const allowed = new Set([...required, 'device', 'geo']);
+  const allowed = new Set([...required, 'context_hash', 'device', 'geo']);
   if (Object.keys(event).some((key) => !allowed.has(key))) invalid('contains an unknown field');
   if (required.some((key) => !(key in event))) invalid('is missing a required field');
   if (event.schema_version !== '1') invalid('schema_version must be 1');
@@ -348,6 +348,8 @@ export function validateCanonicalEvent(input: unknown): CanonicalEvent {
   if (event.source !== 'browser' && event.source !== 'server') invalid('source is not supported');
   if (!sourceSystems.has(event.source_system as SourceSystem))
     invalid('source_system is not supported');
+  if (event.context_hash !== undefined && (typeof event.context_hash !== 'string' || !/^[a-f0-9]{64}$/i.test(event.context_hash)))
+    invalid('context_hash must be a SHA-256 hex digest');
   const occurredAt = safeString(event.occurred_at, 'occurred_at', 64, true);
   if (Number.isNaN(Date.parse(occurredAt))) invalid('occurred_at must be an ISO date');
   const event_name = event.event_name as EventName;
@@ -359,6 +361,7 @@ export function validateCanonicalEvent(input: unknown): CanonicalEvent {
     event_name,
     source: event.source,
     source_system: event.source_system as SourceSystem,
+    ...(event.context_hash === undefined ? {} : { context_hash: event.context_hash }),
     occurred_at: occurredAt,
     visitor: allowedObject(event.visitor, 'visitor') as Record<string, string>,
     session: allowedObject(event.session, 'session') as Record<string, string>,

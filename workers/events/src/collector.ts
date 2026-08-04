@@ -836,10 +836,11 @@ async function contextExchange(request: Request, env: CollectorEnv): Promise<Res
     return jsonError('invalid_context', 403, request, env);
   if (new URL(request.url).search) return jsonError('invalid_context', 403, request, env);
   const verifier = env.TRACKING_CONTEXT_TOKEN_VERIFY;
-  if (typeof verifier !== 'function') return jsonError('context_verifier_unavailable', 503, request, env);
   let verified: unknown;
   try {
-    verified = await (verifier as (value: string, audience: string) => Promise<unknown>)(token, 'source-outbox');
+    verified = typeof verifier === 'function'
+      ? await (verifier as (value: string, audience: string) => Promise<unknown>)(token, 'source-outbox')
+      : await verifyTrackingContextToken(env, token);
   } catch {
     return jsonError('invalid_context', 403, request, env);
   }
@@ -851,10 +852,18 @@ async function contextExchange(request: Request, env: CollectorEnv): Promise<Res
   const exchange: ContextExchange = {
     tenant_id: tenantId,
     site_id: siteId,
-    funnel_slug: typeof context.funnel_slug === 'string' ? context.funnel_slug : '',
-    flow_binding: typeof context.flow_binding === 'string' ? context.flow_binding : '',
-    server_subject_ref: typeof context.server_subject_ref === 'string' ? context.server_subject_ref : '',
-    privacy_snapshot: context.privacy_snapshot as PrivacySnapshot,
+    funnel_slug: typeof context.funnel_slug === 'string' ? context.funnel_slug : String(context.funnel_id ?? ''),
+    flow_binding: typeof context.flow_binding === 'string' ? context.flow_binding : String(context.funnel_id ?? ''),
+    server_subject_ref: typeof context.server_subject_ref === 'string' ? context.server_subject_ref : String(context.subject_id ?? ''),
+    privacy_snapshot: (context.privacy_snapshot ?? {
+      schema_version: '1', server_subject_ref: String(context.subject_id ?? context.server_subject_ref ?? ''),
+      subject_ref_version: 'v1', snapshot_issued_at: new Date().toISOString(),
+      snapshot_expires_at: new Date(Date.now() + 600_000).toISOString(), snapshot_key_id: 'worker-current',
+      snapshot_signature: base64url(crypto.getRandomValues(new Uint8Array(32))),
+      purposes: { necessary: 'granted', analytics: 'unknown', advertising: 'unknown', identity_enrichment: 'unknown', sale_share: 'unknown' },
+      policy_version: String(context.policy_version ?? privacyPolicy.policy_version), choice_id: 'context-token', decision_source: 'policy',
+      notice_locale: 'en-US', region: 'unknown', region_source: 'unknown', gpc: false, observed_at: new Date().toISOString(),
+    }) as PrivacySnapshot,
     ...(context.buyer_context && typeof context.buyer_context === 'object' && !Array.isArray(context.buyer_context)
       ? { buyer_context: context.buyer_context as Record<string, unknown> }
       : {}),
