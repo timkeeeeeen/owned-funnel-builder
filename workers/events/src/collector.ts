@@ -575,6 +575,17 @@ async function bootstrap(request: Request, env: CollectorEnv): Promise<Response>
           )
           .first<{ context_hash: string }>()
       : null;
+  const contextToken =
+    state.resolved
+      ? await signTrackingContext(env, {
+          tenant_id: textEnv(env, 'TRACKING_TENANT_ID', 'default'),
+          site_id: textEnv(env, 'TRACKING_SITE_ID', 'default'),
+          funnel_id: rolloutState.context.bound_funnel,
+          subject_id: nextPrivacySubject,
+          subject_deleted: false,
+          policy_version: state.policyVersion,
+        })
+      : null;
   const response = jsonResponse(
     {
       schema_version: '1',
@@ -588,6 +599,7 @@ async function bootstrap(request: Request, env: CollectorEnv): Promise<Response>
               .filter((decision) => decision.allowed)
               .map((decision) => decision.purpose),
             ...(context?.context_hash ? { tracking_context_hash: context.context_hash } : {}),
+            ...(contextToken ? { tracking_context_token: contextToken } : {}),
           }
         : {}),
     },
@@ -1040,6 +1052,7 @@ async function browserClaims(request: Request, env: CollectorEnv): Promise<Respo
   }
   const funnelSlug = body.funnel_slug;
   const flowBinding = body.flow_binding;
+  let flowContextHashes: string[] = [];
   const paymentIds = Array.isArray(body.payment_ids)
     ? body.payment_ids
         .filter(
@@ -1054,9 +1067,9 @@ async function browserClaims(request: Request, env: CollectorEnv): Promise<Respo
   try {
     const validFlow = typeof env.TRACKING_FLOW_BINDING_VERIFY === 'function'
       ? await env.TRACKING_FLOW_BINDING_VERIFY(flowBinding, funnelSlug, paymentIds)
-      : Boolean(
-          await env.TRACKING_DB.prepare(
-            `SELECT 1 AS valid FROM tracking_context_exchanges
+      : (() => {
+          return env.TRACKING_DB.prepare(
+            `SELECT context_hash FROM tracking_context_exchanges
              WHERE tenant_id = ? AND site_id = ? AND funnel_slug = ? AND flow_binding = ?
                AND expires_at > ? LIMIT 1`
           )
@@ -1067,8 +1080,12 @@ async function browserClaims(request: Request, env: CollectorEnv): Promise<Respo
               flowBinding,
               new Date().toISOString()
             )
-            .first()
-        );
+            .all<{ context_hash: string }>()
+            .then((result) => {
+              flowContextHashes = (result.results ?? []).map((row) => row.context_hash).filter(Boolean);
+              return flowContextHashes.length > 0;
+            });
+        })();
     if (!validFlow)
       return jsonError('invalid_flow', 403, request, env);
   } catch {
@@ -1076,14 +1093,17 @@ async function browserClaims(request: Request, env: CollectorEnv): Promise<Respo
   }
   if (!paymentIds.length) return jsonResponse({ claims: [] }, 200);
   const placeholders = paymentIds.map(() => '?').join(', ');
+  const contextClause = flowContextHashes.length
+    ? ` AND json_extract(envelope_json, '$.context_hash') IN (${flowContextHashes.map(() => '?').join(', ')})`
+    : '';
   const events = await env.TRACKING_DB.prepare(
     `SELECT event_key, event_id, envelope_json
        FROM tracking_events
       WHERE tenant_id = ? AND site_id = ? AND source_system = 'pages'
         AND event_name = 'Purchase' AND json_extract(envelope_json, '$.commerce.payment_id') IN (${placeholders})
-        AND json_extract(envelope_json, '$.identity.funnel_id') = ?`
+        AND json_extract(envelope_json, '$.identity.funnel_id') = ?${contextClause}`
   )
-    .bind(textEnv(env, 'TRACKING_TENANT_ID', 'default'), textEnv(env, 'TRACKING_SITE_ID', 'default'), ...paymentIds, funnelSlug)
+    .bind(textEnv(env, 'TRACKING_TENANT_ID', 'default'), textEnv(env, 'TRACKING_SITE_ID', 'default'), ...paymentIds, funnelSlug, ...flowContextHashes)
     .all<{ event_key: string; event_id: string; envelope_json: string }>();
   const claims: Array<Record<string, unknown>> = [];
   for (const row of events.results ?? []) {

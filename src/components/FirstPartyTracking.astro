@@ -131,6 +131,8 @@ const bootstrapUrl = collectorUrl.replace(/\/v1\/events\/?$/, '/v1/bootstrap');
         serverAuthoritative: true,
       };
       trackerWindow.__maestroConsent = state;
+      if (typeof body?.tracking_context_token === 'string')
+        trackerWindow.__maestroTrackingContextToken = body.tracking_context_token;
       window.dispatchEvent(new CustomEvent('maestro:consent', { detail: state }));
       if (allowedToTrack('advertising')) bootstrapPixel();
       return body;

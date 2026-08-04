@@ -17,8 +17,8 @@ export async function createPrivacyRequest(env: Record<string, unknown> & { TRAC
   if (tombstone && (!tinybirdUrl || !tinybirdToken)) throw new Error('tinybird_tombstone_unconfigured');
   const statements = [
     ...(tombstone ? [env.TRACKING_DB.prepare(`INSERT INTO tracking_suppression_tombstones (suppression_key, tenant_id, site_id, visitor_id, reason, created_at) VALUES (?, ?, ?, ?, ?, ?) ON CONFLICT(suppression_key) DO NOTHING`).bind(`request:${id}`, tenant, site, request.subjectId, `privacy_${request.action}`, now)] : []),
-    env.TRACKING_DB.prepare(`INSERT INTO tracking_privacy_requests (request_id, tenant_id, site_id, subject_id, action, state, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)`).bind(id, tenant, site, request.subjectId, request.action, tombstone ? 'tombstone_committed' : 'pending', now, now),
-    env.TRACKING_DB.prepare(`INSERT INTO tracking_deletion_requests (request_id, tenant_id, subject_key, request_type, state, verification_state, created_at, audit_json) VALUES (?, ?, ?, ?, ?, 'verified', ?, ?)`).bind(id, tenant, request.subjectId, request.action, tombstone ? 'tombstone_committed' : 'pending', now, JSON.stringify({ source: 'worker', request_id: id })),
+    env.TRACKING_DB.prepare(`INSERT INTO tracking_privacy_requests (request_id, tenant_id, site_id, subject_id, action, state, created_at, updated_at) VALUES (?, ?, ?, ?, ?, 'pending', ?, ?)`).bind(id, tenant, site, request.subjectId, request.action, now, now),
+    env.TRACKING_DB.prepare(`INSERT INTO tracking_deletion_requests (request_id, tenant_id, subject_key, request_type, state, verification_state, created_at, audit_json) VALUES (?, ?, ?, ?, 'pending', 'verified', ?, ?)`).bind(id, tenant, request.subjectId, request.action, now, JSON.stringify({ source: 'worker', request_id: id })),
   ];
   await env.TRACKING_DB.batch(statements);
   if (tombstone) {
@@ -26,6 +26,10 @@ export async function createPrivacyRequest(env: Record<string, unknown> & { TRAC
     const privacySubjectKey = `v1:${Array.from(new Uint8Array(digest), byte => byte.toString(16).padStart(2, '0')).join('')}`;
     const response = await fetch(`${tinybirdUrl}${tinybirdUrl.includes('?') ? '&' : '?'}wait=true`, { method: 'POST', headers: { authorization: `Bearer ${tinybirdToken}`, 'content-type': 'application/x-ndjson' }, body: JSON.stringify({ privacy_subject_key: privacySubjectKey, tombstoned_at: now, expires_at: new Date(Date.now() + 10 * 365 * 86_400_000).toISOString(), request_id: id }) + '\n' });
     if (!response.ok) throw new Error('tinybird_tombstone_failed');
+    await env.TRACKING_DB.batch([
+      env.TRACKING_DB.prepare(`UPDATE tracking_privacy_requests SET state = 'tombstone_committed', updated_at = ? WHERE request_id = ? AND state = 'pending'`).bind(now, id),
+      env.TRACKING_DB.prepare(`UPDATE tracking_deletion_requests SET state = 'tombstone_committed' WHERE request_id = ? AND state = 'pending'`).bind(id),
+    ]);
   }
   return id;
 }

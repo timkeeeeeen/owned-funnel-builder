@@ -430,9 +430,17 @@ const frameId = `payment-checkout-${offer.slug}`;
       setLoading(true);
 
       try {
+        const trackingContextToken = (
+          window as Window & { __maestroTrackingContextToken?: unknown }
+        ).__maestroTrackingContextToken;
         const response = await fetch('/api/checkout', {
           method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
+          headers: {
+            'Content-Type': 'application/json',
+            ...(typeof trackingContextToken === 'string' && trackingContextToken
+              ? { 'x-tracking-context-token': trackingContextToken }
+              : {}),
+          },
           body: JSON.stringify({
             email: emailInput.value,
             offerSlug,
