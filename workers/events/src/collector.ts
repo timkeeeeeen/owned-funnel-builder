@@ -36,6 +36,13 @@ import {
 } from './privacy.ts';
 import { persistCanonicalEvent, type QueueLike } from './outbox.ts';
 import { healthResponse, jsonResponse, redactError } from './observability.ts';
+import {
+  SOURCE_SYSTEMS,
+  parseSourceEventEnvelope,
+  verifySignedBridge,
+  type PrivacySnapshot,
+  validatePrivacySnapshot,
+} from './source-bridge.ts';
 
 export type CollectorEnv = Record<string, unknown> & {
   TRACKING_DB: D1Database;
@@ -232,12 +239,49 @@ async function verifyEventContext(
 ): Promise<EventContext | null> {
   if (!contextHash) return null;
   const verifier = env.TRACKING_CONTEXT_VERIFY;
-  const context =
+  let context =
     typeof verifier === 'function'
       ? /^[a-f0-9]{64}$/i.test(contextHash)
         ? await verifier(contextHash)
         : null
       : await verifyTrackingContextToken(env, contextHash);
+  if (!context && /^[a-f0-9]{64}$/i.test(contextHash)) {
+    let row: {
+      tenant_id: string;
+      site_id: string;
+      funnel_slug: string;
+      server_subject_ref: string;
+      privacy_snapshot_json: string;
+      expires_at: string;
+    } | null = null;
+    try {
+      row = await env.TRACKING_DB.prepare(
+        `SELECT tenant_id, site_id, funnel_slug, server_subject_ref, privacy_snapshot_json, expires_at
+         FROM tracking_context_exchanges WHERE context_hash = ? AND expires_at > ? LIMIT 1`
+      )
+        .bind(contextHash, new Date().toISOString())
+        .first();
+    } catch {
+      row = null;
+    }
+    if (row) {
+      try {
+        const snapshot = validatePrivacySnapshot(JSON.parse(row.privacy_snapshot_json));
+        context = snapshot
+          ? {
+              tenant_id: row.tenant_id,
+              site_id: row.site_id,
+              funnel_id: row.funnel_slug,
+              subject_id: row.server_subject_ref,
+              subject_deleted: false,
+              policy_version: snapshot.policy_version,
+            }
+          : null;
+      } catch {
+        context = null;
+      }
+    }
+  }
   if (!context) return null;
   const rolloutContext = rolloutState.context;
   const policyVersion = String(privacyPolicy.policy_version);
@@ -245,6 +289,7 @@ async function verifyEventContext(
     context.subject_deleted ||
     context.tenant_id !== event.tenant_id ||
     context.site_id !== event.site_id ||
+    event.identity.funnel_id !== context.funnel_id ||
     context.funnel_id !== rolloutContext.funnel ||
     context.funnel_id !== rolloutContext.bound_funnel ||
     !context.subject_id ||
@@ -255,8 +300,6 @@ async function verifyEventContext(
   return context;
 }
 const PUBLIC_BROWSER_EVENTS = new Set<EventName>(['PageView']);
-const AUTHORITATIVE_EVENTS = new Set<EventName>(['Lead', 'InitiateCheckout', 'Purchase']);
-const SOURCE_SYSTEMS = new Set<SourceSystem>(['pages', 'app_idea', 'blueprint']);
 
 type Counter = { window: number; count: number };
 const counters = new Map<string, Counter>();
@@ -609,131 +652,63 @@ async function browserEvents(
   return jsonResponse({ accepted: true, suppressed: false }, 202, cors(request, env));
 }
 
-function sourceKey(env: Record<string, unknown>, source: SourceSystem): unknown {
-  return env[`TRACKING_${source.toUpperCase()}_BRIDGE_KEY_CURRENT`];
-}
-
-async function importHmacKey(value: unknown): Promise<CryptoKey | null> {
-  if (value && typeof value === 'object' && 'type' in value) return value as CryptoKey;
-  if (typeof value !== 'string' || value.length < 16 || value.length > 4096) return null;
-  return crypto.subtle.importKey(
-    'raw',
-    new TextEncoder().encode(value),
-    { name: 'HMAC', hash: 'SHA-256' },
-    false,
-    ['verify']
-  );
-}
-
 export function sourceEnvelopeToCanonical(
   value: unknown,
   source: SourceSystem,
   env: CollectorEnv
 ): CanonicalEvent {
-  if (!value || typeof value !== 'object' || Array.isArray(value))
-    throw new TypeError('invalid_source_envelope');
-  const input = value as Record<string, unknown>;
-  const allowedInputKeys = new Set([
-    'schema_version',
-    'event_id',
-    'event_name',
-    'occurred_at',
-    'context_hash',
-    'identity',
-    'commerce',
-    'privacy',
-  ]);
-  if (Object.keys(input).some((key) => !allowedInputKeys.has(key)))
-    throw new TypeError('invalid_source_envelope');
-  const eventName = input.event_name;
-  if (!AUTHORITATIVE_EVENTS.has(eventName as EventName))
-    throw new TypeError('invalid_authoritative_event');
-  if (input.schema_version !== '1' || typeof input.event_id !== 'string')
-    throw new TypeError('invalid_source_envelope');
-  if (typeof input.occurred_at !== 'string') throw new TypeError('invalid_source_envelope');
-
-  const rawIdentity =
-    input.identity && typeof input.identity === 'object' && !Array.isArray(input.identity)
-      ? (input.identity as Record<string, unknown>)
-      : {};
-  const identity: Record<string, string> = {};
-  for (const key of [
-    'lead_id',
-    'funnel_id',
-    'checkout_id',
-    'order_id',
-    'payment_id',
-    'external_id',
-  ]) {
-    if (typeof rawIdentity[key] === 'string' && rawIdentity[key])
-      identity[key] = rawIdentity[key] as string;
-  }
-  const rawPrivacy =
-    input.privacy && typeof input.privacy === 'object' && !Array.isArray(input.privacy)
-      ? (input.privacy as Record<string, unknown>)
-      : {};
-  const privacy: Record<string, string | boolean> = {
-    gpc: rawPrivacy.gpc === true,
-    opted_out: rawPrivacy.opted_out === true,
+  const envelope = parseSourceEventEnvelope(value, source);
+  const identity: Record<string, string> = {
+    funnel_id: envelope.funnel_slug,
+    ...(envelope.lead_id ? { lead_id: envelope.lead_id } : {}),
+    ...(envelope.checkout_session_id ? { checkout_id: envelope.checkout_session_id } : {}),
+    ...(envelope.payment_id ? { payment_id: envelope.payment_id } : {}),
   };
-  privacy.policy_version =
-    typeof rawPrivacy.policy_version === 'string'
-      ? rawPrivacy.policy_version.slice(0, 128)
-      : String(privacyPolicy.policy_version);
-  if (typeof rawPrivacy.region === 'string') privacy.region = rawPrivacy.region.slice(0, 32);
-  const rawCommerce =
-    input.commerce && typeof input.commerce === 'object' && !Array.isArray(input.commerce)
-      ? input.commerce
-      : {};
+  const commerce = envelope.product_id
+    ? {
+        product_id: envelope.product_id,
+        content_ids: [envelope.product_id],
+        content_type: 'product',
+      }
+    : {};
+  const snapshot = envelope.privacy_snapshot;
   return validateCanonicalEvent({
     schema_version: '1',
     tenant_id: textEnv(env, 'TRACKING_TENANT_ID', 'default'),
     site_id: textEnv(env, 'TRACKING_SITE_ID', 'default'),
-    event_id: input.event_id,
-    event_name: eventName,
+    event_id: envelope.source_event_id,
+    event_name: envelope.event_name,
     source: 'server',
     source_system: source,
-    occurred_at: input.occurred_at,
+    occurred_at: envelope.occurred_at,
     visitor: {},
     session: {},
     page: {},
     attribution: {},
     identity,
-    commerce: rawCommerce,
-    privacy,
+    commerce,
+    privacy: {
+      policy_version: snapshot.policy_version,
+      region: snapshot.region,
+      gpc: snapshot.gpc,
+      opted_out: snapshot.purposes.advertising === 'denied',
+    },
   });
 }
 
 async function sourceEvents(request: Request, env: CollectorEnv): Promise<Response> {
-  // Server-to-server bridges authenticate the exact body with an independent key;
-  // a browser Origin header is neither required nor trusted on this route.
   if (!exactHost(request, env)) return jsonError('not_allowed', 403, request, env);
-  const source = request.headers.get('x-tracking-source') as SourceSystem | null;
+  const source = request.headers.get('x-maestro-issuer') as SourceSystem | null;
+  if (!source && request.headers.get('x-tracking-source'))
+    return jsonError('source_runtime_not_ready', 403, request, env);
   if (!source || !SOURCE_SYSTEMS.has(source)) return jsonError('invalid_source', 401, request, env);
   if (!sourceRuntimeReady(source)) return jsonError('source_runtime_not_ready', 403, request, env);
-  const timestamp = request.headers.get('x-tracking-timestamp') ?? '';
-  const nonce = request.headers.get('x-tracking-nonce') ?? '';
-  const signature = request.headers.get('x-tracking-signature') ?? '';
-  const numericTimestamp = Number(timestamp);
-  if (
-    !/^\d{10}$/.test(timestamp) ||
-    !/^[-A-Za-z0-9_]{8,128}$/.test(nonce) ||
-    !/^[a-f0-9]{64}$/i.test(signature) ||
-    Math.abs(Date.now() / 1000 - numericTimestamp) > 300
-  )
-    return jsonError('invalid_signature', 401, request, env);
   const bodyText = await request.text();
   if (new TextEncoder().encode(bodyText).byteLength > EVENT_MAX_BYTES)
     return jsonError('body_too_large', 413, request, env);
-  const key = await importHmacKey(sourceKey(env, source));
-  if (!key) return jsonError('source_not_configured', 503, request, env);
-  const valid = await crypto.subtle.verify(
-    'HMAC',
-    key,
-    Uint8Array.from(signature.match(/.{2}/g)!.map((pair) => parseInt(pair, 16))),
-    new TextEncoder().encode(`${timestamp}.${nonce}.${bodyText}`)
-  );
-  if (!valid) return jsonError('invalid_signature', 401, request, env);
+  if (!(await verifySignedBridge(request, bodyText, env, source, 'source-events')))
+    return jsonError('invalid_signature', 401, request, env);
+  const nonce = request.headers.get('x-maestro-nonce') ?? '';
   const nonceResult = await env.TRACKING_DB.prepare(
     `INSERT INTO tracking_nonces (nonce, source_system, expires_at, created_at) VALUES (?, ?, ?, ?) ON CONFLICT(source_system, nonce) DO NOTHING`
   )
@@ -743,7 +718,8 @@ async function sourceEvents(request: Request, env: CollectorEnv): Promise<Respon
     return jsonError('replayed_request', 409, request, env);
   const body = JSON.parse(bodyText) as unknown;
   if (!safeJson(body)) return jsonError('body_limits_exceeded', 400, request, env);
-  const event = sourceEnvelopeToCanonical(body, source, env);
+  const envelope = parseSourceEventEnvelope(body, source);
+  const event = sourceEnvelopeToCanonical(envelope, source, env);
   if (
     event.tenant_id !== textEnv(env, 'TRACKING_TENANT_ID', 'default') ||
     event.site_id !== textEnv(env, 'TRACKING_SITE_ID', 'default')
@@ -757,14 +733,7 @@ async function sourceEvents(request: Request, env: CollectorEnv): Promise<Respon
     );
     return jsonError('event_scope_mismatch', 403, request, env);
   }
-  const contextHash =
-    body &&
-    typeof body === 'object' &&
-    !Array.isArray(body) &&
-    typeof (body as Record<string, unknown>).context_hash === 'string'
-      ? (body as Record<string, string>).context_hash
-      : null;
-  const eventContext = await verifyEventContext(env, event, contextHash);
+  const eventContext = await verifyEventContext(env, event, envelope.context_hash);
   if (!eventContext) return jsonError('invalid_context', 403, request, env);
   const state = await loadPrivacyState(
     request,
@@ -781,8 +750,108 @@ async function sourceEvents(request: Request, env: CollectorEnv): Promise<Respon
   return jsonResponse(
     { accepted: true, event_key: result.eventKey, suppressed: result.suppressed },
     202,
-    cors(request, env)
+    new Headers({ 'Cache-Control': 'no-store', 'Content-Type': 'application/json' })
   );
+}
+
+type ContextExchange = {
+  tenant_id: string;
+  site_id: string;
+  funnel_slug: string;
+  flow_binding: string;
+  server_subject_ref: string;
+  privacy_snapshot: PrivacySnapshot;
+  buyer_context?: Record<string, unknown>;
+};
+
+async function contextExchange(request: Request, env: CollectorEnv): Promise<Response> {
+  if (!exactHost(request, env)) return jsonError('not_allowed', 403, request, env);
+  const source = request.headers.get('x-maestro-issuer') as SourceSystem | null;
+  if (!source || !SOURCE_SYSTEMS.has(source)) return jsonError('invalid_source', 401, request, env);
+  const bodyText = await request.text();
+  if (new TextEncoder().encode(bodyText).byteLength > 16 * 1024)
+    return jsonError('body_too_large', 413, request, env);
+  if (!(await verifySignedBridge(request, bodyText, env, source, 'context-exchange')))
+    return jsonError('invalid_signature', 401, request, env);
+  const nonce = request.headers.get('x-maestro-nonce') ?? '';
+  const nonceResult = await env.TRACKING_DB.prepare(
+    `INSERT INTO tracking_nonces (nonce, source_system, expires_at, created_at)
+     VALUES (?, ?, ?, ?) ON CONFLICT(source_system, nonce) DO NOTHING`
+  )
+    .bind(nonce, `${source}:context-exchange`, new Date(Date.now() + 600_000).toISOString(), new Date().toISOString())
+    .run();
+  if ((nonceResult.meta?.changes ?? 0) !== 1) return jsonError('replayed_request', 409, request, env);
+  let input: Record<string, unknown>;
+  try {
+    const parsed = JSON.parse(bodyText) as unknown;
+    if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) throw new Error();
+    input = parsed as Record<string, unknown>;
+  } catch {
+    return jsonError('invalid_request', 400, request, env);
+  }
+  const token = input.tracking_context_token;
+  if (typeof token !== 'string' || !/^v1\.[A-Za-z0-9_-]{16,2048}\.[A-Za-z0-9_-]{32,512}$/.test(token))
+    return jsonError('invalid_context', 403, request, env);
+  if (new URL(request.url).search) return jsonError('invalid_context', 403, request, env);
+  const verifier = env.TRACKING_CONTEXT_TOKEN_VERIFY;
+  if (typeof verifier !== 'function') return jsonError('context_verifier_unavailable', 503, request, env);
+  let verified: unknown;
+  try {
+    verified = await (verifier as (value: string, audience: string) => Promise<unknown>)(token, 'source-outbox');
+  } catch {
+    return jsonError('invalid_context', 403, request, env);
+  }
+  if (!verified || typeof verified !== 'object' || Array.isArray(verified))
+    return jsonError('invalid_context', 403, request, env);
+  const context = verified as Record<string, unknown>;
+  const tenantId = textEnv(env, 'TRACKING_TENANT_ID', 'default');
+  const siteId = textEnv(env, 'TRACKING_SITE_ID', 'default');
+  const exchange: ContextExchange = {
+    tenant_id: tenantId,
+    site_id: siteId,
+    funnel_slug: typeof context.funnel_slug === 'string' ? context.funnel_slug : '',
+    flow_binding: typeof context.flow_binding === 'string' ? context.flow_binding : '',
+    server_subject_ref: typeof context.server_subject_ref === 'string' ? context.server_subject_ref : '',
+    privacy_snapshot: context.privacy_snapshot as PrivacySnapshot,
+    ...(context.buyer_context && typeof context.buyer_context === 'object' && !Array.isArray(context.buyer_context)
+      ? { buyer_context: context.buyer_context as Record<string, unknown> }
+      : {}),
+  };
+  if (
+    !/^[A-Za-z0-9:_-]{1,180}$/.test(exchange.funnel_slug) ||
+    !exchange.flow_binding ||
+    !exchange.server_subject_ref ||
+    !validatePrivacySnapshot(exchange.privacy_snapshot)
+  )
+    return jsonError('invalid_context', 403, request, env);
+  const expiresAt = new Date(Date.now() + 10 * 60_000).toISOString();
+  const digest = await crypto.subtle.digest('SHA-256', crypto.getRandomValues(new Uint8Array(32)));
+  const contextHash = Array.from(new Uint8Array(digest), (byte) => byte.toString(16).padStart(2, '0')).join('');
+  const now = new Date().toISOString();
+  try {
+    await env.TRACKING_DB.prepare(
+      `INSERT INTO tracking_context_exchanges
+       (context_hash, tenant_id, site_id, funnel_slug, flow_binding, server_subject_ref,
+        privacy_snapshot_json, buyer_context_json, issued_at, expires_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+    )
+      .bind(
+        contextHash,
+        exchange.tenant_id,
+        exchange.site_id,
+        exchange.funnel_slug,
+        exchange.flow_binding,
+        exchange.server_subject_ref,
+        JSON.stringify(exchange.privacy_snapshot),
+        JSON.stringify(exchange.buyer_context ?? {}),
+        now,
+        expiresAt
+      )
+      .run();
+  } catch {
+    return jsonError('tracking_unavailable', 503, request, env);
+  }
+  return jsonResponse({ context_hash: contextHash, context_expires_at: expiresAt }, 201);
 }
 
 async function privacyMutation(request: Request, env: CollectorEnv): Promise<Response> {
@@ -911,62 +980,34 @@ async function privacyRequest(request: Request, env: CollectorEnv): Promise<Resp
   return jsonResponse({ request_id: requestId, state: 'received' }, 202, cors(request, env));
 }
 
-async function verifyInternalBody(
-  request: Request,
-  env: CollectorEnv,
-  bodyText: string,
-  keyValue: unknown,
-  sourceSystem: string
-): Promise<boolean> {
-  const timestamp = request.headers.get('x-tracking-context-timestamp') ?? '';
-  const nonce = request.headers.get('x-tracking-context-nonce') ?? '';
-  const signature = request.headers.get('x-tracking-context-signature') ?? '';
-  if (
-    !/^\d{10}$/.test(timestamp) ||
-    !/^[-A-Za-z0-9_]{8,128}$/.test(nonce) ||
-    !/^[a-f0-9]{64}$/i.test(signature) ||
-    Math.abs(Date.now() / 1000 - Number(timestamp)) > 300
-  )
-    return false;
-  const key = await importHmacKey(keyValue);
-  if (!key) return false;
-  const valid = await crypto.subtle.verify(
-    'HMAC',
-    key,
-    Uint8Array.from(signature.match(/.{2}/g)!.map((pair) => parseInt(pair, 16))),
-    new TextEncoder().encode(`${timestamp}.${nonce}.${bodyText}`)
-  );
-  if (!valid) return false;
-  const result = await env.TRACKING_DB.prepare(
-    `INSERT INTO tracking_nonces (nonce, source_system, expires_at, created_at)
-       VALUES (?, ?, ?, ?) ON CONFLICT(source_system, nonce) DO NOTHING`
-  )
-    .bind(
-      nonce,
-      sourceSystem,
-      new Date(Date.now() + 300_000).toISOString(),
-      new Date().toISOString()
-    )
-    .run();
-  return (result.meta?.changes ?? 0) === 1;
-}
-
 async function browserClaims(request: Request, env: CollectorEnv): Promise<Response> {
   if (request.method !== 'POST') return jsonError('method_not_allowed', 405, request, env);
   const bodyText = await request.text();
   if (new TextEncoder().encode(bodyText).byteLength > EVENT_MAX_BYTES)
     return jsonError('body_too_large', 413, request, env);
-  if (
-    !(await verifyInternalBody(
-      request,
-      env,
-      bodyText,
-      env.TRACKING_CONTEXT_SIGNING_KEY_CURRENT ?? env.TRACKING_PAGES_BRIDGE_KEY_CURRENT,
-      'pages_context'
-    ))
-  )
+  if (!(await verifySignedBridge(request, bodyText, env, 'pages', 'browser-claims')))
     return jsonError('not_authorized', 401, request, env);
-  const body = JSON.parse(bodyText) as Record<string, unknown>;
+  const nonce = request.headers.get('x-maestro-nonce') ?? '';
+  const nonceResult = await env.TRACKING_DB.prepare(
+    `INSERT INTO tracking_nonces (nonce, source_system, expires_at, created_at)
+     VALUES (?, ?, ?, ?) ON CONFLICT(source_system, nonce) DO NOTHING`
+  )
+    .bind(nonce, 'pages:browser-claims', new Date(Date.now() + 600_000).toISOString(), new Date().toISOString())
+    .run();
+  if ((nonceResult.meta?.changes ?? 0) !== 1) return jsonError('replayed_request', 409, request, env);
+  let body: Record<string, unknown>;
+  try {
+    const parsed = JSON.parse(bodyText) as unknown;
+    if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) throw new Error();
+    body = parsed as Record<string, unknown>;
+  } catch {
+    return jsonError('invalid_request', 400, request, env);
+  }
+  const funnelSlug = body.funnel_slug;
+  const flowBinding = body.flow_binding;
+  if (typeof funnelSlug !== 'string' || !/^[A-Za-z0-9:_-]{1,180}$/.test(funnelSlug) ||
+      typeof flowBinding !== 'string' || !/^[A-Za-z0-9:_-]{1,180}$/.test(flowBinding))
+    return jsonError('invalid_request', 400, request, env);
   const paymentIds = Array.isArray(body.payment_ids)
     ? body.payment_ids
         .filter(
@@ -977,21 +1018,41 @@ async function browserClaims(request: Request, env: CollectorEnv): Promise<Respo
     : [];
   if (!paymentIds.length) return jsonResponse({ claims: [] }, 200);
   const placeholders = paymentIds.map(() => '?').join(', ');
-  const rows = await env.TRACKING_DB.prepare(
-    `SELECT payment_id FROM tracking_purchase_browser_claims
-       WHERE tenant_id = ? AND site_id = ? AND payment_id IN (${placeholders})`
+  const events = await env.TRACKING_DB.prepare(
+    `SELECT event_key, event_id, envelope_json
+       FROM tracking_events
+      WHERE tenant_id = ? AND site_id = ? AND source_system = 'pages'
+        AND event_name = 'Purchase' AND json_extract(envelope_json, '$.commerce.payment_id') IN (${placeholders})
+        AND json_extract(envelope_json, '$.identity.funnel_id') = ?`
   )
-    .bind(
-      textEnv(env, 'TRACKING_TENANT_ID', 'default'),
-      textEnv(env, 'TRACKING_SITE_ID', 'default'),
-      ...paymentIds
+    .bind(textEnv(env, 'TRACKING_TENANT_ID', 'default'), textEnv(env, 'TRACKING_SITE_ID', 'default'), ...paymentIds, funnelSlug)
+    .all<{ event_key: string; event_id: string; envelope_json: string }>();
+  const claims: Array<Record<string, unknown>> = [];
+  for (const row of events.results ?? []) {
+    let envelope: Record<string, unknown>;
+    try {
+      envelope = JSON.parse(row.envelope_json) as Record<string, unknown>;
+    } catch {
+      continue;
+    }
+    const commerce = envelope.commerce;
+    if (!commerce || typeof commerce !== 'object' || Array.isArray(commerce)) continue;
+    const paymentId = (commerce as Record<string, unknown>).payment_id;
+    if (typeof paymentId !== 'string') continue;
+    const claimed = await env.TRACKING_DB.prepare(
+      `INSERT OR IGNORE INTO tracking_purchase_browser_claims
+       (tenant_id, site_id, payment_id, funnel_token_hash, claimed_at) VALUES (?, ?, ?, ?, ?)`
     )
-    .all<{ payment_id: string }>();
-  // Only safe commerce identifiers cross the Worker boundary. Buyer context is never returned.
-  return jsonResponse(
-    { claims: (rows.results ?? []).map((row) => ({ payment_id: row.payment_id })) },
-    200
-  );
+      .bind(textEnv(env, 'TRACKING_TENANT_ID', 'default'), textEnv(env, 'TRACKING_SITE_ID', 'default'), paymentId, flowBinding, new Date().toISOString())
+      .run();
+    if ((claimed.meta?.changes ?? 0) !== 1) continue;
+    const customData: Record<string, unknown> = {};
+    for (const key of ['content_ids', 'content_type', 'contents', 'currency', 'num_items', 'value']) {
+      if ((commerce as Record<string, unknown>)[key] !== undefined) customData[key] = (commerce as Record<string, unknown>)[key];
+    }
+    claims.push({ event_name: 'Purchase', event_id: row.event_id, custom_data: customData });
+  }
+  return jsonResponse({ claims }, 200);
 }
 
 function operatorMetadata(input: Record<string, unknown>): {
@@ -1295,6 +1356,8 @@ export async function handleCollectorFetch(
       return await privacyRequest(request, env);
     if (path === '/v1/source-events' && request.method === 'POST')
       return await sourceEvents(request, env);
+    if (path === '/internal/context-exchange' && request.method === 'POST')
+      return await contextExchange(request, env);
     if (path === '/internal/browser-claims' && request.method === 'POST')
       return await browserClaims(request, env);
     if (path.startsWith('/internal/operator/') && request.method === 'POST')

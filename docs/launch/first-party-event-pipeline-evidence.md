@@ -63,3 +63,13 @@ The design requires `events.shop.maestrogtm.com` and parent-domain cookies for
 `shop.maestrogtm.com`; it does not prove the complete sibling inventory. Do not
 set parent-domain cookies until an authoritative DNS/TLS/deployment readback
 lists every sibling and confirms each is owned, non-dangling, and hardened.
+
+## Task 8 context-exchange prerequisite
+
+The Worker accepts only the canonical `X-Maestro-*` signed bridge contract
+(`v1`, timestamp, 32-byte base64url nonce, and body hash). Source envelopes
+carry a Worker-minted, expiring `context_hash` and signed privacy snapshot;
+raw `buyer_context`, bearer tokens, and legacy `x-tracking-*` headers are
+rejected. Context exchanges are stored in tracking D1 and resolved within
+tenant/site/funnel scope. App-Idea and Blueprint remain shadow-only until
+their exact owners, products, SHAs, and token-verifier bindings are recorded.

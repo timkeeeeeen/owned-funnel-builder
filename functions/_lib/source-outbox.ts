@@ -1,4 +1,5 @@
 import { cleanString, type D1Database, type D1PreparedStatement, type Environment } from './runtime.ts';
+import { base64url, sourceSignatureInput } from '../../workers/events/src/source-bridge.ts';
 
 export type PurchaseContent = { id: string; quantity: number; item_price?: number };
 export type PurchaseCustomData = {
@@ -117,6 +118,7 @@ export async function claimUnseenPurchases(
 }
 
 export async function sourcePayloadHash(payload: Record<string, unknown>): Promise<string> {
+  rejectLegacySourcePayload(payload);
   const canonicalize = (value: unknown): unknown => {
     if (Array.isArray(value)) return value.map(canonicalize);
     if (value && typeof value === 'object') {
@@ -139,6 +141,7 @@ export function sourceOutboxStatement(
 ): D1PreparedStatement {
   const now = new Date().toISOString();
   const expiresAt = new Date(Date.parse(event.occurredAt) + SEVEN_DAYS_MS).toISOString();
+  rejectLegacySourcePayload(event.payload);
   return database
     .prepare(
       `INSERT INTO source_tracking_outbox (
@@ -224,16 +227,31 @@ function bridge(env: Environment): SourceBridge | null {
   const value = env.TRACKING_SOURCE_BRIDGE;
   return value &&
     typeof value === 'object' &&
-    'fetch' in value &&
-    cleanString(env.TRACKING_SOURCE_BRIDGE_TOKEN, 4096)
+    'fetch' in value
     ? (value as SourceBridge)
     : null;
 }
 
-function bridgeHeaders(env: Environment): Headers {
-  const headers = new Headers({ 'Content-Type': 'application/json' });
-  headers.set('Authorization', `Bearer ${cleanString(env.TRACKING_SOURCE_BRIDGE_TOKEN, 4096)}`);
-  return headers;
+function rejectLegacySourcePayload(payload: Record<string, unknown>): void {
+  if ('buyer_context' in payload || 'tracking_context_hash' in payload)
+    throw new TypeError('invalid_source_outbox_payload');
+}
+
+async function bridgeHeaders(env: Environment, body: string): Promise<Headers | null> {
+  const keyValue = cleanString(env.TRACKING_PAGES_BRIDGE_KEY_CURRENT, 4096);
+  if (keyValue.length < 16) return null;
+  const timestamp = String(Math.floor(Date.now() / 1000));
+  const nonce = base64url(crypto.getRandomValues(new Uint8Array(32)));
+  const key = await crypto.subtle.importKey('raw', new TextEncoder().encode(keyValue), { name: 'HMAC', hash: 'SHA-256' }, false, ['sign']);
+  const signature = await crypto.subtle.sign('HMAC', key, new TextEncoder().encode(await sourceSignatureInput(timestamp, nonce, body)));
+  return new Headers({
+    'Content-Type': 'application/json',
+    'X-Maestro-Issuer': 'pages',
+    'X-Maestro-Key-Id': cleanString(env.TRACKING_PAGES_BRIDGE_KEY_ID_CURRENT, 64) || 'pages-current',
+    'X-Maestro-Timestamp': timestamp,
+    'X-Maestro-Nonce': nonce,
+    'X-Maestro-Signature': base64url(new Uint8Array(signature)),
+  });
 }
 
 export async function drainSourceEvent(
@@ -311,10 +329,12 @@ export async function drainSourceEvent(
   }
 
   try {
+    const headers = await bridgeHeaders(env, row.payload_json);
+    if (!headers) throw new Error('source_bridge_unconfigured');
     const response = await sourceBridge.fetch(
-      new Request('https://tracking.internal/private/source-events', {
+      new Request('https://tracking.internal/v1/source-events', {
         method: 'POST',
-        headers: bridgeHeaders(env),
+        headers,
         body: row.payload_json,
       })
     );

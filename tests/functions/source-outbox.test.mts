@@ -105,7 +105,7 @@ test('outbox leases and redacts only the requested tenant/site/source-event row'
   const delivered = await drainSourceEvent(
     database as never,
     {
-      TRACKING_SOURCE_BRIDGE_TOKEN: 'bridge-secret',
+      TRACKING_PAGES_BRIDGE_KEY_CURRENT: 'pages-bridge-secret',
       TRACKING_SOURCE_BRIDGE: {
         fetch: async (request: Request) => {
           body = await request.text();
