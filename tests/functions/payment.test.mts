@@ -87,6 +87,10 @@ class FakeDatabase implements D1Database {
       return this.handler(statement, values, method);
     });
   }
+
+  async batch(_statements: D1PreparedStatement[]): Promise<D1RunResult[]> {
+    return [];
+  }
 }
 
 const originalFetch = globalThis.fetch;
