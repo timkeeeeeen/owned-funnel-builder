@@ -1,0 +1,12 @@
+---
+import OfferLandingPage from '@/components/offers/OfferLandingPage.astro';
+import type { Offer } from '@/data/offers';
+
+interface Props {
+  offer: Offer;
+}
+
+const { offer } = Astro.props;
+---
+
+<OfferLandingPage offer={offer} />

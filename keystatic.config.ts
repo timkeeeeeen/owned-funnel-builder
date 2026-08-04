@@ -66,12 +66,24 @@ export default config({
           description: 'Turn this on when the page is ready to appear on the website.',
           defaultValue: false,
         }),
+        template: fields.select({
+          label: 'Page template',
+          options: [
+            { label: 'Default', value: 'default' },
+            { label: 'Video lead', value: 'video-lead' },
+          ],
+          defaultValue: 'default',
+        }),
         slug: fields.slug({
           name: {
             label: 'Page address',
             description: 'The short name at the end of the page URL.',
             validation: { isRequired: true },
           },
+        }),
+        checkoutFunnelSlug: fields.text({
+          label: 'Checkout funnel to reuse',
+          description: 'Leave blank to use this page address.',
         }),
         productName: requiredText('Product name'),
         eyebrow: requiredText('Small line above the headline'),
