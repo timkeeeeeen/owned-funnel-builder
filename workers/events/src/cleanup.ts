@@ -17,6 +17,7 @@ export async function runCleanup(
   const retentionDays = numberEnv(env, 'TRACKING_RETENTION_DAYS', 395);
   const batchSize = numberEnv(env, 'TRACKING_CLEANUP_BATCH_SIZE', 100);
   const cutoff = new Date(now.getTime() - retentionDays * 86_400_000).toISOString();
+  const budgetCutoff = Math.floor(now.getTime() / 60_000) * 60;
   let expiredEvents = 0;
   let expiredDeliveries = 0;
   try {
@@ -26,6 +27,13 @@ export async function runCleanup(
            SELECT rowid FROM tracking_nonces WHERE expires_at < ? LIMIT ?)`
       )
       .bind(now.toISOString(), batchSize)
+      .run();
+    await database
+      .prepare(
+        `DELETE FROM tracking_delivery_budgets WHERE rowid IN (
+           SELECT rowid FROM tracking_delivery_budgets WHERE window_start < ? LIMIT ?)`
+      )
+      .bind(budgetCutoff, batchSize)
       .run();
     const dlq = await database
       .prepare(

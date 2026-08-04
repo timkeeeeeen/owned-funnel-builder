@@ -37,7 +37,16 @@ function d1(database: DatabaseSync) {
       return statement;
     },
     async batch(statements: Array<{ run(): Promise<unknown> }>) {
-      return Promise.all(statements.map((statement) => statement.run())) as never;
+      database.exec('BEGIN');
+      try {
+        const results = [];
+        for (const statement of statements) results.push(await statement.run());
+        database.exec('COMMIT');
+        return results as never;
+      } catch (error) {
+        database.exec('ROLLBACK');
+        throw error;
+      }
     },
   };
 }
@@ -55,6 +64,7 @@ async function trackingDatabase(): Promise<DatabaseSync> {
     '0003_csrf_nonce_bindings.sql',
     '0004_delivery_safety.sql',
     '0005_runtime_safety.sql',
+    '0006_waf_capability.sql',
   ]) {
     database.exec(await readFile(new URL(`../migrations/${name}`, import.meta.url), 'utf8'));
   }
@@ -436,6 +446,85 @@ test('global Queue, Meta, and spend breakers each bound distinct event cost', as
     }
     assert.equal(sends, 1);
   }
+});
+
+test('an impossible Meta spend reservation writes no budget rows and never calls the provider', async () => {
+  const database = await trackingDatabase();
+  const eventKey = 'f'.repeat(64);
+  seedDelivery(database, eventKey, '{"event_name":"PageView"}');
+  let sends = 0;
+  await processQueue(
+    {
+      queue: 'events',
+      messages: [
+        {
+          body: { event_key: eventKey, destination: 'meta', schema_version: '1' },
+          ack() {},
+          retry() {},
+        },
+      ],
+    },
+    {
+      TRACKING_DB: d1(database),
+      TRACKING_META_SPEND_LIMIT_MICROS_PER_MINUTE: 1,
+      TRACKING_META_EVENT_COST_MICROS: 2,
+      DESTINATION_SENDERS: { meta: async () => void (sends += 1) },
+    } as never
+  );
+  assert.equal(sends, 0);
+  assert.equal(
+    (
+      database.prepare('SELECT count(*) AS count FROM tracking_delivery_budgets').get() as {
+        count: number;
+      }
+    ).count,
+    0
+  );
+});
+
+test('a later exhausted budget rolls back the complete multi-bucket reservation', async () => {
+  const database = await trackingDatabase();
+  const eventKey = '1'.repeat(64);
+  seedDelivery(database, eventKey, '{"event_name":"PageView"}');
+  const now = Date.now();
+  const windowStart = Math.floor(now / 60_000) * 60;
+  database
+    .prepare(
+      `INSERT INTO tracking_delivery_budgets
+       (bucket_key, window_start, used, budget_limit, updated_at)
+       VALUES ('spend:meta', ?, 1, 1, ?)`
+    )
+    .run(windowStart, new Date(now).toISOString());
+
+  await processQueue(
+    {
+      queue: 'events',
+      messages: [
+        {
+          body: { event_key: eventKey, destination: 'meta', schema_version: '1' },
+          ack() {},
+          retry() {},
+        },
+      ],
+    },
+    {
+      TRACKING_DB: d1(database),
+      TRACKING_META_SPEND_LIMIT_MICROS_PER_MINUTE: 1,
+      TRACKING_META_EVENT_COST_MICROS: 1,
+      DESTINATION_SENDERS: { meta: async () => assert.fail('provider must not be called') },
+    } as never
+  );
+
+  assert.deepEqual(
+    database
+      .prepare(
+        `SELECT bucket_key, used FROM tracking_delivery_budgets
+         WHERE window_start = ? ORDER BY bucket_key`
+      )
+      .all(windowStart)
+      .map((row) => ({ ...row })),
+    [{ bucket_key: 'spend:meta', used: 1 }]
+  );
 });
 
 test('an explicitly audited replay_pending delivery can acquire a new fence', async () => {
@@ -830,6 +919,12 @@ test('scheduled work bounds cleanup and persists watermark, oldest age, and miss
      (dlq_id, reason, attempt_count, created_at) VALUES (?, 'expired', 1, '2020-01-01T00:00:00.000Z')`
   );
   for (let index = 0; index < 150; index += 1) expired.run(`expired_${index}`);
+  const expiredBudget = database.prepare(
+    `INSERT INTO tracking_delivery_budgets
+     (bucket_key, window_start, used, budget_limit, updated_at)
+     VALUES (?, 1, 1, 1, '2020-01-01T00:00:00.000Z')`
+  );
+  for (let index = 0; index < 150; index += 1) expiredBudget.run(`expired_budget_${index}`);
   database
     .prepare(
       `INSERT INTO tracking_runtime_metrics
@@ -850,6 +945,14 @@ test('scheduled work bounds cleanup and persists watermark, oldest age, and miss
   assert.equal(
     (
       database.prepare('SELECT count(*) AS count FROM tracking_dlq_records').get() as {
+        count: number;
+      }
+    ).count,
+    125
+  );
+  assert.equal(
+    (
+      database.prepare('SELECT count(*) AS count FROM tracking_delivery_budgets').get() as {
         count: number;
       }
     ).count,

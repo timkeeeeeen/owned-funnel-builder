@@ -126,4 +126,5 @@ test('tracking migration creates only tracking tables', async () => {
   assert.ok(tables.some(({ name }) => name === 'tracking_runtime_release_state'));
   assert.ok(tables.some(({ name }) => name === 'tracking_delivery_budgets'));
   assert.ok(tables.some(({ name }) => name === 'tracking_runtime_metrics'));
+  assert.ok(tables.some(({ name }) => name === 'tracking_ingress_capabilities'));
 });

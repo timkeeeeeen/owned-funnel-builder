@@ -3,7 +3,7 @@ import { processQueue, type QueueBatch, type QueueEnv } from './queue.ts';
 import { enqueueDueOutbox } from './outbox.ts';
 import { reclaimExpiredLeases, recordScheduledMetrics, runCleanup } from './cleanup.ts';
 import type { TrackingQueueMessage } from './outbox.ts';
-import { assertRuntimeReady } from './safety.ts';
+import { assertCollectorAbuseCapability, assertRuntimeReady } from './safety.ts';
 import { jsonResponse } from './observability.ts';
 
 export type EventsEnv = CollectorEnv & QueueEnv;
@@ -24,6 +24,11 @@ const worker = {
       await assertRuntimeReady(env);
     } catch {
       return jsonResponse({ error: 'tracking_migrations_not_ready' }, 503);
+    }
+    try {
+      await assertCollectorAbuseCapability(env);
+    } catch {
+      return jsonResponse({ error: 'tracking_ingress_capability_not_ready' }, 503);
     }
     return handleCollectorFetch(request, env, context(executionContext));
   },

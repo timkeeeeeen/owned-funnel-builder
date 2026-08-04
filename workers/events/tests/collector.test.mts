@@ -9,6 +9,7 @@ import { REQUIRED_TRACKING_MIGRATIONS } from '../src/safety.ts';
 
 const TEST_MIGRATION_SET_SHA = '5'.repeat(64);
 const TEST_RELEASE_SHA = '6'.repeat(40);
+const TEST_INGRESS_CONFIG_SHA = '7'.repeat(64);
 
 type Bind = string | number | null;
 
@@ -55,6 +56,18 @@ async function env() {
       TEST_RELEASE_SHA,
       new Date().toISOString()
     );
+  database
+    .prepare(
+      `INSERT INTO tracking_ingress_capabilities
+       (capability_key, status, config_hash, release_sha, observed_at, expires_at)
+       VALUES ('cloudflare_collector_abuse_protection', 'verified', ?, ?, ?, ?)`
+    )
+    .run(
+      TEST_INGRESS_CONFIG_SHA,
+      TEST_RELEASE_SHA,
+      new Date().toISOString(),
+      new Date(Date.now() + 60_000).toISOString()
+    );
   const key = await crypto.subtle.importKey(
     'raw',
     new TextEncoder().encode('collector-cookie-signing-key'),
@@ -100,6 +113,7 @@ async function BunlessMigration(): Promise<string> {
     new URL('../migrations/0003_csrf_nonce_bindings.sql', import.meta.url),
     new URL('../migrations/0004_delivery_safety.sql', import.meta.url),
     new URL('../migrations/0005_runtime_safety.sql', import.meta.url),
+    new URL('../migrations/0006_waf_capability.sql', import.meta.url),
   ];
   const chunks = [] as string[];
   for (const file of files)
@@ -241,6 +255,22 @@ test('fetch fails closed while the migration lock or release SHA readback is not
   const response = await worker.fetch(request('/v1/bootstrap'), bindings as never, {} as never);
   assert.equal(response.status, 503);
   assert.deepEqual(await response.json(), { error: 'tracking_migrations_not_ready' });
+  assert.equal(
+    (
+      bindings.__database.prepare('SELECT count(*) AS count FROM tracking_csrf_nonces').get() as {
+        count: number;
+      }
+    ).count,
+    0
+  );
+});
+
+test('fetch fails closed before collector writes when ingress protection readback is absent', async () => {
+  const bindings = await env();
+  bindings.__database.prepare('DELETE FROM tracking_ingress_capabilities').run();
+  const response = await worker.fetch(request('/v1/bootstrap'), bindings as never, {} as never);
+  assert.equal(response.status, 503);
+  assert.deepEqual(await response.json(), { error: 'tracking_ingress_capability_not_ready' });
   assert.equal(
     (
       bindings.__database.prepare('SELECT count(*) AS count FROM tracking_csrf_nonces').get() as {
@@ -1067,6 +1097,102 @@ test('operator replay claims outcome_unknown once and rejects tombstoned or expi
   const expiredKey = '9'.repeat(64);
   seed(expiredKey, '2020-01-01T00:00:00.000Z', null);
   assert.equal((await replay(expiredKey, 'idem_replay_789')).status, 410);
+});
+
+test('operator replay enqueue failure restores durable retry state for scheduled recovery', async () => {
+  const bindings = await env();
+  const now = new Date().toISOString();
+  const eventKey = 'e'.repeat(64);
+  bindings.__database
+    .prepare(
+      `INSERT INTO tracking_events
+       (event_key, tenant_id, site_id, event_name, event_id, source_system, occurred_at,
+        received_at, envelope_json, privacy_state_json, bot_state, created_at,
+        canonical_payload_hash)
+       VALUES (?, 'tenant_demo', 'site_demo', 'PageView', 'replay_enqueue_failure', 'pages', ?, ?,
+               '{"identity":{"funnel_id":"owned-funnel-builder"}}', '{}', 'human', ?, ?)`
+    )
+    .run(eventKey, now, now, now, 'a'.repeat(64));
+  bindings.__database
+    .prepare(
+      `INSERT INTO tracking_outbox
+       (event_key, state, next_attempt_at, created_at, updated_at)
+       VALUES (?, 'outcome_unknown', ?, ?, ?)`
+    )
+    .run(eventKey, now, now, now);
+  bindings.__database
+    .prepare(
+      `INSERT INTO tracking_deliveries
+       (delivery_key, tenant_id, site_id, event_key, destination, state, outcome,
+        created_at, updated_at, destination_payload_hash)
+       VALUES (?, 'tenant_demo', 'site_demo', ?, 'meta', 'outcome_unknown',
+               'outcome_unknown', ?, ?, ?)`
+    )
+    .run(`${eventKey}:meta`, eventKey, now, now, 'b'.repeat(64));
+
+  const response = await worker.fetch(
+    request('/internal/operator/replay', {
+      method: 'POST',
+      headers: { authorization: 'Bearer operator-secret' },
+      body: JSON.stringify({
+        event_key: eventKey,
+        destination: 'meta',
+        actor: 'on-call@example.test',
+        reason: 'verified enqueue recovery',
+        request_id: 'request_replay_enqueue_failure',
+        idempotency_key: 'idem_replay_enqueue_failure',
+      }),
+    }),
+    {
+      ...bindings,
+      TRACKING_OPERATOR_TOKEN: 'operator-secret',
+      EVENTS_QUEUE: { send: async () => Promise.reject(new Error('queue unavailable')) },
+    } as never,
+    {} as never
+  );
+
+  assert.equal(response.status, 503);
+  const retryState = bindings.__database
+    .prepare(
+      `SELECT d.state AS delivery_state, o.state AS outbox_state,
+                o.next_attempt_at, d.last_error AS delivery_error, o.last_error AS outbox_error
+         FROM tracking_deliveries d JOIN tracking_outbox o ON o.event_key = d.event_key
+         WHERE d.event_key = ? AND d.destination = 'meta'`
+    )
+    .get(eventKey) as Record<string, unknown>;
+  assert.deepEqual(
+    { ...retryState, next_attempt_at: undefined },
+    {
+      delivery_state: 'retryable',
+      outbox_state: 'retryable',
+      next_attempt_at: undefined,
+      delivery_error: 'replay_enqueue_failed',
+      outbox_error: 'replay_enqueue_failed',
+    }
+  );
+  assert.ok(Date.parse(String(retryState.next_attempt_at)) <= Date.now());
+  assert.equal(
+    (
+      bindings.__database
+        .prepare(
+          `SELECT count(*) AS count FROM tracking_operator_audits
+           WHERE operation = 'replay_claim' AND event_key = ?`
+        )
+        .get(eventKey) as { count: number }
+    ).count,
+    1
+  );
+
+  const recovered: unknown[] = [];
+  await worker.scheduled(
+    {},
+    {
+      ...bindings,
+      EVENTS_QUEUE: { send: async (message: unknown) => void recovered.push(message) },
+    } as never,
+    {}
+  );
+  assert.deepEqual(recovered, [{ event_key: eventKey, destination: 'meta', schema_version: '1' }]);
 });
 
 test('operator resume changes only the requested funnel and destination scope', async () => {

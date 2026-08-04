@@ -260,7 +260,6 @@ const SOURCE_SYSTEMS = new Set<SourceSystem>(['pages', 'app_idea', 'blueprint'])
 
 type Counter = { window: number; count: number };
 const counters = new Map<string, Counter>();
-const destinationSpend = new Map<string, Counter>();
 
 function textEnv(env: Record<string, unknown>, key: string, fallback = ''): string {
   const value = env[key];
@@ -1244,8 +1243,28 @@ async function operatorRoute(request: Request, env: CollectorEnv): Promise<Respo
     if (results.some((result) => !result.success))
       return jsonError('operator_write_failed', 503, request, env);
     const claimed = Number(results[0]?.meta?.changes ?? 0) === 1;
-    if (claimed)
-      await env.EVENTS_QUEUE.send({ event_key: eventKey, destination, schema_version: '1' });
+    if (claimed) {
+      try {
+        await env.EVENTS_QUEUE.send({ event_key: eventKey, destination, schema_version: '1' });
+      } catch (error) {
+        console.warn(redactError(error));
+        const recovery = await env.TRACKING_DB.batch([
+          env.TRACKING_DB.prepare(
+            `UPDATE tracking_deliveries
+             SET state = 'retryable', last_error = 'replay_enqueue_failed', updated_at = ?
+             WHERE event_key = ? AND destination = ? AND state = 'replay_pending'`
+          ).bind(now, eventKey, destination),
+          env.TRACKING_DB.prepare(
+            `UPDATE tracking_outbox
+             SET state = 'retryable', next_attempt_at = ?, last_error = 'replay_enqueue_failed',
+                 updated_at = ? WHERE event_key = ?`
+          ).bind(now, now, eventKey),
+        ]);
+        if (recovery.some((result) => !result.success))
+          return jsonError('operator_write_failed', 503, request, env);
+        return jsonError('replay_enqueue_failed', 503, request, env);
+      }
+    }
     return jsonResponse({ accepted: true, claimed, event_key: eventKey, destination });
   }
   return jsonError('not_found', 404, request, env);
@@ -1292,5 +1311,4 @@ export async function handleCollectorFetch(
 
 export function resetCollectorBudgets(): void {
   counters.clear();
-  destinationSpend.clear();
 }

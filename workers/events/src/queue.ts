@@ -297,27 +297,41 @@ function positiveInteger(env: QueueEnv, key: string, fallback: number): number {
   return Number.isSafeInteger(value) && value > 0 ? value : fallback;
 }
 
-async function consumeBudget(
-  env: QueueEnv,
-  bucketKey: string,
-  limit: number,
-  amount = 1,
-  windowSeconds = 60
-): Promise<boolean> {
+type BudgetCheck = [key: string, limit: number, amount: number];
+
+function validBudgetCheck([, limit, amount]: BudgetCheck): boolean {
+  return (
+    Number.isSafeInteger(limit) &&
+    limit > 0 &&
+    Number.isSafeInteger(amount) &&
+    amount > 0 &&
+    amount <= limit
+  );
+}
+
+async function consumeBudgets(env: QueueEnv, checks: BudgetCheck[]): Promise<boolean> {
+  if (!checks.every(validBudgetCheck)) return false;
   const now = Date.now();
-  const windowStart = Math.floor(now / (windowSeconds * 1000)) * windowSeconds;
-  const result = await env.TRACKING_DB.prepare(
-    `INSERT INTO tracking_delivery_budgets
-       (bucket_key, window_start, used, budget_limit, updated_at)
-       VALUES (?, ?, ?, ?, ?)
-       ON CONFLICT(bucket_key, window_start) DO UPDATE SET
-         used = used + excluded.used, budget_limit = excluded.budget_limit,
-         updated_at = excluded.updated_at
-       WHERE used + excluded.used <= excluded.budget_limit`
-  )
-    .bind(bucketKey, windowStart, amount, limit, new Date(now).toISOString())
-    .run();
-  return (result.meta?.changes ?? 0) === 1;
+  const windowStart = Math.floor(now / 60_000) * 60;
+  const updatedAt = new Date(now).toISOString();
+  try {
+    const results = await env.TRACKING_DB.batch(
+      checks.map(([bucketKey, limit, amount]) =>
+        env.TRACKING_DB.prepare(
+          `INSERT INTO tracking_delivery_budgets
+             (bucket_key, window_start, used, budget_limit, updated_at)
+             VALUES (?, ?, ?, ?, ?)
+             ON CONFLICT(bucket_key, window_start) DO UPDATE SET
+               used = used + excluded.used, budget_limit = excluded.budget_limit,
+               updated_at = excluded.updated_at`
+        ).bind(bucketKey, windowStart, amount, limit, updatedAt)
+      )
+    );
+    return results.every((result) => result.success && Number(result.meta?.changes ?? 0) === 1);
+  } catch (error) {
+    if (redactError(error).includes('tracking_budget_exhausted')) return false;
+    throw error;
+  }
 }
 
 async function deliveryBudgetReason(
@@ -325,7 +339,7 @@ async function deliveryBudgetReason(
   eventKey: string,
   destination: DestinationName
 ): Promise<string | null> {
-  const checks: Array<[string, number, number]> = [
+  const checks: BudgetCheck[] = [
     ['queue:global', positiveInteger(env, 'TRACKING_QUEUE_BUDGET_PER_MINUTE', 10_000), 1],
     [
       `event:${eventKey}:${destination}`,
@@ -343,10 +357,9 @@ async function deliveryBudgetReason(
       ]
     );
   }
-  for (const [key, limit, amount] of checks) {
-    if (!(await consumeBudget(env, key, limit, amount))) return `${key}_budget_exhausted`;
-  }
-  return null;
+  const impossible = checks.find((check) => !validBudgetCheck(check));
+  if (impossible) return `${impossible[0]}_budget_exhausted`;
+  return (await consumeBudgets(env, checks)) ? null : 'delivery_budget_exhausted';
 }
 
 function funnelSenderEnabled(
