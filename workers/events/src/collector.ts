@@ -709,8 +709,11 @@ export function sourceEnvelopeToCanonical(
         content_ids: [envelope.product_id],
         content_type: 'product',
         ...(envelope.payment_id ? { payment_id: envelope.payment_id } : {}),
+        ...(envelope.value !== undefined ? { value: envelope.value } : {}),
+        ...(envelope.currency ? { currency: envelope.currency } : {}),
+        ...(envelope.num_items !== undefined ? { num_items: envelope.num_items } : {}),
       }
-    : envelope.payment_id ? { payment_id: envelope.payment_id } : {};
+    : envelope.payment_id ? { payment_id: envelope.payment_id, ...(envelope.value !== undefined ? { value: envelope.value } : {}), ...(envelope.currency ? { currency: envelope.currency } : {}) } : {};
   const snapshot = envelope.privacy_snapshot;
   return validateCanonicalEvent({
     schema_version: '1',

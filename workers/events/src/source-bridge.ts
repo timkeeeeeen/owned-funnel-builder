@@ -38,6 +38,11 @@ export type SourceEventEnvelope = {
   lead_id?: string;
   checkout_session_id?: string;
   payment_id?: string;
+  value?: number;
+  currency?: string;
+  num_items?: number;
+  content_ids?: string[];
+  contents?: Array<{ id: string; quantity: number }>;
   privacy_snapshot: PrivacySnapshot;
 };
 
@@ -171,7 +176,7 @@ export function parseSourceEventEnvelope(value: unknown, source: SourceSystem): 
   const allowed = new Set([
     'schema_version', 'source_system', 'source_event_id', 'event_name', 'occurred_at',
     'context_hash', 'context_expires_at', 'funnel_slug', 'product_id', 'lead_id',
-    'checkout_session_id', 'payment_id', 'privacy_snapshot',
+    'checkout_session_id', 'payment_id', 'value', 'currency', 'num_items', 'content_ids', 'contents', 'privacy_snapshot',
   ]);
   if (Object.keys(input).some((key) => !allowed.has(key))) throw new TypeError('invalid_source_envelope');
   if (
@@ -189,6 +194,9 @@ export function parseSourceEventEnvelope(value: unknown, source: SourceSystem): 
   if (input.event_name === 'Lead' && typeof input.lead_id !== 'string') throw new TypeError('invalid_source_envelope');
   if (input.event_name === 'InitiateCheckout' && typeof input.checkout_session_id !== 'string') throw new TypeError('invalid_source_envelope');
   if (input.event_name === 'Purchase' && typeof input.payment_id !== 'string') throw new TypeError('invalid_source_envelope');
+  if (input.value !== undefined && (typeof input.value !== 'number' || !Number.isFinite(input.value) || input.value <= 0)) throw new TypeError('invalid_source_envelope');
+  if (input.currency !== undefined && (typeof input.currency !== 'string' || !/^[A-Z]{3}$/.test(input.currency))) throw new TypeError('invalid_source_envelope');
+  if (input.num_items !== undefined && (!Number.isSafeInteger(input.num_items) || (input.num_items as number) < 0)) throw new TypeError('invalid_source_envelope');
   const snapshot = validatePrivacySnapshot(input.privacy_snapshot);
   if (!snapshot) throw new TypeError('invalid_privacy_snapshot');
   return { ...input, privacy_snapshot: snapshot } as SourceEventEnvelope;
