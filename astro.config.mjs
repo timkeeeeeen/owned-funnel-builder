@@ -10,6 +10,7 @@ export default defineConfig({
       changefreq: 'weekly',
       priority: 0.7,
       lastmod: new Date(),
+      filter: (page) => new URL(page).pathname !== '/owned-funnel-builder-video-lead/',
     }),
   ],
   vite: {

@@ -5,9 +5,10 @@ import { MARKETING_CONSENT_COPY } from '@/data/emailConsent';
 interface Props {
   offer: Offer;
   checkout: OfferCheckoutSection;
+  analyticsOfferSlug?: string;
 }
 
-const { offer, checkout } = Astro.props;
+const { offer, checkout, analyticsOfferSlug = offer.slug } = Astro.props;
 const dialogId = `offer-checkout-${offer.slug}`;
 const frameId = `payment-checkout-${offer.slug}`;
 ---
@@ -16,6 +17,7 @@ const frameId = `payment-checkout-${offer.slug}`;
   id={dialogId}
   data-offer-checkout-dialog
   data-offer-slug={offer.slug}
+  data-analytics-offer-slug={analyticsOfferSlug}
   data-consent-version={checkout.consentVersion}
   data-frame-id={frameId}
   class="checkout-light fixed inset-0 z-[100] m-auto max-h-[calc(100dvh-1rem)] w-[calc(100%-1rem)] max-w-6xl overflow-y-auto rounded-xl border border-border bg-background p-0 text-foreground shadow-2xl backdrop:bg-foreground/75 backdrop:backdrop-blur-sm sm:max-h-[calc(100dvh-3rem)] sm:w-[calc(100%-3rem)]"
@@ -330,6 +332,7 @@ const frameId = `payment-checkout-${offer.slug}`;
 
   if (checkoutDialog) {
     const offerSlug = checkoutDialog.dataset.offerSlug ?? '';
+    const analyticsOfferSlug = checkoutDialog.dataset.analyticsOfferSlug ?? offerSlug;
     const consentVersion = checkoutDialog.dataset.consentVersion ?? '';
     const frameId = checkoutDialog.dataset.frameId ?? '';
     const emailStep = checkoutDialog.querySelector<HTMLElement>('[data-checkout-email-step]');
@@ -429,7 +432,7 @@ const frameId = `payment-checkout-${offer.slug}`;
 
       window.dispatchEvent(
         new CustomEvent('offer:checkout-event', {
-          detail: { offer: offerSlug, placement, event: event.event_type },
+          detail: { offer: analyticsOfferSlug, placement, event: event.event_type },
         })
       );
     };
@@ -504,7 +507,7 @@ const frameId = `payment-checkout-${offer.slug}`;
           throw new Error(result.error ?? 'Checkout is temporarily unavailable. Please try again.');
         }
 
-        trackLead(emailInput.value, offerSlug, placement, bumpInput?.checked === true);
+        trackLead(emailInput.value, analyticsOfferSlug, placement, bumpInput?.checked === true);
 
         if (result.provider === 'stripe') {
           window.location.assign(result.checkoutUrl);
@@ -541,7 +544,7 @@ const frameId = `payment-checkout-${offer.slug}`;
 
         window.dispatchEvent(
           new CustomEvent('offer:checkout-session-created', {
-            detail: { offer: offerSlug, placement },
+            detail: { offer: analyticsOfferSlug, placement },
           })
         );
       } catch (error) {

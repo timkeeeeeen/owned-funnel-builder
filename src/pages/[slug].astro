@@ -1,8 +1,6 @@
 ---
-import OfferLandingPage from '@/components/offers/OfferLandingPage.astro';
-import VideoLeadOfferLandingPage from '@/components/offers/templates/VideoLeadOfferLandingPage.astro';
+import OfferTemplateRenderer from '@/components/offers/OfferTemplateRenderer.astro';
 import { offers, publishedOffers, type Offer } from '@/data/offers';
-import { resolveOfferTemplate } from '@/data/offerTemplates';
 
 // Keep offer pages content-driven and pre-rendered even when the local editor
 // runs Astro in server mode. This also leaves /keystatic to the editor route.
@@ -23,12 +21,6 @@ interface Props {
 }
 
 const { offer } = Astro.props;
-const template = resolveOfferTemplate(offer.template);
-const templates = {
-  default: OfferLandingPage,
-  'video-lead': VideoLeadOfferLandingPage,
-};
-const LandingPage = templates[template];
 ---
 
-<LandingPage offer={offer} />
+<OfferTemplateRenderer offer={offer} />

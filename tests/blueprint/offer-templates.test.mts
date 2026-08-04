@@ -28,17 +28,46 @@ test('video-lead comparison reuses the original offer content and checkout', asy
   assert.deepEqual(comparison.proof, original.proof);
   assert.deepEqual(comparison.faqs, original.faqs);
 
-  const comparisonRoute = await readFile(
-    'src/pages/owned-funnel-builder-video-lead.astro',
-    'utf8'
-  );
+  const comparisonRoute = await readFile('src/pages/owned-funnel-builder-video-lead.astro', 'utf8');
   assert.match(comparisonRoute, /getOffer\('owned-funnel-builder-video-lead'\)/);
   assert.match(
     comparisonRoute,
     /if \(!offer\) throw new Error\('Missing video lead comparison offer\.'\);/,
     'the explicit static route must fail closed when its comparison content is unavailable'
   );
-  assert.match(comparisonRoute, /<VideoLeadOfferLandingPage offer=\{offer\} \/>/);
+  assert.match(comparisonRoute, /<OfferTemplateRenderer offer=\{offer\} \/>/);
+});
+
+test('explicit and dynamic offer routes use one validated template renderer', async () => {
+  const [dynamicRoute, explicitRoute, renderer] = await Promise.all([
+    readFile('src/pages/[slug].astro', 'utf8'),
+    readFile('src/pages/owned-funnel-builder-video-lead.astro', 'utf8'),
+    readFile('src/components/offers/OfferTemplateRenderer.astro', 'utf8'),
+  ]);
+
+  for (const route of [dynamicRoute, explicitRoute]) {
+    assert.match(
+      route,
+      /import OfferTemplateRenderer from '@\/components\/offers\/OfferTemplateRenderer\.astro';/
+    );
+    assert.match(route, /<OfferTemplateRenderer offer=\{offer\} \/>/);
+    assert.doesNotMatch(route, /VideoLeadOfferLandingPage/);
+    assert.doesNotMatch(route, /const templates =/);
+  }
+
+  assert.match(
+    renderer,
+    /import OfferLandingPage from '@\/components\/offers\/OfferLandingPage\.astro';/
+  );
+  assert.match(
+    renderer,
+    /import VideoLeadOfferLandingPage from '@\/components\/offers\/templates\/VideoLeadOfferLandingPage\.astro';/
+  );
+  assert.match(renderer, /const template = resolveOfferTemplate\(offer\.template\);/);
+  assert.match(renderer, /default: OfferLandingPage/);
+  assert.match(renderer, /'video-lead': VideoLeadOfferLandingPage/);
+  assert.match(renderer, /const LandingPage = templates\[template\];/);
+  assert.match(renderer, /<LandingPage offer=\{offer\} \/>/);
 });
 
 test('video-lead template composes the complete dedicated landing page', async () => {
@@ -59,10 +88,7 @@ test('video-lead template composes the complete dedicated landing page', async (
     source,
     /const checkoutSlug = offer\.checkoutFunnelSlug \?\? offer\.slug;\s+const checkoutOffer = checkoutSlug === offer\.slug \? offer : \{ \.\.\.offer, slug: checkoutSlug \};/
   );
-  assert.match(
-    source,
-    /<OfferCheckoutDialog offer=\{checkoutOffer\} checkout=\{checkoutOffer\.checkout\} \/>/
-  );
+  assert.match(source, /<OfferCheckoutDialog/);
   assert.match(source, /<OfferAnalytics offerSlug=\{offer\.slug\} \/>/);
   assert.equal((source.match(/data-offer-cta/g) ?? []).length, 4);
   assert.equal((source.match(/^\s*data-offer-checkout$/gm) ?? []).length, 4);
@@ -92,4 +118,54 @@ test('video-lead template composes the complete dedicated landing page', async (
     /background: linear-gradient\(135deg, oklch\(72% 0\.18 250\), oklch\(75% 0\.18 335\)\);/
   );
   assert.doesNotMatch(source, /perspective/i);
+});
+
+test('checkout submission and analytics keep their distinct offer identities', async () => {
+  const [dialogSource, templateSource] = await Promise.all([
+    readFile('src/components/offers/OfferCheckoutDialog.astro', 'utf8'),
+    readFile('src/components/offers/templates/VideoLeadOfferLandingPage.astro', 'utf8'),
+  ]);
+
+  assert.match(dialogSource, /analyticsOfferSlug\?: string;/);
+  assert.match(
+    dialogSource,
+    /const \{ offer, checkout, analyticsOfferSlug = offer\.slug \} = Astro\.props;/
+  );
+  assert.match(dialogSource, /data-analytics-offer-slug=\{analyticsOfferSlug\}/);
+  assert.match(
+    dialogSource,
+    /const analyticsOfferSlug = checkoutDialog\.dataset\.analyticsOfferSlug \?\? offerSlug;/
+  );
+  assert.match(dialogSource, /offerSlug,\s+placement,/);
+  assert.match(
+    dialogSource,
+    /trackLead\(emailInput\.value, analyticsOfferSlug, placement, bumpInput\?\.checked === true\)/
+  );
+  assert.equal(
+    (dialogSource.match(/detail: \{ offer: analyticsOfferSlug, placement/g) ?? []).length,
+    2,
+    'checkout events and checkout sessions must report the landing-page analytics identity'
+  );
+  assert.match(
+    templateSource,
+    /<OfferCheckoutDialog\s+offer=\{checkoutOffer\}\s+checkout=\{checkoutOffer\.checkout\}\s+analyticsOfferSlug=\{offer\.slug\}\s+\/>/
+  );
+});
+
+test('video-lead headline preserves visible whitespace before the accent', async () => {
+  const source = await readFile(
+    'src/components/offers/templates/VideoLeadOfferLandingPage.astro',
+    'utf8'
+  );
+
+  assert.match(source, /\{offer\.headline\}\s+\{' '\}\s+<span class="text-brand">/);
+});
+
+test('the default offer renderer remains independent of checkout aliases', async () => {
+  const source = await readFile('src/components/offers/OfferLandingPage.astro', 'utf8');
+
+  assert.doesNotMatch(source, /checkoutFunnelSlug/);
+  assert.match(source, /const \{ offer \} = Astro\.props;/);
+  assert.match(source, /const funnel = getFunnel\(offer\.slug\);/);
+  assert.match(source, /<OfferCheckoutDialog offer=\{offer\} checkout=\{offer\.checkout\} \/>/);
 });

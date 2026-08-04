@@ -41,7 +41,12 @@ const productSchema = {
 };
 ---
 
-<OfferLayout title={offer.metaTitle} description={offer.metaDescription} image={offer.ogImage}>
+<OfferLayout
+  title={offer.metaTitle}
+  description={offer.metaDescription}
+  image={offer.ogImage}
+  noindex={!offer.published}
+>
   <script is:inline type="application/ld+json" set:html={JSON.stringify(productSchema)} />
 
   <div class="video-lead-theme min-h-screen overflow-x-clip bg-background text-foreground">
@@ -86,6 +91,7 @@ const productSchema = {
           class="mx-auto mt-4 max-w-4xl text-balance text-4xl font-bold leading-[1.05] tracking-[-0.035em] sm:text-5xl md:text-6xl lg:text-7xl"
         >
           {offer.headline}
+          {' '}
           <span class="text-brand">{offer.headlineAccent}</span>
         </h1>
         <p
@@ -598,7 +604,11 @@ const productSchema = {
 
   {
     usesManagedCheckout && checkoutOffer.checkout && (
-      <OfferCheckoutDialog offer={checkoutOffer} checkout={checkoutOffer.checkout} />
+      <OfferCheckoutDialog
+        offer={checkoutOffer}
+        checkout={checkoutOffer.checkout}
+        analyticsOfferSlug={offer.slug}
+      />
     )
   }
   <OfferAnalytics offerSlug={offer.slug} />

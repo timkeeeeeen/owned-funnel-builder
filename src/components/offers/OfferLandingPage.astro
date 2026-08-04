@@ -14,11 +14,10 @@ import { siteSettings } from '@/data/site';
 
 interface Props {
   offer: Offer;
-  checkoutFunnelSlug?: string;
 }
 
-const { offer, checkoutFunnelSlug = offer.slug } = Astro.props;
-const funnel = getFunnel(checkoutFunnelSlug);
+const { offer } = Astro.props;
+const funnel = getFunnel(offer.slug);
 const productInitial = offer.productName.trim().charAt(0).toUpperCase() || 'O';
 const usesManagedCheckout =
   ['provider-checkout', 'dodo-inline'].includes(offer.checkout?.provider ?? '') &&
@@ -662,7 +661,7 @@ const productSchema = {
 
   {
     usesManagedCheckout && offer.checkout && (
-      <OfferCheckoutDialog offer={{ ...offer, slug: checkoutFunnelSlug }} checkout={offer.checkout} />
+      <OfferCheckoutDialog offer={offer} checkout={offer.checkout} />
     )
   }
   <OfferAnalytics offerSlug={offer.slug} />

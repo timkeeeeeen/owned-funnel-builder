@@ -1,0 +1,20 @@
+---
+import OfferLandingPage from '@/components/offers/OfferLandingPage.astro';
+import VideoLeadOfferLandingPage from '@/components/offers/templates/VideoLeadOfferLandingPage.astro';
+import type { Offer } from '@/data/offers';
+import { resolveOfferTemplate } from '@/data/offerTemplates';
+
+interface Props {
+  offer: Offer;
+}
+
+const { offer } = Astro.props;
+const template = resolveOfferTemplate(offer.template);
+const templates = {
+  default: OfferLandingPage,
+  'video-lead': VideoLeadOfferLandingPage,
+};
+const LandingPage = templates[template];
+---
+
+<LandingPage offer={offer} />
