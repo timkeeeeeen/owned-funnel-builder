@@ -6,7 +6,7 @@ Plan: `docs/superpowers/plans/2026-08-03-first-party-event-pipeline.md`
 ## Task ledger
 
 - [x] Task 1 — authority inventory and contract map (`5a41a6e`; focused gate deferred because host load stayed above `10.00`)
-- [ ] Task 2 — canonical event contract and D1 schemas
+- [x] Task 2 — canonical event contract and D1 schemas (`88d4ca1`; focused Node gate deferred because host load stayed above `10.00`)
 - [ ] Task 3 — identity, cookies, privacy, GPC, and CORS
 - [ ] Task 4 — Pages checkout context, source outbox, and browser claims
 - [ ] Task 5 — browser Pixel/collector integration
