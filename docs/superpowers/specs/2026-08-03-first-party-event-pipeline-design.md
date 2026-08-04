@@ -1,7 +1,8 @@
 # First-Party Event Pipeline and Identity Graph Design
 
 Date: 2026-08-03  
-Status: architecture approved; specialist-reviewed and owner-reviewed; implementation plan pending
+Status: architecture approved; specialist-reviewed, owner-reviewed, and
+implementation-plan reviewed
 
 ## Purpose
 
@@ -46,10 +47,12 @@ logic.
 - one standalone Cloudflare Worker for the first-party collector, Queue
   consumer, scheduled outbox dispatcher, retention cleanup, Meta CAPI, and
   Tinybird delivery;
-- the existing production D1 shared by Pages and the Worker through additive
-  migrations, one main Queue plus dead-letter queue, one Tinybird datasource,
-  and one Meta dataset/pixel; and
-- a separate preview D1/Queue/DLQ/Tinybird/Worker stack. Preview never sends
+- the existing production business D1 used by Pages and its Functions, plus a
+  separate production tracking D1 used by the tracking Worker and its signed
+  browser-claim/bridge operations; one main Queue plus dead-letter queue, one
+  Tinybird datasource, and one Meta dataset/pixel; and
+- separate preview business/tracking D1s, Queue/DLQ/Tinybird/Worker stack.
+  Preview never sends
   ordinary live Meta events and never becomes a second production business
   database.
 
@@ -97,15 +100,15 @@ and Tinybird as the append-only analytics projection.
 shop.maestrogtm.com (existing Pages project)
   storefront + browser SDK + native Meta Pixel
   checkout + Dodo webhooks
-          | authoritative D1 batch: business state + event_outbox
-          | optional Queue producer after commit
+          | authoritative business-D1 batch: business state + source outbox
+          | authenticated source bridge after commit
           v
-shared D1 authority <-------- scheduled outbox scan
-          ^                              |
-          |                              v
 events.shop.maestrogtm.com (standalone event Worker)
   bootstrap + event collector + privacy choices
   Queue consumer + scheduled dispatcher + cleanup
+          |
+          v
+   dedicated tracking D1 <-------- source bridge from Pages/Convex
           |
           v
 Cloudflare Queue ----------------> dead-letter queue
@@ -130,15 +133,19 @@ exact custom domain is manually attached in Maestro's Cloudflare zone for the
 first release.
 
 Authoritative Lead, InitiateCheckout, and Purchase events use a transactional
-outbox. For Pages-owned funnels, the business-state mutation and `event_outbox`
-row are submitted in one D1 `batch()` transaction. After commit, the Pages
-Function attempts an immediate Queue send. A scheduled Worker scan leases and
-republishes pending outbox rows, so a Queue outage or request crash cannot
-separate a successful Pages business mutation from its conversion record.
+source outbox. For Pages-owned funnels, the business-state mutation and a
+bounded authenticated source-outbox row are submitted in one business-D1
+`batch()` transaction. After commit, Pages drains that row to the Worker
+bridge. The Worker writes the canonical event and delivery outbox in the
+dedicated tracking D1; its scheduled scan leases and republishes pending
+source rows, so a Queue or bridge outage cannot separate a successful Pages
+business mutation from its conversion record. The public Worker never binds
+the business D1 or reads leads, payments, fulfillment rows, or raw webhook
+payloads.
 
 The App-Idea Evaluator and $5 Blueprint have separate commercial-state
-authorities and deployments. The tracking Worker is shared; D1 is the
-canonical tracking/delivery ledger, not a second source of truth for Convex
+authorities and deployments. The tracking Worker is shared; the dedicated
+tracking D1 is the canonical tracking/delivery ledger, not a second source of truth for Convex
 sessions, payments, or fulfillment. Each Convex authority must write a
 source-side tracking outbox in the same mutation that durably records a
 checkout-session or verified-payment transition, then drain that outbox to the
@@ -190,7 +197,7 @@ Tinybird is well suited to high-volume append-only ingestion, low-latency
 funnel queries, attribution analysis, and dashboards. It is not the source of
 truth for transactional delivery claims or physical row uniqueness.
 
-D1 owns:
+D1 (the dedicated tracking D1) owns:
 
 - deterministic identity aliases;
 - unique event claims;
@@ -261,7 +268,9 @@ authenticated account, or completed first-party verification may upgrade an
 asserted claim.
 
 Internal alias keys use tenant-scoped, domain-separated HMAC-SHA-256 rather
-than Meta's unsalted SHA-256. Hashing is pseudonymization, not anonymization.
+than Meta's unsalted SHA-256. Each alias stores the HMAC key ID and supports a
+current/previous key ring during rotation so lookup, deletion tombstones, and
+unmerge remain stable. Hashing is pseudonymization, not anonymization.
 Meta-required hashes are created separately inside the scoped Meta transform
 and retained only for its retry window.
 
@@ -476,6 +485,14 @@ encoding.
   outbox provide the same atomic boundary. The checkout response returns
   separately named Lead and InitiateCheckout browser payloads with only event
   IDs and normalized non-PII custom data.
+- App-Idea and Blueprint use the same-origin/no-CORS
+  `POST /api/tracking/source-browser-events` claim route. It accepts a
+  source-runtime-bound public-session token; the Pages route proxies a signed
+  Worker-only claim operation. The Worker resolves only committed source
+  outbox events in the tracking D1, atomically claims each Purchase once, and
+  returns `{event_name,event_id,custom_data}` without PII. Pages has no tracking
+  D1 binding, and the route cannot create an event when the source outbox
+  transaction did not commit.
 - CAPI includes authoritative cart, products, quantities, value, currency,
   checkout session, offer, and attribution.
 
@@ -572,7 +589,10 @@ populate Meta's Lead Ads `lead_id`. `fbp`, `fbc`, client IP, and client user
 agent are not hashed. Phone requires an explicit country-aware E.164 input; the
 system does not guess a country code.
 
-One shared server module owns normalization and exact-output fixtures. Native
+One shared, version-pinned server module owns normalization and exact-output
+fixtures. Pages and Convex source authorities may invoke that module before
+the authenticated bridge; the Worker validates the transform version and does
+not hash an already-hashed field. Native
 Pixel receives the corresponding browser inputs through Meta's supported
 mechanism; it does not implement an independent normalization algorithm. The
 Meta Graph API version and transform version are pinned and upgraded
@@ -719,7 +739,7 @@ consent state.
 
 ## Operational storage
 
-D1 contains compact tables for:
+The dedicated tracking D1 contains compact tables for:
 
 - visitors and rolling sessions;
 - people, tenant-keyed identifier claims, aliases, redirects, and conflicts;
@@ -730,7 +750,9 @@ D1 contains compact tables for:
 - privacy choices, suppression tombstones, and deletion audit records.
 
 Raw email remains only in the existing purpose-authorized
-checkout/fulfillment system. Tracking identity tables store tenant-scoped HMAC
+checkout/fulfillment system. The public tracking Worker has no binding to that
+business D1; Pages and source runtimes send bounded authenticated outbox
+envelopes instead. Tracking identity tables store tenant-scoped HMAC
 claims and approved provider IDs. Meta-normalized SHA-256 values live only in a
 bounded retry snapshot. Raw PII never enters browser responses, generic Queue
 messages, Tinybird, logs, or error metadata.
@@ -964,22 +986,29 @@ replay procedure.
 
 ## Rollout
 
-1. Add migrations beginning at `0010_*`; update migration tests to apply the
-   complete lexically sorted directory, including both existing `0007_*` files.
-   Record the exact pending filenames and D1 Time Travel recovery point.
+1. Add Pages/business-D1 source migrations beginning at `0010_*` and tracking-D1
+   migrations beginning at `0001_*`; update each migration test to apply its
+   complete lexically sorted directory, including both existing `0007_*` files
+   in the business database. Record exact pending filenames and D1 Time Travel
+   recovery points for both databases.
 2. Pin separate deployed contracts for App-Idea and Blueprint checkout,
    payment, webhook, and fulfillment authorities, including the Blueprint
    checkout/status references, schemas, environments, and Dodo product
    metadata. Verify the signed token/bridge and source-outbox contracts before
    changing any runtime.
 3. Reconcile the version-controlled Dodo product ownership manifest against
-   live webhook configuration. Provision a separate preview D1/Queue/DLQ,
-   Tinybird, Worker secrets, and kill switches; additively migrate the existing
-   production D1 and attach the exact Worker custom domain.
+   live webhook configuration. Provision separate preview business/tracking
+   D1s, Queue/DLQ, Tinybird, Worker secrets, and kill switches; additively
+   migrate the production business D1 only for source-outbox rows and create
+   the production tracking D1 from the tracking migrations. Attach the exact
+   Worker custom domain.
 4. Deploy a backward-compatible Worker in shadow mode with Meta delivery off,
    then deploy the Pages outbox/browser producer and the Convex source-outbox
-   producers/bridge. The consumer supports the current and previous envelope
-   during the rolling change.
+   producers/bridge. Keep direct Convex browser calls accepted but shadowed
+   until the same-origin proxies and signed producers are green; only then
+   reject the direct path. The consumer supports the current and previous
+   envelope during the rolling change, and the compatible source/runtime SHA
+   set is recorded before cutover.
 5. Validate collection, attribution, identity conflicts, privacy choices, GPC,
    abuse limits, retention cleanup, Tinybird deduplication, and independent
    alerts.
@@ -1005,9 +1034,10 @@ additive D1 migrations while older code may still run.
 ## Acceptance criteria
 
 - The first-party collector is served from `events.shop.maestrogtm.com`.
-- The existing Pages project writes authoritative business state plus event
-  outbox rows; the standalone Worker owns collection, Queue consumption,
-  scheduled dispatch, cleanup, Meta, and Tinybird.
+- The existing Pages project writes authoritative business state plus bounded
+  source-outbox rows; the standalone Worker owns collection, Queue
+  consumption, scheduled dispatch, cleanup, Meta, and Tinybird and binds only
+  the dedicated tracking D1, never the business D1.
 - A returning browser retains one visitor identity across sessions while the
   cookie remains available.
 - Cookie Domain, credentialed CORS, key rotation, privacy-gated issuance, and
@@ -1027,7 +1057,7 @@ additive D1 migrations while older code may still run.
   those products block launch; dormant, unrelated Stripe support may remain.
 - App-Idea and Blueprint each have a pinned checkout, payment, webhook, and
   fulfillment contract. Their source-side outboxes and reconciliation prove
-  that every verified source payment maps to exactly one D1 canonical Purchase
+  that every verified source payment maps to exactly one tracking-D1 canonical Purchase
   or an alert.
 - The deployed Blueprint checkout/status contract is pinned and its signed
   bridge token produces one idempotent InitiateCheckout only after a verified
@@ -1055,9 +1085,11 @@ additive D1 migrations while older code may still run.
 - Collector availability and five-minute event/Purchase resolution SLOs are
   observable through D1/Queue plus an external probe, with owned runbooks and
   no-deploy kill switches.
-- Preview uses isolated resources while production reuses the existing
-  authoritative D1 with additive migrations. Convex business state remains in
-  its existing deployments and is never copied into D1 as a second authority.
+- Preview uses isolated business/tracking resources while production reuses
+  the existing authoritative business D1 with additive source-outbox
+  migrations and provisions a dedicated tracking D1. Convex business state
+  remains in its existing deployments and is never copied into tracking D1 as
+  a second authority.
   The Maestro deployment uses configuration and Worker secrets rather than
   hardcoded core behavior.
 - A future customer can deploy an isolated stack with different hostname,
