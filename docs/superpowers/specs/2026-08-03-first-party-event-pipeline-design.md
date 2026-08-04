@@ -241,6 +241,22 @@ dataset ID, offer slug, product ID, or credential. Preview and production use
 separate D1 databases, Queues/DLQs, Tinybird datasources/tokens, cookie names or
 scopes, and Meta delivery configuration.
 
+### Required pre-launch control artifacts
+
+The following versioned, machine-readable artifacts are launch prerequisites;
+prose or an operator assertion is insufficient:
+
+| Artifact | Required proof | Launch effect |
+| --- | --- | --- |
+| `config/trusted-hosts.json` | DNS, TLS, CNAME ownership, HSTS, CSP/referrer policy, no user-content sibling, no alternate `workers.dev` route, and continuous drift probe | Blocks parent-domain cookie issuance until green |
+| `config/privacy-policy.json` | Per-region/state purpose decisions, unknown-region behavior, GPC/opt-out precedence, sensitive-data/minor handling, legal owner/version approval, and Meta LDU/data-processing options | Blocks the affected funnel's campaign gate |
+| `config/tracking-field-policy.json` | Source, purpose, consent, destination, exact TTL, deletion path, and trust provenance for every field (including `fbclid`, `fbp`, `fbc`, IP, and UA) | Blocks collection or destination mapping for an unlisted field |
+| `config/source-runtime-manifest.json` | Source repository, exact SHA, bridge contract version, environment, and required CI status | Blocks deployment when a producer is missing, unreachable, or incompatible |
+| `docs/launch/provider-capability-readback.md` | Tinybird/Meta deletion capability, token scopes, log retention, DPA/subprocessor review, and per-destination deletion SLA | Blocks jurisdictions whose deletion contract is unsupported |
+
+The host probe runs continuously after launch. HSTS, CSP, and a strict
+`event_source_url` path allowlist are part of the trusted-host contract.
+
 ## First-party identity model
 
 ### Identity levels
@@ -286,10 +302,12 @@ characteristics are never sufficient to create or merge people.
 
 ### Cookie contract
 
-The collector at `events.shop.maestrogtm.com` issues these cookies with the
-explicit parent scope `Domain=shop.maestrogtm.com` so the existing Pages
-checkout backend can read the same signed identity without trusting a
-browser-supplied external ID:
+The production collector at `events.shop.maestrogtm.com` issues these cookies
+with the explicit parent scope `Domain=shop.maestrogtm.com` so the existing
+Pages checkout backend can read the same signed identity without trusting a
+browser-supplied external ID. Preview uses environment-specific cookie names
+and a host-only preview domain; it never shares a parent-domain cookie with
+production:
 
 - `ma_vid`: signed opaque visitor ID, `HttpOnly`, `Secure`, `SameSite=Lax`,
   `Path=/`, rolling maximum practical lifetime;
@@ -298,8 +316,9 @@ browser-supplied external ID:
 - `ma_privacy`: signed privacy-choice state with the same security attributes.
 
 The parent-domain choice makes every hostname below `shop.maestrogtm.com` part
-of the cookie trust boundary. Launch therefore requires an inventory showing
-that no untrusted or takeover-prone sibling hostname exists. Cookie values
+of the cookie trust boundary. Launch therefore requires the trusted-host
+ownership, HSTS, CSP, and continuous drift controls above; an inventory alone is
+not sufficient. Cookie values
 include a format version and signing-key ID. Current and previous keys are
 accepted during rotation; invalid or ambiguous duplicate cookie names are
 rejected safely rather than selecting an attacker-controlled value.
@@ -313,7 +332,11 @@ thirty-year browser cookie, provides durable continuity after identification.
 Before required tracking consent exists, the collector may set only the
 purpose-limited `ma_privacy` choice cookie. It does not set `ma_vid` or `ma_sid`
 in a prior-consent region until the relevant category is granted. Cookie
-deletion uses the exact original Domain, Path, and security attributes.
+deletion uses the exact original Domain, Path, and security attributes. An
+accepted deletion/opt-out request returns deletion `Set-Cookie` headers for the
+environment's `ma_vid`, `ma_sid`, `ma_privacy`, and destination-safe external-ID
+state before the request is marked effective; the suppression tombstone is
+committed first so a late event cannot recreate the identity.
 
 The raw visitor ID is never exposed to browser JavaScript. `GET /v1/bootstrap`
 sets the cookies and returns a non-secret, destination-safe external ID derived
@@ -432,6 +455,15 @@ Attribution values have strict length and character limits. They are treated as
 untrusted input and never interpolated into HTML, SQL, logs, or URLs without
 encoding.
 
+The launch field policy fixes these maximum lifetimes: raw `fbclid`, `fbp`, and
+`fbc` and browser IP/UA are retained in buyer context for seven days; sanitized
+first/latest UTM dimensions remain only under the normalized analytics
+retention; raw source URLs are retained for seven days; and Meta-normalized
+identity hashes are retained for seven days. The policy artifact records the
+same TTL, deletion path, source provenance, and destination for every other
+allowlisted field. Client-supplied Cloudflare geo/IP headers are never trusted;
+only platform-authenticated request metadata is eligible.
+
 ## Event-time rules
 
 - The server records both `occurred_at` and immutable `received_at`.
@@ -538,14 +570,19 @@ D1 enforces:
 - unique destination delivery:
   `(tenant_id, site_id, event_name, event_id, destination)`;
 - unique provider source mapping:
-  `(tenant_id, provider, provider_object_id, event_name)`; and
+  `(tenant_id, site_id, provider, provider_object_id, event_name)`; and
 - one active person alias per tenant-scoped claim key, subject to the conflict
   rules above.
 
-Cloudflare Queue delivery is at least once and unordered. The consumer creates
-canonical and destination rows idempotently, then uses a compare-and-set lease
-state machine: `pending -> sending -> delivered | retryable | permanent |
-outcome_unknown`. It skips destinations already marked delivered.
+Cloudflare Queue delivery is at least once and unordered. Every canonical and
+source event stores a deterministic body hash. The same scoped identity with a
+different hash is quarantined and audited; it is never accepted by
+`INSERT OR IGNORE` or first-writer-wins behavior. The consumer creates
+canonical and destination rows idempotently, then uses a fenced lease state
+machine: `pending -> sending -> delivered | retryable | permanent |
+outcome_unknown`. A lease has an opaque owner/token and every completion,
+release, and retry update compares that token, so an expired worker cannot
+overwrite a reclaimed attempt. It skips destinations already marked delivered.
 
 No component claims exactly-once delivery across a remote call. A worker can
 crash after Meta or Tinybird accepts a request but before D1 records success.
@@ -691,10 +728,17 @@ advertising, and identity enrichment.
 
 For US visitors, configured analytics and advertising begin immediately unless
 the visitor has opted out or sends Global Privacy Control, consistent with the
-approved launch behavior. `Sec-GPC: 1` is evaluated on every applicable
+approved `config/privacy-policy.json` artifact. `Sec-GPC: 1` is evaluated on every applicable
 request; current GPC or any stored opt-out wins over stale opt-in. GPC
 suppresses advertising, sale/share-classified processing, future resolver
-enrichment, and similarly classified CRM sync.
+enrichment, and similarly classified CRM sync. Where Meta's limited-data-use
+controls apply, the transform emits the configured `data_processing_options`
+and related state rather than inferring a universal US default.
+
+Privacy choices use a monotonic compare-and-set rule on policy version and
+effective timestamp; a stale opt-in cannot overwrite a newer opt-out or GPC
+decision. Unknown region, sensitive-data, and minor states fail closed unless
+the approved policy artifact explicitly says otherwise.
 
 For a region requiring prior consent, only the privacy-preference cookie and
 purpose-limited checkout/security processing are allowed before affirmative,
@@ -719,15 +763,22 @@ identifier. The runbook defines request verification, response SLA, export
 schema, legal exceptions, and backup/Time Travel expiry. Deletion removes or
 anonymizes tracking records in D1 and Tinybird, cancels pending deliveries, and
 creates a non-identifying keyed suppression tombstone so Queue/DLQ replay or a
-later alias cannot recreate the data. Restored data stays quarantined until all
-post-snapshot tombstones are reapplied from the current privacy-request record.
+later alias cannot recreate the data. The tombstone is a transactional barrier:
+ingestion, alias merges, and outbox inserts check it before commit. It carries
+`retain_until`, which extends through the maximum Queue/DLQ, D1 backup/Time
+Travel, provider-retry, and key-rotation horizon (or remains indefinite for a
+deleted alias key). Restored data stays quarantined until all post-snapshot
+tombstones are reapplied from the current privacy-request record.
 
 Queue payloads contain only event keys and bounded pseudonymous context, never
 raw email or phone. Messages that cannot be selectively removed are suppressed
 by the tombstone and expire under the Queue retention policy. Previously
 accepted destination data is deleted only where that provider exposes a
-supported mechanism; the operator record states plainly when accepted Meta
-data cannot be retracted and documents the downstream request procedure.
+supported mechanism. Each destination has a tested capability readback,
+completion deadline, retry/escalation state, and explicit residual-retention
+disclosure when the provider cannot retract accepted data. A funnel remains
+blocked in jurisdictions requiring deletion until that destination contract is
+green.
 
 Privacy audit records retain request ID, effective choice, policy versions,
 status, and timestamps—not deleted PII. Legally required transaction records
@@ -1001,14 +1052,18 @@ replay procedure.
    D1s, Queue/DLQ, Tinybird, Worker secrets, and kill switches; additively
    migrate the production business D1 only for source-outbox rows and create
    the production tracking D1 from the tracking migrations. Attach the exact
-   Worker custom domain.
+   Worker custom domain. Read back provider token scopes/expiry, vendor
+   deletion capability, log-retention/redaction, and DPA/data-residency
+   evidence before any send.
 4. Deploy a backward-compatible Worker in shadow mode with Meta delivery off,
    then deploy the Pages outbox/browser producer and the Convex source-outbox
    producers/bridge. Keep direct Convex browser calls accepted but shadowed
    until the same-origin proxies and signed producers are green; only then
    reject the direct path. The consumer supports the current and previous
    envelope during the rolling change, and the compatible source/runtime SHA
-   set is recorded before cutover.
+   set is recorded before cutover. Deployment fails closed if any source SHA is
+   unreachable, its required CI status is stale/red, or its bridge contract
+   version does not match the Worker manifest.
 5. Validate collection, attribution, identity conflicts, privacy choices, GPC,
    abuse limits, retention cleanup, Tinybird deduplication, and independent
    alerts.
@@ -1068,6 +1123,10 @@ additive D1 migrations while older code may still run.
 - Redacted Pixel network evidence and pre-send CAPI fixtures prove field-level
   normalization and identical `(event_name, event_id, pixel_id)` pairing for
   all four events; Meta Test Events is only receipt evidence.
+- Every funnel/product/stage row has a live `$1` canary or a reviewer-approved
+  equivalence link to an identical implementation. Canary events carry a
+  validation-session marker, are excluded from campaign optimization/KPIs, and
+  have refund/revocation evidence.
 - Internal aliases use tenant-scoped HMAC; Meta-specific normalized SHA-256 is
   exact, single-pass, and bounded to the retry window.
 - Queue and remote delivery are described and tested as at-least-once. Every

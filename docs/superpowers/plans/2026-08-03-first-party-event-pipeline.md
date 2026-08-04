@@ -65,8 +65,24 @@ Wrangler, and Woodpecker.
 - Browser code never receives Meta, Tinybird, Dodo, HMAC, or Worker credentials.
 - Raw email, phone, payment payloads, flow tokens, and secrets never enter
   browser responses, generic Queue messages, Tinybird, logs, or diagnostics.
-- Parent cookie scope is explicitly `Domain=shop.maestrogtm.com`; all sibling
-  hosts must be inventoried as trusted before launch.
+- Production parent cookie scope is explicitly `Domain=shop.maestrogtm.com`;
+  preview uses host-only, environment-specific cookie names. All production
+  sibling hosts require DNS/TLS/CNAME ownership, HSTS/CSP/referrer policy, no
+  user-content host, no alternate `workers.dev` route, and a continuous drift
+  probe before cookie issuance.
+- Every canonical/source event stores a deterministic body hash. A same-scoped
+  ID with a different hash is quarantined, never first-writer-wins. Every lease
+  stores an opaque owner/token and all completion/release updates compare it.
+- Source bridge envelopes include signed `tenant_id`, `site_id`, `product_id`,
+  `funnel_slug`, an opaque TTL-bound `context_ref`/`lead_id`, and an immutable
+  `privacy_snapshot`; these fields are validated against the ownership manifest.
+- Bridge timestamps use a fixed ±5 minute skew, nonces expire after 10 minutes,
+  and retries use a fresh nonce with source-event idempotency. Tokens never
+  travel in URLs, query strings, referrers, or access logs; checkout-status is
+  POST body or HttpOnly-bound state only.
+- Live `$1` canaries carry `validation_session_id` and `is_canary` through every
+  projection, are excluded from campaign KPIs/optimization, and require proof
+  that refund/revocation did not pollute production metrics.
 - Purchase is emitted only after a signature-verified, catalog-validated Dodo
   `payment.succeeded`. One Dodo payment ID produces one canonical Purchase;
   base plus bump items in one payment share one `contents` array.
@@ -115,6 +131,10 @@ is not complete until all five gates are green.
 **Files:**
 
 - Create: `docs/launch/first-party-event-pipeline-evidence.md`
+- Create: `config/trusted-hosts.json`
+- Create: `config/privacy-policy.json`
+- Create: `config/tracking-field-policy.json`
+- Create: `config/source-runtime-manifest.json`
 - Create: `tests/quality/first-party-authority-inventory.test.mts`
 - Read-only inputs: `docs/superpowers/specs/2026-08-03-first-party-event-pipeline-design.md`,
   `docs/superpowers/plans/2026-08-02-standard-funnels-launch.md`,
@@ -184,6 +204,15 @@ Values marked `UNVERIFIED` or `*_UNVERIFIED` are evidence fields in the
 document only. They must be replaced by observed values or the row stays
 `unverified` and blocks that funnel's activation.
 
+The same task commits the control artifacts required by the spec. The privacy
+policy contains per-region/state purpose decisions, GPC/LDU behavior,
+unknown-region and minor/sensitive-data handling, and named legal
+owner/version approval. The field policy gives every field its source,
+purpose, consent, destination, trust provenance, exact TTL, and deletion path.
+The source-runtime manifest pins repository, SHA, bridge contract version,
+environment, and required CI status. The trusted-hosts file records ownership,
+HSTS/CSP/referrer policy, alternate-route checks, and the continuous drift probe.
+
 - [ ] **Step 4: Add static authority assertions**
 
 The test must assert that the four event names, five source-system labels, the
@@ -224,6 +253,7 @@ App-Idea/Blueprint source modules without inventing their contract.
 - Create: `functions/_lib/tracking-contract.ts`
 - Create: `migrations/0010_source_tracking_outbox.sql`
 - Create: `workers/events/migrations/0001_tracking_ledger.sql`
+- Create: `workers/events/migrations/0002_tracking_scope_hardening.sql`
 - Modify: `functions/_lib/runtime.ts`
 - Modify: `tests/functions/migrations.test.mts`
 - Create: `tests/functions/tracking-contract.test.mts`
@@ -250,6 +280,17 @@ App-Idea/Blueprint source modules without inventing their contract.
   The business/source runtime also owns
   `source_tracking_provider_mappings`, so duplicate provider deliveries are
   collapsed before the bridge is called.
+
+The migration makes that scope real, not just a lookup convention:
+`tracking_provider_event_mappings` includes `site_id`; source mappings include
+`source_system` and `funnel_slug`; visitor/session/redirect/person/nonces use
+tenant/site/issuer-scoped composite keys; and every foreign key uses the same
+scope. Existing globally keyed tables are rebuilt transactionally with old-row
+copy, indexes, and foreign keys preserved. The upgrade fixture applies the
+previous schema with representative rows, proves the rebuild preserves them,
+and proves cross-tenant/site collisions and concurrent replays are rejected.
+Every canonical and source row stores `payload_hash`; a same-scoped ID with a
+different hash is quarantined rather than ignored.
 
 - [ ] **Step 1: Write failing contract tests**
 
@@ -305,8 +346,10 @@ CREATE TABLE IF NOT EXISTS source_tracking_outbox (
   outbox_id INTEGER PRIMARY KEY AUTOINCREMENT,
   tenant_id TEXT NOT NULL,
   site_id TEXT NOT NULL,
-  source_event_id TEXT NOT NULL UNIQUE,
+  source_event_id TEXT NOT NULL,
   source_system TEXT NOT NULL,
+  funnel_slug TEXT NOT NULL,
+  product_id TEXT,
   event_name TEXT NOT NULL,
   payload_json TEXT NOT NULL,
   state TEXT NOT NULL,
@@ -314,17 +357,24 @@ CREATE TABLE IF NOT EXISTS source_tracking_outbox (
   attempt_count INTEGER NOT NULL DEFAULT 0,
   last_error TEXT,
   created_at TEXT NOT NULL,
-  updated_at TEXT NOT NULL
+  updated_at TEXT NOT NULL,
+  payload_hash TEXT NOT NULL
 );
+CREATE UNIQUE INDEX IF NOT EXISTS source_tracking_outbox_identity_idx
+  ON source_tracking_outbox (tenant_id, site_id, source_system, source_event_id);
 CREATE TABLE IF NOT EXISTS source_tracking_provider_mappings (
   tenant_id TEXT NOT NULL,
   site_id TEXT NOT NULL,
   provider TEXT NOT NULL,
   provider_object_id TEXT NOT NULL,
   event_name TEXT NOT NULL,
-  source_event_id TEXT NOT NULL REFERENCES source_tracking_outbox(source_event_id),
+  source_system TEXT NOT NULL,
+  funnel_slug TEXT NOT NULL,
+  source_event_id TEXT NOT NULL,
   created_at TEXT NOT NULL,
-  PRIMARY KEY (tenant_id, site_id, provider, provider_object_id, event_name)
+  PRIMARY KEY (tenant_id, site_id, provider, provider_object_id, event_name),
+  FOREIGN KEY (tenant_id, site_id, source_system, source_event_id)
+    REFERENCES source_tracking_outbox(tenant_id, site_id, source_system, source_event_id)
 );
 CREATE INDEX IF NOT EXISTS source_tracking_outbox_due_idx
   ON source_tracking_outbox (state, next_attempt_at);
@@ -409,6 +459,7 @@ CREATE TABLE IF NOT EXISTS tracking_events (
   source_system TEXT NOT NULL,
   occurred_at TEXT NOT NULL,
   received_at TEXT NOT NULL,
+  payload_hash TEXT NOT NULL,
   envelope_json TEXT NOT NULL,
   privacy_state_json TEXT NOT NULL,
   bot_state TEXT NOT NULL,
@@ -422,6 +473,8 @@ CREATE TABLE IF NOT EXISTS tracking_outbox (
   state TEXT NOT NULL,
   next_attempt_at TEXT NOT NULL,
   lease_until TEXT,
+  lease_owner TEXT,
+  lease_token TEXT,
   attempt_count INTEGER NOT NULL DEFAULT 0,
   last_error TEXT,
   created_at TEXT NOT NULL,
@@ -431,12 +484,13 @@ CREATE TABLE IF NOT EXISTS tracking_outbox (
 
 CREATE TABLE IF NOT EXISTS tracking_provider_event_mappings (
   tenant_id TEXT NOT NULL,
+  site_id TEXT NOT NULL,
   provider TEXT NOT NULL,
   provider_object_id TEXT NOT NULL,
   event_name TEXT NOT NULL,
   event_key TEXT NOT NULL REFERENCES tracking_events(event_key),
   created_at TEXT NOT NULL,
-  PRIMARY KEY (tenant_id, provider, provider_object_id, event_name)
+  PRIMARY KEY (tenant_id, site_id, provider, provider_object_id, event_name)
 );
 
 CREATE TABLE IF NOT EXISTS tracking_source_mappings (
@@ -450,10 +504,13 @@ CREATE TABLE IF NOT EXISTS tracking_source_mappings (
 );
 
 CREATE TABLE IF NOT EXISTS tracking_nonces (
-  nonce TEXT PRIMARY KEY,
+  tenant_id TEXT NOT NULL,
+  site_id TEXT NOT NULL,
+  nonce TEXT NOT NULL,
   source_system TEXT NOT NULL,
   expires_at TEXT NOT NULL,
-  created_at TEXT NOT NULL
+  created_at TEXT NOT NULL,
+  PRIMARY KEY (tenant_id, site_id, source_system, nonce)
 );
 
 CREATE TABLE IF NOT EXISTS tracking_deliveries (
@@ -523,10 +580,13 @@ CREATE TABLE IF NOT EXISTS tracking_suppression_tombstones (
   suppression_key TEXT PRIMARY KEY,
   tenant_id TEXT NOT NULL,
   site_id TEXT NOT NULL,
+  subject_type TEXT NOT NULL,
+  subject_id TEXT NOT NULL,
   alias_key TEXT,
   visitor_id TEXT,
   reason TEXT NOT NULL,
-  created_at TEXT NOT NULL
+  created_at TEXT NOT NULL,
+  retain_until TEXT NOT NULL
 );
 
 CREATE TABLE IF NOT EXISTS tracking_deletion_requests (
@@ -557,6 +617,15 @@ reuse the same event key instead of minting a second Purchase.
 
 - [ ] **Step 4: Make both migration discoverers lexical and complete**
 
+Add `0002_tracking_scope_hardening.sql` as an executable SQLite/D1 table
+rebuild (create scoped replacement, copy validated old rows, recreate indexes
+and foreign keys, verify counts, then swap). It must replace the globally
+scoped visitor/session/redirect/nonce/provider keys from `0001` and add
+`payload_hash`, lease fencing fields, tombstone subject/retention fields, and
+the scoped source uniqueness index. The migration aborts before swap on any
+row-copy or scope collision; a representative backup/restore fixture proves
+old rows and rollback quarantine behavior.
+
 Replace any hardcoded migration list with:
 
 ```ts
@@ -578,7 +647,7 @@ creates only tracking tables and cannot query a business table.
 ```bash
 rtk host-test-slot --class focused node --import tsx --test tests/functions/migrations.test.mts tests/functions/tracking-contract.test.mts
 rtk git diff --check
-rtk git add functions/_lib/tracking-contract.ts functions/_lib/runtime.ts migrations/0010_source_tracking_outbox.sql workers/events/migrations/0001_tracking_ledger.sql tests/functions/migrations.test.mts tests/functions/tracking-contract.test.mts
+rtk git add functions/_lib/tracking-contract.ts functions/_lib/runtime.ts migrations/0010_source_tracking_outbox.sql workers/events/migrations/0001_tracking_ledger.sql workers/events/migrations/0002_tracking_scope_hardening.sql tests/functions/migrations.test.mts tests/functions/tracking-contract.test.mts
 rtk git commit -m "feat: add canonical tracking ledger schema"
 ```
 
@@ -599,7 +668,7 @@ rtk git commit -m "feat: add canonical tracking ledger schema"
 ```ts
 type PrivacyPurpose = 'necessary' | 'analytics' | 'advertising' | 'identity_enrichment' | 'sale_share';
 type PrivacyDecision = { purpose: PrivacyPurpose; allowed: boolean; policyVersion: string };
-function issueSignedCookie(name: 'ma_vid' | 'ma_sid' | 'ma_privacy', value: string, keyId: string, maxAge: number): string;
+function issueSignedCookie(name: string, value: string, keyId: string, maxAge: number, environment: 'preview' | 'live'): string;
 function verifySignedCookie(header: string | null, name: string, keys: Record<string, string>): string | null;
 type StoredPrivacyChoice = { purpose: PrivacyPurpose; allowed: boolean; policyVersion: string; effectiveAt: string; source: 'ui' | 'gpc' | 'operator'; region: string };
 function resolvePrivacy(request: Request, stored: StoredPrivacyChoice[], policy: { region: string; failClosed: boolean; policyVersion: string }): PrivacyDecision[];
@@ -620,7 +689,11 @@ Cover:
    and privacy-state precedence;
 5. exact credentialed CORS for `https://shop.maestrogtm.com`, rejection of
    `null`, suffix origins, wrong ports, and wrong schemes; and
-6. alias HMAC domain separation, normalization version, revocation, and
+6. preview cookies cannot be read or overwrite live cookies, and live parent
+   cookies are issued only after the trusted-host artifact is green;
+7. privacy choices use monotonic compare-and-set so stale opt-in cannot replace
+   newer opt-out/GPC;
+8. alias HMAC domain separation, normalization version, revocation, and
    conflict quarantine; concurrent verified claims choose one stable canonical
    person, record a redirect, and never silently merge an asserted claim.
 
@@ -651,7 +724,8 @@ when no opt-out/GPC decision suppresses them.
 ```ts
 const VISITOR_MAX_AGE = 34_560_000;
 const SESSION_INACTIVITY_SECONDS = 1_800;
-const COOKIE_DOMAIN = 'shop.maestrogtm.com';
+const COOKIE_DOMAIN = env.environment === 'live' ? 'shop.maestrogtm.com' : undefined;
+const COOKIE_PREFIX = env.environment === 'live' ? 'ma_' : 'ma_preview_';
 const GPC_HEADER = 'sec-gpc';
 ```
 
@@ -696,9 +770,11 @@ rtk git commit -m "feat: add first-party identity and privacy primitives"
   same business-D1 batch as the accepted lead/funnel state. The row is drained
   through the authenticated source bridge; Pages never gives the public Worker
   a business-D1 binding.
-- Dodo webhook processing stores the verified payment and Purchase source-outbox
-  row in one Pages business-D1 batch, keyed by the provider mapping for
-  `payment_id`.
+- Dodo webhook processing claims ownership and stores the verified payment and
+  Purchase source-outbox row in one Pages business-D1 transaction, keyed by the
+  provider mapping for `payment_id`. A pending owner claim is recoverable; a
+  crash after claim but before the batch cannot strand the payment or cause a
+  later valid delivery to be treated as `ignored_not_owner`.
 - `POST /api/funnel/browser-events` accepts the bound high-entropy flow token
   and returns a single safe Purchase browser claim; it never returns PII and
   never enables CORS.
@@ -714,8 +790,11 @@ function toSafeBrowserPurchase(row: VerifiedPurchase): BrowserPurchaseClaim;
 
 `source-outbox.ts` immediately drains committed Pages rows to the authenticated
 Worker bridge and exposes a scheduled recovery scan. It uses the same
-source-event ID on retries, records provider mapping reuse, and never reads
-tracking-D1 from the business-D1 transaction.
+source-event ID with a fresh nonce on retries, records provider mapping reuse,
+fences leases with an owner/token, and never reads tracking-D1 from the
+business-D1 transaction. The source state machine is bounded and recoverable:
+`pending -> sending -> accepted | retryable | permanent | expired`, with
+quarantine/DLQ, backoff, maximum age, and reconciliation alert.
 
 - [ ] **Step 1: Extend fakes and write failing checkout/webhook tests**
 
@@ -862,6 +941,11 @@ newly returned purchases to Pixel. A failed Pixel call does not trigger another
 claim. The canonical outbox alone drives CAPI/Tinybird, and a retry preserves
 the same event ID.
 
+All checkout-start/status proxies use POST bodies or HttpOnly-bound state for
+their assertion/context token. GET query parameters, URL fragments, referrers,
+and access logs must never contain a token; reject legacy GET token transport
+and set `Referrer-Policy: no-referrer` on token-bearing responses.
+
 - [ ] **Step 5: Migrate Blueprint browser checkout calls through same-origin proxies**
 
 Replace direct browser calls to
@@ -952,6 +1036,13 @@ oldest-unresolved age, Queue/DLQ growth, permanent failures, Tinybird
 quarantine, verified-payment/Meta mismatch, kill-switch actions, and bounded
 operator replay.
 
+The runbook also fixes destination request timeouts, `Retry-After` handling,
+jittered backoff, maximum attempts, maximum event age, and the Meta seven-day
+expiry. `outcome_unknown` is terminal for automatic retry until an audited
+operator replay is approved. Fan-out creates independent `meta` and `tinybird`
+delivery claims atomically; one destination can never mark the canonical event
+complete or suppress the other.
+
 - [ ] **Step 1: Write failing collector and Queue tests**
 
 Cover bootstrap cookie policy, exact CORS, body/nesting/item limits, duplicate
@@ -969,8 +1060,9 @@ same event/destination key on retries. The scheduled handler scans pending
 outbox rows, reclaims expired leases, runs retention cleanup, and writes DLQ
 failures to D1 before acknowledgement.
 
-Enforce explicit per-IP, per-cookie, per-tenant, per-event, and global
-Queue/Meta budgets with a documented managed-bot-score fallback. Add a
+Enforce explicit edge/WAF rate limits before D1 access, plus bounded per-IP,
+per-cookie, per-tenant, per-event, and global Queue/Meta budgets with a
+documented managed-bot-score fallback. Add a
 destination-spend circuit breaker and kill switch; authoritative Lead,
 InitiateCheckout, and Purchase events can only enter through Pages/source
 outboxes, never through the public browser collector. Tests sustain valid-cookie
@@ -1009,6 +1101,7 @@ this task.
 - Create: `workers/events/src/meta.ts`
 - Create: `workers/events/src/tinybird.ts`
 - Create: `workers/events/src/privacy-requests.ts`
+- Create: `config/destination-retry-policy.json`
 - Create: `workers/events/tests/destinations.test.mts`
 - Create: `workers/events/tests/privacy-requests.test.mts`
 - Modify: `workers/events/src/queue.ts`
@@ -1026,6 +1119,13 @@ type DeliveryResult = {
 function sendMeta(event: CanonicalEvent, env: EventsEnv): Promise<DeliveryResult>;
 function sendTinybird(event: CanonicalEvent, env: EventsEnv): Promise<DeliveryResult>;
 ```
+
+`config/destination-retry-policy.json` fixes request timeout, `Retry-After`
+ceiling, jittered backoff, maximum attempts, and maximum age for each
+destination. Meta events expire at seven days; Tinybird failures become
+permanent after the bounded policy; ambiguous provider outcomes alert and do
+not retry forever. Delivery claim completion always includes the fenced lease
+token.
 
 - [ ] **Step 1: Write redacted Meta/Tinybird fixtures first**
 
@@ -1046,7 +1146,9 @@ For each event type assert:
 Use the pinned Graph API version and Worker secret. Build the payload from the
 canonical event plus the captured buyer context. Include `test_event_code`
 only when an explicit operator validation flag is present. Never store the
-access token or raw response.
+access token or raw response. Live `$1` events also carry a bounded
+`validation_session_id`/`is_canary` marker through Meta and Tinybird and are
+excluded from campaign optimization and production KPI queries.
 
 - [ ] **Step 3: Implement Tinybird append delivery**
 
@@ -1071,7 +1173,11 @@ its expiry are recorded explicitly. Each D1, queue/DLQ, Tinybird, and source
 store has a completion state and retry/failure path before the request is
 complete. Audit rows contain request IDs/status only. Previously accepted Meta data is
 not claimed retractable; record the provider limitation and downstream request
-procedure. Tests prove replay cannot resurrect a deleted identity/event.
+procedure. Each destination has a numeric completion deadline, retry/escalation
+owner, capability readback, and explicit `residual_retention` outcome when
+physical deletion is unsupported. Tests prove replay cannot resurrect a deleted
+identity/event and a concurrent late ingestion is blocked by the tombstone
+barrier.
 
 Scheduled cleanup deletes raw retry context, Meta hashes, IP/UA, unresolved
 delivery context, and existing raw webhook payloads no later than seven days
@@ -1124,12 +1230,17 @@ must replace it with the observed owning repository/path or keep that funnel
 ```ts
 type SourceEventEnvelope = {
   schema_version: '1';
+  tenant_id: string;
+  site_id: string;
   source_system: 'pages' | 'app_idea' | 'blueprint';
   source_event_id: string;
   event_name: 'Lead' | 'InitiateCheckout' | 'Purchase';
   occurred_at: string;
   tracking_context_token: string;
   funnel_slug: string;
+  product_id?: string;
+  context_ref?: string;
+  lead_id?: string;
   checkout_session_id?: string;
   payment_id?: string;
   attribution?: {
@@ -1141,6 +1252,14 @@ type SourceEventEnvelope = {
     ct?: string[]; st?: string[]; zp?: string[]; country?: string[];
   };
   meta_identity_version?: 'meta-v1';
+  privacy_snapshot: {
+    purposes: Record<'necessary' | 'analytics' | 'advertising' | 'enrichment', 'granted' | 'denied' | 'unknown'>;
+    policy_version: string;
+    region: string;
+    region_source: string;
+    gpc: boolean;
+    observed_at: string;
+  };
   buyer_context?: {
     fbp?: string; fbc?: string; external_id?: string;
     browser_ip?: string; browser_user_agent?: string;
@@ -1163,6 +1282,17 @@ only in tracking D1 for seven days, and is used to build Purchase CAPI from the
 original buyer context—not Dodo request headers. It is never sent to Queue,
 Tinybird, logs, or browser responses.
 
+`privacy_snapshot` is signed and immutable for the event; the Worker applies the
+more restrictive current state at delivery time but cannot reconstruct a
+missing event-time decision. The source dispatcher uses states
+`pending -> sending -> accepted | retryable | permanent | expired`, jittered
+backoff, a bounded attempt count and maximum age, an opaque lease token, and a
+source-owned quarantine/DLQ with an alert owner, reconciliation SLO, and
+runbook. Every retry signs a fresh nonce; stable `source_event_id` makes a
+response-loss retry idempotent. A missing or expired `context_ref` never uses
+Dodo request headers: it either emits a redacted Purchase and alerts, or is
+explicitly suppressed by the funnel policy.
+
 `POST /api/tracking/source-browser-events` is same-origin/no-CORS. The Pages
 proxy validates the source runtime's bound public-session token and calls a
 signed Worker-only claim operation; the Worker resolves only that funnel's
@@ -1181,9 +1311,12 @@ verified source payment lacks one D1 canonical Purchase mapping.
 
 - [ ] **Step 2: Implement Worker-side bridge verification**
 
-Verify issuer, audience, timestamp skew, nonce uniqueness, HMAC key version,
-source-system allowlist (`pages`, `app_idea`, `blueprint`), product ownership, current privacy/tombstone state,
-and source-event idempotency. Ignore browser-provided tenant/site authority.
+Verify issuer, audience, fixed ±5 minute timestamp skew, ten-minute nonce
+uniqueness, HMAC key version, source-system allowlist (`pages`, `app_idea`,
+`blueprint`), signed tenant/site/product/funnel ownership, current
+privacy/tombstone state, context linkage, and source-event idempotency. Ignore
+browser-provided tenant/site authority. Reject tokens in query strings and
+redact token-bearing headers from access logs.
 
  - [ ] **Step 3: Implement Blueprint source outbox in its owning runtime**
 
@@ -1250,6 +1383,10 @@ unverified source SHA.
 - Create: `tests/quality/dodo-funnel-ownership.test.mts`
 - Create: `tests/quality/tracking-d1-binding.test.mts`
 - Create: `config/cloudflare-event-abuse-limits.json`
+- Create: `config/source-runtime-manifest.json`
+- Create: `config/trusted-hosts.json`
+- Create: `config/privacy-policy.json`
+- Create: `config/tracking-field-policy.json`
 - Modify: `wrangler.jsonc`
 - Create: `workers/events/wrangler.jsonc`
 - Modify: `scripts/publish-cloudflare.mjs`
@@ -1270,6 +1407,10 @@ unverified source SHA.
   secrets. Pages retains only its business-D1 binding and calls the Worker
   claim operation server-to-server; neither Pages nor the public Worker exposes
   a cross-purpose D1 binding.
+- Deployment fails closed unless every source-runtime manifest row pins a
+  reachable repository and exact SHA, bridge contract version, environment, and
+  required focused CI status. The deploy readback verifies the SHA is reachable
+  and compatible before publishing the Worker or producer.
 
 ```ts
 type ProductOwner = { environment: 'preview' | 'live'; product_id: string; product_key: string; funnel_slug: string; owner_runtime: 'pages' | 'app_idea' | 'blueprint'; enabled: boolean };
@@ -1291,7 +1432,8 @@ are separate and disabled outside the validation window.
 The abuse-limits artifact defines exact per-IP (60 requests/minute), per-signed
 visitor (120 events/minute), per-tenant (10,000 events/hour), and global Queue
 budgets plus the Meta spend circuit-breaker threshold. Validate the configured
-Cloudflare rate-limit/WAF capability and record a redacted readback; when the
+Cloudflare edge rate-limit/WAF capability before any D1-backed counter and
+record a redacted readback; when the
 plan lacks managed bot scoring, use the documented Worker counter fallback.
 
 - [ ] **Step 2: Add separate Worker configuration**
@@ -1347,7 +1489,6 @@ steps:
       - npm run test:blueprint
       - npm run test:quality
       - node --import tsx --test tests/tracking/*.test.mts workers/events/tests/*.test.mts
-      - node --import tsx --test workers/events/tests/*.test.mts
       - npm run format:check
       - npm run lint
       - npm run typecheck
@@ -1370,6 +1511,12 @@ the exact external config owner and this file is not duplicated; the same
 commands and status contract remain mandatory. The gate never receives live
 provider secrets and never deploys.
 
+The gate uses the pinned lockfile, an explicit runtime timeout, offline
+fixtures, and a no-network/provider-mutation guard. Required source-runtime
+focused gates plus exact-SHA and bridge-compatibility readbacks are part of the
+protected status or deployment is blocked; an evidence-only green claim is not
+sufficient.
+
 - [ ] **Step 5: Pass quality and configuration gates and commit**
 
 ```bash
@@ -1387,6 +1534,7 @@ rtk git commit -m "ci: add first-party deployment contracts"
 **Files:**
 
 - Modify: `docs/launch/first-party-event-pipeline-evidence.md`
+- Create: `docs/launch/five-funnel-canary-matrix.json`
 - Create: `tests/tracking/live-validation-checklist.test.mts`
 
 **Interfaces:** Produces redacted, exact-SHA evidence for preview isolation,
@@ -1429,8 +1577,12 @@ only, not normalization or deduplication.
 
 - [ ] **Step 4: Run the approved live $1 canary matrix**
 
-Canary each distinct payment implementation—Pages base/bump, Pages one-click
-upsell, Blueprint Convex checkout, and App-Idea checkout—using temporary
+Canary each named funnel and paid stage in a machine-readable
+`funnel/product/stage/owner` matrix. The matrix may reference shared evidence
+for an identical implementation only after a reviewer records the equivalence;
+otherwise each row gets its own canary. The distinct implementations currently
+expected are Pages base/bump, Pages one-click upsell, Blueprint Convex checkout,
+and App-Idea checkout—using temporary
 non-public live `$1` products. Use no-charge catalog checks for sibling SKUs
 with the same implementation. Record redacted product ID suffix, exact
 price/currency, owner runtime, manifest row, webhook, and refund owner. The
@@ -1440,8 +1592,9 @@ webhook, one Purchase, fulfillment, browser claim, Pixel/CAPI parity, Tinybird
 row, tracking-D1 ledger, privacy state, and source reconciliation. Refund and
 revoke immediately, then deactivate the canary product. Advance each funnel
 independently through `shadow → test_purchase → live_purchase →
-campaign_enabled`; an unresolved funnel does not block an otherwise green
-funnel.
+campaign_enabled`; canary rows carry `validation_session_id`/`is_canary` and are
+excluded from Meta optimization and production KPI queries. An unresolved
+funnel does not block an otherwise green funnel.
 
 - [ ] **Step 5: Add no-charge real-product checks**
 
@@ -1454,7 +1607,7 @@ payment. Mark the check `intentionally_uncharged`.
 ```bash
 rtk host-test-slot --class focused node --import tsx --test tests/tracking/live-validation-checklist.test.mts
 rtk git diff --check
-rtk git add docs/launch/first-party-event-pipeline-evidence.md tests/tracking/live-validation-checklist.test.mts
+rtk git add docs/launch/first-party-event-pipeline-evidence.md docs/launch/five-funnel-canary-matrix.json tests/tracking/live-validation-checklist.test.mts
 rtk git commit -m "docs: record first-party pipeline validation"
 ```
 
@@ -1492,14 +1645,18 @@ claims, guarantees, proof, or price changes outside the approved copy deck.
 Use the approved Meta Ads authority and exact destination/UTM ledger. Every
 campaign remains `PAUSED` until its funnel row has green software, privacy,
 delivery, live-canary, refund/revocation, and owner-evidence gates. Record
-redacted campaign/ad IDs and state; never commit access tokens.
+redacted campaign/ad-set/ad IDs, exact pre/post state readback, pause
+acknowledgement, and the gate artifact link; never commit access tokens.
 
 - [ ] **Step 4: Activate and monitor one funnel at a time**
 
-Pause campaign traffic before a funnel rollback. Check collection, Lead,
+Pause campaign traffic before a funnel rollback and record the provider's
+acknowledged paused state. Check collection, Lead,
 InitiateCheckout, Purchase, CAPI/Tinybird delivery, duplicate rate, and
 payment/revenue reconciliation at 15, 30, 60 minutes, 4 hours, and 24 hours.
 The global Meta kill switch is reserved for cross-funnel incidents.
+The first activation includes one reversible pause/readback drill tied to that
+funnel's ledger row.
 
 - [ ] **Step 5: Commit copy and campaign evidence**
 
@@ -1517,6 +1674,7 @@ Before implementation, run a local plan audit:
 ```bash
 rtk rg -n 'TBD|TODO|implement later|fill in|appropriate error|write tests for the above|similar to Task' docs/superpowers/plans/2026-08-03-first-party-event-pipeline.md
 rtk rg -n 'PageView|Lead|InitiateCheckout|Purchase|consent|GPC|tombstone|outbox|Convex|Blueprint|App-Idea|Dodo|Tinybird|Meta|Queue|DLQ' docs/superpowers/plans/2026-08-03-first-party-event-pipeline.md
+rtk rg -n 'payload_hash|lease_token|privacy_snapshot|retain_until|validation_session_id|source-runtime-manifest|destination-retry-policy' docs/superpowers/plans/2026-08-03-first-party-event-pipeline.md
 rtk git diff --check
 ```
 
@@ -1532,6 +1690,10 @@ Review the plan in three independent passes before Task 2 implementation:
 3. **Security/privacy and product-ops review:** verify no raw PII/secret path,
    no unsupported identity claim, no broad global launch gate, no hidden second
    business authority, and no campaign activation without redacted evidence.
+4. **Fresh review disposition:** verify trusted-host ownership/drift,
+   machine-readable regional policy and field TTLs, scoped schema rebuilds and
+   hash conflicts, fenced leases, source state/recovery, provider retry/deletion
+   ceilings, exact source SHA compatibility, and a five-funnel canary matrix.
 
 Resolve every Critical/Important plan finding before creating the implementation
 worktree. Minor findings become a review ledger entry and are revisited in the
