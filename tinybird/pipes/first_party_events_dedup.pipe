@@ -1,0 +1,8 @@
+NODE first_party_events_dedup
+SQL >
+  SELECT * EXCEPT (row_number) FROM (
+    SELECT *, row_number() OVER (PARTITION BY canonical_key ORDER BY occurred_at DESC) AS row_number
+    FROM first_party_events
+  ) WHERE row_number = 1
+TYPE endpoint
+TOKEN "read"

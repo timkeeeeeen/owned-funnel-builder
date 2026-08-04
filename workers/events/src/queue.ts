@@ -2,6 +2,8 @@ import type { D1Database } from '../../../functions/_lib/runtime.ts';
 import type { DestinationName } from '../../../functions/_lib/tracking-contract.ts';
 import { redactError } from './observability.ts';
 import { safeEventKey, type TrackingQueueMessage } from './outbox.ts';
+import { sendMeta, type DeliveryResult } from './meta.ts';
+import { sendTinybird } from './tinybird.ts';
 
 export type QueueMessage = {
   body: unknown;
@@ -497,7 +499,10 @@ async function processMessage(env: QueueEnv, message: QueueMessage, isDlq: boole
     message.ack();
     return;
   }
-  const sender = env.DESTINATION_SENDERS?.[destination];
+  const sender = env.DESTINATION_SENDERS?.[destination] ??
+    (destination === 'meta'
+      ? (payload: Record<string, unknown>) => sendMeta(payload as never, env)
+      : (payload: Record<string, unknown>) => sendTinybird(payload as never, env));
   const event = JSON.parse(row.envelope_json) as Record<string, unknown>;
   const identity =
     event.identity && typeof event.identity === 'object'
@@ -550,18 +555,6 @@ async function processMessage(env: QueueEnv, message: QueueMessage, isDlq: boole
   const budgetReason = await deliveryBudgetReason(env, eventKey, destination);
   if (budgetReason) {
     if (await pauseDelivery(env, eventKey, destination, deliveryLease, budgetReason)) message.ack();
-    return;
-  }
-  if (!sender) {
-    await markFailure(
-      env,
-      eventKey,
-      destination,
-      'retryable',
-      new Error('destination_unconfigured'),
-      deliveryLease
-    );
-    message.retry({ delaySeconds: 30 });
     return;
   }
   const transform = env.DESTINATION_TRANSFORMS?.[destination];
@@ -625,7 +618,13 @@ async function processMessage(env: QueueEnv, message: QueueMessage, isDlq: boole
     return;
   }
   try {
-    await sender(transformedPayload, { eventKey, destination });
+    const result = await sender(transformedPayload, { eventKey, destination }) as DeliveryResult | undefined;
+    if (result && result.state !== 'accepted') {
+      await markFailure(env, eventKey, destination, result.state, new Error(result.state), deliveryLease);
+      if (result.state === 'retryable' && attempts < MAX_RETRIES) message.retry({ delaySeconds: result.retryAfterSeconds ?? Math.min(300, 2 ** attempts * 5) });
+      else message.ack();
+      return;
+    }
     if (await completeDelivered(env, eventKey, destination, deliveryLease)) message.ack();
   } catch (error) {
     const ambiguous = error instanceof Error && /ambiguous|timeout|network/i.test(error.message);

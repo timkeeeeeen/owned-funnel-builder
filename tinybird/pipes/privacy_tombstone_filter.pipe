@@ -1,0 +1,6 @@
+NODE privacy_tombstone_filter
+SQL >
+  SELECT e.* FROM first_party_events_dedup e
+  LEFT ANTI JOIN privacy_tombstones t ON e.privacy_subject_key = t.privacy_subject_key AND t.expires_at > now()
+TYPE endpoint
+TOKEN "read"

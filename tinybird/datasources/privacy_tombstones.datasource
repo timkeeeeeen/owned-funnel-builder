@@ -1,0 +1,8 @@
+DESCRIPTION > Restore-safe privacy tombstones v1; retained longer than every queue and replay horizon.
+SCHEMA >
+  privacy_subject_key String,
+  tombstoned_at DateTime,
+  expires_at DateTime,
+  request_id String
+ENGINE "MergeTree"
+ENGINE_SORTING_KEY "(privacy_subject_key, tombstoned_at)"

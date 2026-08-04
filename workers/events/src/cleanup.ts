@@ -30,6 +30,7 @@ export async function runCleanup(
     MAX_CLEANUP_BATCH_SIZE
   );
   const cutoff = new Date(now.getTime() - retentionDays * 86_400_000).toISOString();
+  const sensitiveCutoff = new Date(now.getTime() - 7 * 86_400_000).toISOString();
   const budgetCutoff = Math.floor(now.getTime() / 60_000) * 60;
   let expiredEvents = 0;
   let expiredDeliveries = 0;
@@ -41,6 +42,16 @@ export async function runCleanup(
       )
       .bind(now.toISOString(), batchSize)
       .run();
+    // Canonical envelopes are JSON: remove retry context before its seven-day ceiling.
+    await database.prepare(
+      `UPDATE tracking_events SET envelope_json = json_remove(envelope_json,
+        '$.device.user_agent', '$.geo', '$.attribution.fbp', '$.attribution.fbc',
+        '$.identity.meta_hash', '$.buyer_context') WHERE received_at < ?`
+    ).bind(sensitiveCutoff).run();
+    await database.prepare(
+      `DELETE FROM tracking_buyer_context WHERE rowid IN (
+         SELECT rowid FROM tracking_buyer_context WHERE captured_at < ? LIMIT ?)`
+    ).bind(sensitiveCutoff, batchSize).run();
     await database
       .prepare(
         `DELETE FROM tracking_delivery_budgets WHERE rowid IN (
