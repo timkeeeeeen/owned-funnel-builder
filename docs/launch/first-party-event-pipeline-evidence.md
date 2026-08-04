@@ -81,3 +81,13 @@ remain unverified. No repository-local Woodpecker pipeline is created while
 `ci_authority` is unknown. Pages/Worker publishing, preview provisioning, and
 migration commands are dry-run by default and reject mutation without both
 `--execute` and `--approval-id`.
+
+## Task 10 pending canary validation
+
+`config/five-funnel-canary-matrix.json` records all thirteen paid stages as
+`shadow` only. Approval, validation session, product, payment, webhook,
+canonical/delivery, refund, revocation, deactivation, and owner-signoff fields
+are intentionally blank: blank is unverified, never green. No preview/live
+deployment, provider readback, charge, refund, destination call, or rollout
+transition was performed here. App-Idea and Blueprint stay fail-closed because
+their source-runtime gates remain unverified.
