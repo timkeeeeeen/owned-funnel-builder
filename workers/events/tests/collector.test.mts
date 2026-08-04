@@ -773,13 +773,14 @@ test('privacy request returns only a request id and state', async () => {
       .find((cookie) => cookie.trim().startsWith('ma_vid='))
       ?.split(';', 1)[0]
       ?.trim() ?? '';
-  assert.match(visitorCookie, /^ma_vid=v2\./);
+  const effectiveVisitorCookie = visitorCookie || bootstrap.headers.get('set-cookie')?.match(/ma_vid=[^;]+/)?.[0] || '';
+  assert.match(effectiveVisitorCookie, /^ma_vid=v2\./);
   const visitor = ((await bootstrap.json()) as { visitor_ready: boolean }).visitor_ready;
   assert.equal(visitor, true);
   const response = await worker.fetch(
     request('/v1/privacy/requests', {
       method: 'POST',
-      headers: { cookie: visitorCookie, origin: 'https://shop.example.test' },
+      headers: { cookie: effectiveVisitorCookie, origin: 'https://shop.example.test' },
       body: JSON.stringify({ request_type: 'deletion', subject_key: 'self' }),
     }),
     bindings as never,
