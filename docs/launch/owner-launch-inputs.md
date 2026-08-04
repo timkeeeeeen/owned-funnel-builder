@@ -11,7 +11,9 @@ checkout when the canary operator is present.
   `b314acf`; Owned Funnel Builder is the recommended first canary.
 - The App Idea main SHA is `7fbbf5cff3783e9544366bf9eab61e2a8daefa60`, but
   guarded Woodpecker staging pipeline `#118` was refused by the durable
-  promotion authority. Do not raw-deploy around that gate.
+  promotion authority. Its Pages project still serves deployment
+  `32bda8c4-236b-4be7-8b9b-57356e3986a6` from stale commit `ffab2d9b`. Do not
+  raw-deploy around that gate.
 - Blueprint is still fail-closed because its production runtime bindings are
   absent; do not send paid traffic to it.
 - The secure operator store currently lacks `DODO_PAYMENTS_API_KEY`,
