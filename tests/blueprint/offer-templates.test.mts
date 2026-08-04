@@ -28,3 +28,13 @@ test('video-lead comparison reuses the original offer content and checkout', asy
   assert.deepEqual(comparison.proof, original.proof);
   assert.deepEqual(comparison.faqs, original.faqs);
 });
+
+test('video-lead adapter forwards the checkout funnel slug', async () => {
+  const source = await readFile(
+    'src/components/offers/templates/VideoLeadOfferLandingPage.astro',
+    'utf8'
+  );
+
+  assert.match(source, /const checkoutSlug = offer\.checkoutFunnelSlug \?\? offer\.slug;/);
+  assert.match(source, /<OfferLandingPage offer=\{\{ \.\.\.offer, slug: checkoutSlug \}\} \/>/);
+});
