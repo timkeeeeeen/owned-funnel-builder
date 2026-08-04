@@ -73,20 +73,24 @@ export type CanonicalEvent =
   | EventEnvelope<'Purchase'>;
 
 type MetaContent = CommerceContent;
+type MetaCustomData = {
+  order_id?: string;
+  payment_id?: string;
+  content_ids?: string[];
+  content_type?: 'product';
+  contents?: MetaContent[];
+  currency?: string;
+  quantity?: number;
+  num_items?: number;
+  value?: number;
+};
 type MetaPayload = {
   event_name: EventName;
   event_time: number;
   event_id: string;
   action_source: 'website';
-  event_source_path?: string;
-  custom_data?: {
-    content_ids?: string[];
-    content_type?: 'product';
-    contents?: MetaContent[];
-    currency?: string;
-    num_items?: number;
-    value?: number;
-  };
+  event_source_url?: string;
+  custom_data?: MetaCustomData;
   user_data?: {
     client_ip_address?: string;
     client_user_agent?: string;
@@ -217,6 +221,13 @@ function safeString(value: unknown, name: string, maximum = 256, allowPhoneLike 
   return value;
 }
 
+function opaqueId(value: unknown, name: string, maximum = 256): string {
+  const candidate = safeString(value, name, maximum, true);
+  if (!/^[A-Za-z0-9][A-Za-z0-9_-]*$/.test(candidate))
+    invalid(`${name} must be an opaque identifier`);
+  return candidate;
+}
+
 function allowedObject(
   value: unknown,
   name: keyof typeof sectionKeys,
@@ -230,12 +241,12 @@ function allowedObject(
       invalid(`${name}.${key} is not allowed`);
     const type = types[key] ?? 'string';
     if (type === 'string')
-      output[key] = safeString(
-        field,
-        `${name}.${key}`,
-        key === 'user_agent' ? 512 : 256,
-        key === 'user_agent' || /(?:^|_)(?:id|[a-z]+_id)$/.test(key)
-      );
+      output[key] =
+        key === 'user_agent'
+          ? safeString(field, `${name}.${key}`, 512, true)
+          : /(?:^|_)(?:id|[a-z]+_id)$/.test(key)
+            ? opaqueId(field, `${name}.${key}`)
+            : safeString(field, `${name}.${key}`);
     else if (type === 'number' && typeof field === 'number' && Number.isFinite(field))
       output[key] = field;
     else if (type === 'boolean' && typeof field === 'boolean') output[key] = field;
@@ -267,21 +278,38 @@ function commerce<Name extends EventName>(value: unknown, eventName: Name): Even
         }
         if (
           typeof content.quantity !== 'number' ||
-          !Number.isFinite(content.quantity) ||
+          !Number.isInteger(content.quantity) ||
+          content.quantity < 0 ||
           (content.item_price !== undefined &&
-            (typeof content.item_price !== 'number' || !Number.isFinite(content.item_price)))
+            (typeof content.item_price !== 'number' ||
+              !Number.isFinite(content.item_price) ||
+              content.item_price < 0))
         ) {
           invalid('commerce.contents has invalid values');
         }
         return {
-          id: safeString(content.id, 'commerce.contents.id', 256, true),
+          id: opaqueId(content.id, 'commerce.contents.id'),
           quantity: content.quantity,
           ...(content.item_price === undefined ? {} : { item_price: content.item_price }),
         };
       });
     } else if (key === 'content_ids') {
       if (!Array.isArray(field)) invalid('commerce.content_ids must be an array');
-      output.content_ids = field.map((id) => safeString(id, 'commerce.content_ids'));
+      output.content_ids = field.map((id) => opaqueId(id, 'commerce.content_ids'));
+    } else if (key === 'order_id' || key === 'payment_id' || key === 'content_id') {
+      output[key] = opaqueId(field, `commerce.${key}`);
+    } else if (key === 'quantity' || key === 'num_items') {
+      if (typeof field !== 'number' || !Number.isInteger(field) || field < 0)
+        invalid(`commerce.${key} must be a non-negative integer`);
+      output[key] = field;
+    } else if (key === 'value') {
+      if (typeof field !== 'number' || !Number.isFinite(field) || field < 0)
+        invalid('commerce.value must be a non-negative number');
+      output[key] = field;
+    } else if (key === 'currency') {
+      if (typeof field !== 'string' || !/^[A-Z]{3}$/.test(field))
+        invalid('commerce.currency must be an ISO currency code');
+      output[key] = field;
     } else if (typeof field === 'number' && Number.isFinite(field)) output[key] = field;
     else output[key] = safeString(field, `commerce.${key}`);
   }
@@ -320,9 +348,9 @@ export function validateCanonicalEvent(input: unknown): CanonicalEvent {
   const event_name = event.event_name as EventName;
   return {
     schema_version: '1',
-    tenant_id: safeString(event.tenant_id, 'tenant_id', 128, true),
-    site_id: safeString(event.site_id, 'site_id', 128, true),
-    event_id: safeString(event.event_id, 'event_id', 128, true),
+    tenant_id: opaqueId(event.tenant_id, 'tenant_id', 128),
+    site_id: opaqueId(event.site_id, 'site_id', 128),
+    event_id: opaqueId(event.event_id, 'event_id', 128),
     event_name,
     source: event.source,
     source_system: event.source_system as SourceSystem,
@@ -364,17 +392,23 @@ function metaContents(value: unknown): MetaContent[] {
     ) {
       invalid('meta.contents has invalid keys');
     }
-    if (typeof content.quantity !== 'number' || !Number.isFinite(content.quantity)) {
-      invalid('meta.contents.quantity must be a number');
+    if (
+      typeof content.quantity !== 'number' ||
+      !Number.isInteger(content.quantity) ||
+      content.quantity < 0
+    ) {
+      invalid('meta.contents.quantity must be a non-negative integer');
     }
     if (
       content.item_price !== undefined &&
-      (typeof content.item_price !== 'number' || !Number.isFinite(content.item_price))
+      (typeof content.item_price !== 'number' ||
+        !Number.isFinite(content.item_price) ||
+        content.item_price < 0)
     ) {
       invalid('meta.contents.item_price must be a number');
     }
     return {
-      id: safeString(content.id, 'meta.contents.id', 256, true),
+      id: opaqueId(content.id, 'meta.contents.id'),
       quantity: content.quantity,
       ...(content.item_price === undefined ? {} : { item_price: content.item_price }),
     };
@@ -404,14 +438,14 @@ function clientUserAgent(value: unknown): string {
   return userAgent;
 }
 
-function metaPayload(value: unknown): MetaPayload {
+function metaPayload(value: unknown, occurredAt: string): MetaPayload {
   const input = record(value, 'meta payload');
   const allowed = new Set([
     'event_name',
     'event_time',
     'event_id',
     'action_source',
-    'event_source_path',
+    'event_source_url',
     'custom_data',
     'user_data',
   ]);
@@ -420,37 +454,65 @@ function metaPayload(value: unknown): MetaPayload {
   if (
     !eventNames.has(input.event_name as EventName) ||
     typeof input.event_time !== 'number' ||
-    !Number.isFinite(input.event_time) ||
+    !Number.isInteger(input.event_time) ||
+    input.event_time < 0 ||
     input.action_source !== 'website'
   ) {
     invalid('meta payload has invalid required fields');
   }
+  if (Math.abs(input.event_time * 1000 - Date.parse(occurredAt)) > 300_000)
+    invalid('meta event_time does not match occurred_at');
   const output: MetaPayload = {
     event_name: input.event_name as EventName,
     event_time: input.event_time,
-    event_id: safeString(input.event_id, 'meta.event_id', 128, true),
+    event_id: opaqueId(input.event_id, 'meta.event_id', 128),
     action_source: 'website',
   };
-  if (input.event_source_path !== undefined)
-    output.event_source_path = safeString(input.event_source_path, 'meta.event_source_path');
+  if (input.event_source_url !== undefined) {
+    if (
+      typeof input.event_source_url !== 'string' ||
+      !input.event_source_url ||
+      input.event_source_url.length > 512
+    )
+      invalid('meta.event_source_url must be a bounded URL');
+    const sourceUrl = input.event_source_url;
+    try {
+      const url = new URL(sourceUrl);
+      if (
+        url.protocol !== 'https:' ||
+        url.hostname !== 'shop.maestrogtm.com' ||
+        url.search ||
+        url.hash
+      )
+        invalid('meta.event_source_url must use the trusted HTTPS host');
+      output.event_source_url = sourceUrl;
+    } catch {
+      invalid('meta.event_source_url must be a URL');
+    }
+  }
   if (input.custom_data !== undefined) {
     const custom = record(input.custom_data, 'meta.custom_data');
-    const allowedCustom = new Set([
-      'content_ids',
-      'content_type',
-      'contents',
-      'currency',
-      'num_items',
-      'value',
-    ]);
+    const allowedCustom = new Set(
+      input.event_name === 'PageView'
+        ? []
+        : input.event_name === 'Purchase'
+          ? ['order_id', 'payment_id', 'content_ids', 'content_type', 'contents', 'currency', 'quantity', 'num_items', 'value']
+          : ['content_ids', 'content_type', 'contents', 'currency', 'quantity', 'num_items', 'value']
+    );
     if (Object.keys(custom).some((key) => !allowedCustom.has(key)))
       invalid('meta.custom_data contains an unknown field');
     output.custom_data = {
+      ...(custom.order_id === undefined
+        ? {}
+        : { order_id: opaqueId(custom.order_id, 'meta.order_id') }),
+      ...(custom.payment_id === undefined
+        ? {}
+        : { payment_id: opaqueId(custom.payment_id, 'meta.payment_id') }),
       ...(custom.content_ids === undefined
         ? {}
         : {
             content_ids: Array.isArray(custom.content_ids)
-              ? custom.content_ids.map((id) => safeString(id, 'meta.content_ids'))
+              ? custom.content_ids.map((id) => opaqueId(id, 'meta.content_ids'))
               : invalid('meta.content_ids must be an array'),
           }),
       ...(custom.content_type === undefined
@@ -464,22 +526,39 @@ function metaPayload(value: unknown): MetaPayload {
       ...(custom.contents === undefined ? {} : { contents: metaContents(custom.contents) }),
       ...(custom.currency === undefined
         ? {}
-        : { currency: safeString(custom.currency, 'meta.currency', 3) }),
+        : {
+            currency:
+              typeof custom.currency === 'string' && /^[A-Z]{3}$/.test(custom.currency)
+                ? custom.currency
+                : invalid('meta.currency must be an ISO currency code'),
+          }),
+      ...(custom.quantity === undefined
+        ? {}
+        : {
+            quantity:
+              typeof custom.quantity === 'number' &&
+              Number.isInteger(custom.quantity) &&
+              custom.quantity >= 0
+                ? custom.quantity
+                : invalid('meta.quantity must be a non-negative integer'),
+          }),
       ...(custom.num_items === undefined
         ? {}
         : {
             num_items:
-              typeof custom.num_items === 'number' && Number.isFinite(custom.num_items)
+              typeof custom.num_items === 'number' &&
+              Number.isInteger(custom.num_items) &&
+              custom.num_items >= 0
                 ? custom.num_items
-                : invalid('meta.num_items must be a number'),
+                : invalid('meta.num_items must be a non-negative integer'),
           }),
       ...(custom.value === undefined
         ? {}
         : {
             value:
-              typeof custom.value === 'number' && Number.isFinite(custom.value)
+              typeof custom.value === 'number' && Number.isFinite(custom.value) && custom.value > 0
                 ? custom.value
-                : invalid('meta.value must be a number'),
+                : invalid('meta.value must be a positive number'),
           }),
     };
   }
@@ -538,11 +617,11 @@ export function validateDestinationProjection(input: unknown): DestinationProjec
   if (!eventNames.has(projection.event_name as EventName))
     invalid('destination projection has an invalid event_name');
   const event_name = projection.event_name as EventName;
-  const event_id = safeString(projection.event_id, 'destination event_id', 128, true);
+  const event_id = opaqueId(projection.event_id, 'destination event_id', 128);
   const occurred_at = safeString(projection.occurred_at, 'destination occurred_at', 64, true);
   if (Number.isNaN(Date.parse(occurred_at))) invalid('destination occurred_at must be an ISO date');
   if (projection.destination === 'meta') {
-    const payload = metaPayload(projection.payload);
+    const payload = metaPayload(projection.payload, occurred_at);
     if (payload.event_name !== event_name || payload.event_id !== event_id)
       invalid('meta payload does not match its envelope');
     return { destination: 'meta', event_name, event_id, occurred_at, payload };

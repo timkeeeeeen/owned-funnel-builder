@@ -50,7 +50,19 @@ Wrangler, and Woodpecker.
   exactly-once remote delivery; every retry preserves the same event and
   destination key.
 - Events are exactly `PageView`, `Lead`, `InitiateCheckout`, and
-  `Purchase`. No open-ended browser `properties` bag is permitted.
+`Purchase`. No open-ended browser `properties` bag is permitted.
+- Canonical and destination schemas are discriminated by `event_name`: each
+  event has its own permitted `page`, `identity`, `commerce`, and Meta
+  `custom_data` fields. Field validators are context-specific; opaque IDs
+  reject phone-like and email-like input, while phone is accepted only in the
+  explicit identity phone field after country-aware E.164 validation.
+- `event_source_url` is the sole source URL field. It must be a verified,
+  sanitized URL on the trusted-host/path allowlist; `event_source_path` and
+  unverified provider URLs are rejected.
+- Meta `event_time` is an integer Unix second correlated to canonical
+  `occurred_at` within the configured skew. Currency is a three-letter ISO
+  code, value is finite and positive for paid events, and quantity/`num_items`
+  are non-negative integers.
 - Internal identity aliases use tenant-scoped, domain-separated HMAC-SHA-256.
   Meta hashes are generated only by the versioned, destination-scoped Meta
   transform. Pages/Convex may invoke that exact transform before the
@@ -307,12 +319,43 @@ test('rejects arbitrary properties and oversized attribution', () => {
   assert.throws(() => validateCanonicalEvent({ properties: { email: 'x' } }));
   assert.throws(() => validateCanonicalEvent({ attribution: { fbclid: 'x'.repeat(257) } }));
 });
+
+test('rejects phone-like values in every opaque identifier field', () => {
+  for (const field of ['event_id', 'visitor_id', 'session_id', 'content_id', 'payment_id']) {
+    assert.throws(() => makeCanonical({ [field]: '+1 212 555 0123' }));
+  }
+});
+
+test('destination schemas are discriminated and use the verified source URL', () => {
+  assert.throws(() => validateMetaProjection(pageView(), {
+    event_source_path: '/checkout',
+    custom_data: { value: 1 },
+  }));
+  assert.throws(() => validateMetaProjection(pageView(), {
+    event_source_url: 'https://shop.maestrogtm.com/checkout',
+    custom_data: { order_id: 'order-1' },
+  }));
+  assert.deepEqual(validateMetaProjection(purchase(), {
+    event_source_url: 'https://shop.maestrogtm.com/checkout/complete',
+    custom_data: {
+      order_id: 'order-1', payment_id: 'pay-1', value: 1,
+      currency: 'USD', quantity: 1, num_items: 1,
+    },
+  }).custom_data.payment_id, 'pay-1');
+});
+
+test('Meta time and commerce values are strict', () => {
+  assert.throws(() => validateMetaProjection(pageView(), { event_time: 1.5 }));
+  assert.throws(() => validateMetaProjection(purchase(), { custom_data: { currency: 'US', quantity: -1 } }));
+});
 ```
 
 Define discriminated schemas for each event and destination projection before
 serialization. Recursively reject unknown keys, raw email/phone, flow tokens,
 full URLs, and nested `properties`; `envelope_json` and `payload_json` may only
-contain the validated schema output.
+contain the validated schema output. Keep the identifier validator separate from
+the identity-phone validator so an `allowPhoneLike` escape hatch cannot be
+reused by IDs or commerce fields.
 
 - [ ] **Step 2: Run the migration test and observe the duplicate-0007 failure**
 
@@ -333,10 +376,13 @@ CREATE TABLE IF NOT EXISTS source_tracking_outbox (
   outbox_id INTEGER PRIMARY KEY AUTOINCREMENT,
   tenant_id TEXT NOT NULL,
   site_id TEXT NOT NULL,
-  source_event_id TEXT NOT NULL UNIQUE,
+  source_event_id TEXT NOT NULL,
   source_system TEXT NOT NULL,
+  funnel_slug TEXT NOT NULL,
+  product_id TEXT,
   event_name TEXT NOT NULL,
   payload_json TEXT NOT NULL,
+  payload_hash TEXT NOT NULL,
   state TEXT NOT NULL,
   next_attempt_at TEXT NOT NULL,
   attempt_count INTEGER NOT NULL DEFAULT 0,
@@ -344,16 +390,24 @@ CREATE TABLE IF NOT EXISTS source_tracking_outbox (
   created_at TEXT NOT NULL,
   updated_at TEXT NOT NULL
 );
+CREATE UNIQUE INDEX IF NOT EXISTS source_tracking_outbox_identity_idx
+  ON source_tracking_outbox (tenant_id, site_id, source_system, source_event_id);
 CREATE TABLE IF NOT EXISTS source_tracking_provider_mappings (
   tenant_id TEXT NOT NULL,
   site_id TEXT NOT NULL,
   provider TEXT NOT NULL,
   provider_object_id TEXT NOT NULL,
   event_name TEXT NOT NULL,
-  source_event_id TEXT NOT NULL REFERENCES source_tracking_outbox(source_event_id),
+  source_system TEXT NOT NULL,
+  funnel_slug TEXT NOT NULL,
+  source_event_id TEXT NOT NULL,
   created_at TEXT NOT NULL,
+  FOREIGN KEY (tenant_id, site_id, source_system, source_event_id)
+    REFERENCES source_tracking_outbox(tenant_id, site_id, source_system, source_event_id),
   PRIMARY KEY (tenant_id, site_id, provider, provider_object_id, event_name)
 );
+CREATE UNIQUE INDEX IF NOT EXISTS source_tracking_provider_mapping_outbox_fk_idx
+  ON source_tracking_provider_mappings (tenant_id, site_id, source_system, source_event_id);
 CREATE INDEX IF NOT EXISTS source_tracking_outbox_due_idx
   ON source_tracking_outbox (state, next_attempt_at);
 ```
@@ -895,10 +949,13 @@ rtk git commit -m "feat: make Pages conversion events transactional"
 - Create or verify owner: `src/components/ConsentBanner.astro`
 - Create: `functions/api/blueprint/checkout-start.ts`
 - Create: `functions/api/blueprint/checkout-status.ts`
+- Modify: `functions/api/blueprint/_proxy.ts`
+- Modify: `functions/api/checkout.ts`
 - Create: `tests/functions/blueprint-proxy.test.mts`
 - Modify: `tests/blueprint/contract.test.mts`
 - Create: `tests/tracking/browser-contract.test.mts`
-- Create: `tests/tracking/preview-browser.spec.mts`
+- Create only when a repository Playwright harness and host fixture exist:
+  `tests/tracking/preview-browser.spec.mts`
 
 **Interfaces:**
 
@@ -993,10 +1050,11 @@ events to `/v1/events`.
 rtk host-test-slot --class focused pnpm test:blueprint
 rtk host-test-slot --class focused node --import tsx --test tests/tracking/browser-contract.test.mts
 rtk host-test-slot --class focused node --import tsx --test tests/functions/blueprint-proxy.test.mts
-rtk host-test-slot --class focused pnpm exec playwright test tests/tracking/preview-browser.spec.mts
+rtk host-test-slot --class focused pnpm exec playwright test tests/tracking/preview-browser.spec.mts # only when the harness exists
 rtk pnpm check:functions
 rtk git diff --check
-rtk git add src/components/FirstPartyTracking.astro src/components/ConsentBanner.astro src/layouts/OfferLayout.astro src/components/offers/OfferAnalytics.astro src/components/offers/OfferCheckoutDialog.astro src/components/blueprint/BlueprintFunnelRuntime.astro src/scripts/blueprint-funnel-client.ts functions/api/blueprint/checkout-start.ts functions/api/blueprint/checkout-status.ts tests/blueprint/contract.test.mts tests/tracking/browser-contract.test.mts tests/tracking/preview-browser.spec.mts tests/functions/blueprint-proxy.test.mts
+rtk git add src/components/FirstPartyTracking.astro src/components/ConsentBanner.astro src/layouts/OfferLayout.astro src/components/offers/OfferAnalytics.astro src/components/offers/OfferCheckoutDialog.astro src/components/blueprint/BlueprintFunnelRuntime.astro src/scripts/blueprint-funnel-client.ts functions/api/checkout.ts functions/api/blueprint/_proxy.ts functions/api/blueprint/checkout-start.ts functions/api/blueprint/checkout-status.ts tests/blueprint/contract.test.mts tests/tracking/browser-contract.test.mts tests/functions/blueprint-proxy.test.mts
+# Add tests/tracking/preview-browser.spec.mts only when the harness exists.
 rtk git commit -m "feat: wire first-party browser event parity"
 ```
 
@@ -1051,11 +1109,21 @@ Routes:
 - Worker-only signed `POST /internal/browser-claims`: accepts a Pages-signed
   claim request and returns newly claimed non-PII browser payloads; it is not
   exposed as a public route and cannot create canonical events.
+
+The browser-claims route remains disabled or shadow-only until Task 7 supplies
+the canonical Purchase mapping and safe `{event_name,event_id,custom_data}`
+payload. A payment ID alone is never enough for the browser to synthesize a
+Purchase; the browser may only emit a server-issued claim.
 - Private operator `POST /internal/operator/replay` and kill-switch operations:
   privileged auth, actor/reason/request ID/idempotency key, optional second
   approver, tombstone/expiry checks, and an audit row; browser/source
   credentials are rejected.
 - `GET /healthz`: no secrets, no PII, and an external-probe-safe response.
+
+`POST /v1/source-events` is server-to-server and must not require a browser
+`Origin`; it instead requires the source-specific HMAC key/audience, fixed
+timestamp skew, nonce uniqueness, and tenant/site/source scope. Browser routes
+retain exact Origin, Fetch Metadata, and CSRF checks.
 
 The Worker cron runs every minute with a bounded batch/time budget and a
 documented catch-up policy. Queue configuration pins max retries, retry delay,
@@ -1087,6 +1155,12 @@ same event/destination key on retries. The scheduled handler scans pending
 outbox rows, reclaims expired leases, runs retention cleanup, and writes DLQ
 failures to D1 before acknowledgement.
 
+The fetch, queue, and scheduled handlers fail closed until the complete
+lexically sorted migration set, including `0002_tracking_scope_hardening.sql`,
+has been applied and read back for the exact reviewed SHA. A forward-only
+migration lock keeps public traffic disabled during the transition; no route
+may run against the temporary globally keyed schema.
+
 Enforce explicit per-IP, per-cookie, per-tenant, per-event, and global
 Queue/Meta budgets with a documented managed-bot-score fallback. Add a
 destination-spend circuit breaker and kill switch; authoritative Lead,
@@ -1108,6 +1182,11 @@ The scheduled path records cleanup watermark/oldest-expired metrics and alerts
 when a deadline or cron run is missed. Per-funnel sender enablement is read
 atomically from the manifest at send time; a funnel rollback disables its
 Meta/Tinybird sends without requiring the global kill switch.
+
+The kill switch is durable configuration (not isolate-local memory) with an
+audited actor, reason, request ID, and readback. In-memory abuse counters are
+only a bounded fallback; the deployment gate requires a redacted Cloudflare
+WAF/rate-limit capability readback before launch.
 
 - [ ] **Step 3: Configure preview/production bindings without secrets**
 
@@ -1162,14 +1241,22 @@ function sendTinybird(event: CanonicalEvent, env: EventsEnv): Promise<DeliveryRe
 For each event type assert:
 
 1. identical browser/server `(event_name,event_id,pixel_id)` pairing;
-2. exact Meta email/phone/name/address normalization and one SHA-256 pass;
+2. event-specific Meta `custom_data` is enforced: PageView rejects commerce,
+   Lead rejects payment/order identifiers, InitiateCheckout rejects payment
+   identifiers, and Purchase accepts the allowlisted order/payment/value/
+   quantity/content fields;
+3. `event_source_url` is emitted and `event_source_path` is rejected; the URL
+   must match the trusted-host/path allowlist;
+4. exact Meta email/phone/name/address normalization and one SHA-256 pass;
    source bridges carry `meta_identity_version: 'meta-v1'`, and the Worker
    rejects missing, unknown, or already-rehashed values;
-3. `fbp`, `fbc`, IP, and UA are not hashed;
-4. no Dodo request IP/UA/geo appears in Purchase;
-5. `Customer`, internal lead UUID, raw URLs, flow tokens, and placeholder
+5. `fbp`, `fbc`, IP, and UA are not hashed;
+6. no Dodo request IP/UA/geo appears in Purchase;
+7. `Customer`, internal lead UUID, raw URLs, flow tokens, and placeholder
    values are omitted; and
-6. Tinybird receives only the named allowlist with canonical key.
+8. integer event time, positive paid value, ISO currency, and non-negative
+   integer quantities are enforced; Tinybird receives only the named allowlist
+   with canonical key.
 
 Also append the same canonical key twice and assert the raw datasource may
 contain two physical rows while the deduplicated pipe returns one. Provider
@@ -1344,6 +1431,14 @@ verified canonical events in tracking D1, atomically claims each Purchase once,
 and returns non-PII `{event_name,event_id,custom_data}` payloads. The endpoint
 rejects cross-origin/preflight requests and cannot create an event without a
 committed source outbox row. Pages has no tracking-D1 binding.
+
+The Blueprint proxy remains disabled until Task 8 supplies the exact
+`BLUEPRINT_CONTEXT_TOKEN_VERIFY` binding and short-lived token issuer contract:
+issuer, audience, nonce, expiry, flow/session binding, and signature algorithm
+are pinned in the source-runtime manifest. A missing binding or contract keeps
+Blueprint shadow-only; the proxy must not guess a deployed Convex function or
+accept a browser-supplied token. Apply the same fail-closed rule to App-Idea
+when its deployed checkout contract is not pinned.
 
 - [ ] **Step 1: Write failing bridge and source-outbox tests**
 
@@ -1670,8 +1765,12 @@ InitiateCheckout, source bridges, Dodo signature fixtures, Queue retries,
 privacy suppression, tombstones, cleanup, and no-secret/raw-PII leakage.
 Run the real preview Playwright suite for navigation/beacon delivery, consent
 and cookie/CORS behavior, Pixel/CAPI event IDs, completion claims, reload, and
-replay. Read back DNS/TLS/sibling ownership, external probe success, alert
-routing, and cleanup watermark before parent-domain cookies are enabled.
+replay. If the repository has no Playwright harness and host fixture at this
+point, do not claim this evidence: run the committed browser contract tests,
+record the missing harness as an explicit launch gap, and add the preview suite
+only once the harness exists. Read back DNS/TLS/sibling ownership, external
+probe success, alert routing, and cleanup watermark before parent-domain cookies
+are enabled.
 
 - [ ] **Step 3: Capture Meta/Tinybird validation evidence**
 

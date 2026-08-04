@@ -700,6 +700,24 @@ same configured pixel/dataset and `action_source: "website"`. The
 occurred, never the collector, Dodo, or webhook URL. Originating browser IP and
 user agent come from the captured browser request.
 
+The destination contract is discriminated by `event_name`; a serializer may not
+attach commerce fields merely because they are available on the envelope:
+
+| Event | Permitted Meta commerce fields |
+| --- | --- |
+| `PageView` | none |
+| `Lead` | offer/content identifiers, content type, value, currency, quantity, `num_items`, and contents when the lead offer provides them |
+| `InitiateCheckout` | checkout content identifiers, content type, value, currency, quantity, `num_items`, and contents |
+| `Purchase` | order/payment identifiers, content identifiers, content type, value, currency, quantity, `num_items`, and contents |
+
+Unknown fields, cross-event fields, `event_source_path`, and unverified URLs are
+rejected before serialization. Opaque IDs use a field-specific validator that
+rejects email-like and phone-like values; phone is accepted only in the
+explicit identity-phone field after country-aware E.164 validation. Meta
+`event_time` is an integer Unix second correlated to `occurred_at` within the
+configured skew. Currency is a three-letter ISO code, paid value is finite and
+positive, and quantities are non-negative integers.
+
 The server payload includes every field present on the explicit Meta allowlist
 for that event and consent state, including:
 
