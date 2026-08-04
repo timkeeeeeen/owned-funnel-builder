@@ -19,6 +19,10 @@ export async function runCleanup(
   let expiredEvents = 0;
   let expiredDeliveries = 0;
   try {
+    await database
+      .prepare(`DELETE FROM tracking_nonces WHERE expires_at < ?`)
+      .bind(now.toISOString())
+      .run();
     const dlq = await database
       .prepare(`DELETE FROM tracking_dlq_records WHERE created_at < ?`)
       .bind(cutoff)
