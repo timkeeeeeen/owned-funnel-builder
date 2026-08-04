@@ -12,3 +12,9 @@ test('deployment scripts are dry-run first and execution is approval-gated', asy
   assert.match(migrations, /readdir/);
   assert.match(migrations, /\.sort\(\)/);
 });
+
+test('Pages dry-run probes the installed Wrangler CLI without the removed dry-run flag', async () => {
+  const source = await readFile('scripts/publish-cloudflare.mjs', 'utf8');
+  assert.match(source, /'--help'/);
+  assert.doesNotMatch(source, /'--dry-run'/);
+});

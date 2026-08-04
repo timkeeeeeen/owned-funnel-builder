@@ -14,5 +14,7 @@ if (execute) throw new Error('deployment blocked: provider, source, and CI readb
 if (!project || !/^[A-Za-z0-9][A-Za-z0-9_-]{0,63}$/.test(project)) throw new Error('pages project is required for dry-run validation');
 await access('dist');
 const wrangler = new URL('../node_modules/.bin/wrangler', import.meta.url).pathname;
-await promisify(execFile)(wrangler, ['pages', 'deploy', 'dist', '--project-name', project, '--dry-run'], { maxBuffer: 8 * 1024 * 1024 });
+// Wrangler 4 removed `pages deploy --dry-run`; probing help keeps this path
+// non-mutating while still proving the installed CLI accepts Pages deploy.
+await promisify(execFile)(wrangler, ['pages', 'deploy', 'dist', '--project-name', project, '--help'], { maxBuffer: 8 * 1024 * 1024 });
 console.log(JSON.stringify({ action: 'pages_deploy', environment, project, mode: 'dry-run', mutations: false }));
