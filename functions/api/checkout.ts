@@ -56,6 +56,18 @@ interface StripeCheckoutResponse {
   url?: unknown;
 }
 
+interface BrowserEventPayload {
+  event_id: string;
+  event_name: 'Lead' | 'InitiateCheckout';
+  custom_data: {
+    content_ids: string[];
+    content_type: 'product';
+    value: number;
+    currency: string;
+    num_items: number;
+  };
+}
+
 const MAX_BODY_BYTES = 16 * 1024;
 const DODO_TIMEOUT_MS = 15_000;
 const OFFER_SLUG_PATTERN = /^[a-z][a-z0-9]*(?:-[a-z0-9]+)*$/;
@@ -110,7 +122,9 @@ function trackingCookie(request: Request, name: 'fbp' | 'fbc'): string {
 function safeSourceUrl(value: string, expectedOrigin: string): string {
   try {
     const url = new URL(value);
-    return url.protocol === 'https:' && url.origin === expectedOrigin ? `${url.origin}${url.pathname}` : '';
+    return url.protocol === 'https:' && url.origin === expectedOrigin
+      ? `${url.origin}${url.pathname}`
+      : '';
   } catch {
     return '';
   }
@@ -130,13 +144,17 @@ async function verifiedBuyerIdentity(
     {
       tenantId: scope.tenantId,
       siteId: scope.siteId,
-      environment: readEnvironmentValue(env, 'TRACKING_ENVIRONMENT') === 'preview' ? 'preview' : 'live',
+      environment:
+        readEnvironmentValue(env, 'TRACKING_ENVIRONMENT') === 'preview' ? 'preview' : 'live',
     }
   );
   return externalId ? { signed_external_id: externalId } : {};
 }
 
-function sourceScope(env: PagesContext['env'], requestUrl: URL): { tenantId: string; siteId: string } {
+function sourceScope(
+  env: PagesContext['env'],
+  requestUrl: URL
+): { tenantId: string; siteId: string } {
   return {
     tenantId: cleanString(env.TRACKING_TENANT_ID, 128) || 'owned-funnel-builder',
     siteId: cleanString(env.TRACKING_SITE_ID, 128) || requestUrl.hostname,
@@ -212,7 +230,8 @@ export async function onRequestPost(context: PagesContext): Promise<Response> {
 
   let leadId = '';
   let offerSlug = '';
-  let leadEvent: { event_id: string; event_name: 'Lead' } | null = null;
+  let leadEvent: BrowserEventPayload | null = null;
+  let initiateEvent: BrowserEventPayload | null = null;
 
   try {
     const input = await parseRequest(request);
@@ -245,6 +264,20 @@ export async function onRequestPost(context: PagesContext): Promise<Response> {
 
     const definition = assertFunnelDefinition(offerSlug);
     const bumpAccepted = requestedBump && Boolean(definition.bump);
+    const browserContentIds = [
+      definition.base.productKey,
+      ...(bumpAccepted && definition.bump ? [definition.bump.productKey] : []),
+    ];
+    const browserValue =
+      definition.base.priceAmount +
+      (bumpAccepted && definition.bump ? definition.bump.priceAmount : 0);
+    const browserCustomData = {
+      content_ids: browserContentIds,
+      content_type: 'product' as const,
+      value: browserValue,
+      currency: definition.base.currency,
+      num_items: browserContentIds.length,
+    };
     const paymentProvider = getPaymentProvider(env);
     const dodoConfig = paymentProvider === 'dodo' ? getDodoConfig(env) : null;
     const checkoutMode =
@@ -308,29 +341,29 @@ export async function onRequestPost(context: PagesContext): Promise<Response> {
         attribution_json, referrer, country, status, bump_selected, admaxxer_visitor_id,
         payment_provider, created_at, updated_at
       ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'captured', ?, ?, ?, ?, ?)`
-    )
-      .bind(
-        leadId,
-        email,
-        offerSlug,
-        placement,
-        marketingOptIn ? 1 : 0,
-        consentVersion,
-        JSON.stringify(attribution),
-        referrer || null,
-        country || null,
-        bumpAccepted ? 1 : 0,
-        admaxxerVisitorId || null,
-        paymentProvider,
-        now,
-        now
-      );
+    ).bind(
+      leadId,
+      email,
+      offerSlug,
+      placement,
+      marketingOptIn ? 1 : 0,
+      consentVersion,
+      JSON.stringify(attribution),
+      referrer || null,
+      country || null,
+      bumpAccepted ? 1 : 0,
+      admaxxerVisitorId || null,
+      paymentProvider,
+      now,
+      now
+    );
 
     const businessStatements = [leadStatement];
 
     if (marketingOptIn) {
-      businessStatements.push(env.LEADS.prepare(
-        `INSERT INTO email_subscribers (
+      businessStatements.push(
+        env.LEADS.prepare(
+          `INSERT INTO email_subscribers (
           id, email, offer_slug, status, consent_version, consent_copy,
           source_placement, consented_at, created_at, updated_at
         ) VALUES (?, ?, ?, 'subscribed', ?, ?, ?, ?, ?, ?)
@@ -338,8 +371,7 @@ export async function onRequestPost(context: PagesContext): Promise<Response> {
           status = 'subscribed', consent_version = excluded.consent_version,
           consent_copy = excluded.consent_copy, source_placement = excluded.source_placement,
           consented_at = excluded.consented_at, updated_at = excluded.updated_at`
-      )
-        .bind(
+        ).bind(
           crypto.randomUUID(),
           email,
           offerSlug,
@@ -349,27 +381,31 @@ export async function onRequestPost(context: PagesContext): Promise<Response> {
           now,
           now,
           now
-        ));
-      businessStatements.push(env.LEADS.prepare(
-        "DELETE FROM email_suppressions WHERE email = ? AND reason = 'unsubscribe'"
-      )
-        .bind(email));
+        )
+      );
+      businessStatements.push(
+        env.LEADS.prepare(
+          "DELETE FROM email_suppressions WHERE email = ? AND reason = 'unsubscribe'"
+        ).bind(email)
+      );
     }
 
-    businessStatements.push(env.LEADS.prepare(
-      `INSERT INTO funnel_runs (
+    businessStatements.push(
+      env.LEADS.prepare(
+        `INSERT INTO funnel_runs (
         id, lead_id, offer_slug, token_hash, payment_provider, created_at, updated_at
       ) VALUES (?, ?, ?, ?, ?, ?, ?)`
-    )
-      .bind(funnelId, leadId, offerSlug, flowTokenHash, paymentProvider, now, now));
+      ).bind(funnelId, leadId, offerSlug, flowTokenHash, paymentProvider, now, now)
+    );
 
     for (const step of definition.upsells) {
-      businessStatements.push(env.LEADS.prepare(
-        `INSERT INTO funnel_step_runs (
+      businessStatements.push(
+        env.LEADS.prepare(
+          `INSERT INTO funnel_step_runs (
           id, funnel_id, step_key, ordinal, created_at, updated_at
         ) VALUES (?, ?, ?, ?, ?, ?)`
-      )
-        .bind(crypto.randomUUID(), funnelId, step.key, step.ordinal, now, now));
+        ).bind(crypto.randomUUID(), funnelId, step.key, step.ordinal, now, now)
+      );
     }
     businessStatements.push(
       sourceOutboxStatement(env.LEADS, {
@@ -384,7 +420,11 @@ export async function onRequestPost(context: PagesContext): Promise<Response> {
     );
     const businessResult = await env.LEADS.batch(businessStatements);
     if (businessResult.some((result) => !result.success)) throw new Error('Lead capture failed.');
-    leadEvent = { event_id: leadSourceEventId, event_name: 'Lead' };
+    leadEvent = {
+      event_id: leadSourceEventId,
+      event_name: 'Lead',
+      custom_data: browserCustomData,
+    };
     if (env.TRACKING_SOURCE_BRIDGE)
       await drainSourceEvent(env.LEADS, env, { ...scope, sourceEventId: leadSourceEventId });
 
@@ -439,29 +479,48 @@ export async function onRequestPost(context: PagesContext): Promise<Response> {
 
       const initiateEventId = `initiate_checkout:${sessionId}`;
       const initiatePayload = {
-        schema_version: '1', event_id: initiateEventId, event_name: 'InitiateCheckout', occurred_at: new Date().toISOString(),
-        flow_token_hash: flowTokenHash, identity: { lead_id: leadId, funnel_id: funnelId }, buyer_context: buyerContext,
+        schema_version: '1',
+        event_id: initiateEventId,
+        event_name: 'InitiateCheckout',
+        occurred_at: new Date().toISOString(),
+        flow_token_hash: flowTokenHash,
+        identity: { lead_id: leadId, funnel_id: funnelId },
+        buyer_context: buyerContext,
       };
       const initiateResult = await env.LEADS.batch([
         env.LEADS.prepare(
-        `UPDATE checkout_leads
+          `UPDATE checkout_leads
          SET status = 'session_created', stripe_session_id = ?, updated_at = ?
          WHERE id = ?`
-      )
-        .bind(sessionId, new Date().toISOString(), leadId),
+        ).bind(sessionId, new Date().toISOString(), leadId),
         sourceOutboxStatement(env.LEADS, {
-          tenantId: scope.tenantId, siteId: scope.siteId, sourceEventId: initiateEventId,
-          eventName: 'InitiateCheckout', occurredAt: initiatePayload.occurred_at, payload: initiatePayload,
+          tenantId: scope.tenantId,
+          siteId: scope.siteId,
+          sourceEventId: initiateEventId,
+          eventName: 'InitiateCheckout',
+          occurredAt: initiatePayload.occurred_at,
+          payload: initiatePayload,
           payloadHash: await sourcePayloadHash(initiatePayload),
         }),
       ]);
       if (initiateResult.some((result) => !result.success)) {
         throw new Error('InitiateCheckout capture failed.');
       }
+      initiateEvent = {
+        event_id: initiateEventId,
+        event_name: 'InitiateCheckout',
+        custom_data: browserCustomData,
+      };
       if (env.TRACKING_SOURCE_BRIDGE)
         await drainSourceEvent(env.LEADS, env, { ...scope, sourceEventId: initiateEventId });
 
-      return json({ checkoutUrl, mode: checkoutMode, provider: paymentProvider });
+      return json({
+        checkoutUrl,
+        mode: checkoutMode,
+        provider: paymentProvider,
+        ...(leadEvent ? { lead: leadEvent } : {}),
+        ...(initiateEvent ? { initiateCheckout: initiateEvent } : {}),
+      });
     }
 
     if (!dodoConfig) throw new Error('Dodo checkout configuration is unavailable.');
@@ -549,29 +608,48 @@ export async function onRequestPost(context: PagesContext): Promise<Response> {
 
     const initiateEventId = `initiate_checkout:${sessionId}`;
     const initiatePayload = {
-      schema_version: '1', event_id: initiateEventId, event_name: 'InitiateCheckout', occurred_at: new Date().toISOString(),
-      flow_token_hash: flowTokenHash, identity: { lead_id: leadId, funnel_id: funnelId }, buyer_context: buyerContext,
+      schema_version: '1',
+      event_id: initiateEventId,
+      event_name: 'InitiateCheckout',
+      occurred_at: new Date().toISOString(),
+      flow_token_hash: flowTokenHash,
+      identity: { lead_id: leadId, funnel_id: funnelId },
+      buyer_context: buyerContext,
     };
     const initiateResult = await env.LEADS.batch([
       env.LEADS.prepare(
-      `UPDATE checkout_leads
+        `UPDATE checkout_leads
        SET status = 'session_created', dodo_session_id = ?, updated_at = ?
        WHERE id = ?`
-    )
-      .bind(sessionId, new Date().toISOString(), leadId),
+      ).bind(sessionId, new Date().toISOString(), leadId),
       sourceOutboxStatement(env.LEADS, {
-        tenantId: scope.tenantId, siteId: scope.siteId, sourceEventId: initiateEventId,
-        eventName: 'InitiateCheckout', occurredAt: initiatePayload.occurred_at, payload: initiatePayload,
+        tenantId: scope.tenantId,
+        siteId: scope.siteId,
+        sourceEventId: initiateEventId,
+        eventName: 'InitiateCheckout',
+        occurredAt: initiatePayload.occurred_at,
+        payload: initiatePayload,
         payloadHash: await sourcePayloadHash(initiatePayload),
       }),
     ]);
     if (initiateResult.some((result) => !result.success)) {
       throw new Error('InitiateCheckout capture failed.');
     }
+    initiateEvent = {
+      event_id: initiateEventId,
+      event_name: 'InitiateCheckout',
+      custom_data: browserCustomData,
+    };
     if (env.TRACKING_SOURCE_BRIDGE)
       await drainSourceEvent(env.LEADS, env, { ...scope, sourceEventId: initiateEventId });
 
-    return json({ checkoutUrl, mode: checkoutMode, provider: paymentProvider });
+    return json({
+      checkoutUrl,
+      mode: checkoutMode,
+      provider: paymentProvider,
+      ...(leadEvent ? { lead: leadEvent } : {}),
+      ...(initiateEvent ? { initiateCheckout: initiateEvent } : {}),
+    });
   } catch (error) {
     if (leadId && env.LEADS) {
       try {

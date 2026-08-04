@@ -1,0 +1,224 @@
+---
+const pixelId = import.meta.env.PUBLIC_META_PIXEL_ID?.trim() ?? '';
+const collectorUrl =
+  import.meta.env.PUBLIC_TRACKING_COLLECTOR_URL?.trim() ||
+  'https://events.shop.maestrogtm.com/v1/events';
+---
+
+<script is:inline define:vars={{ pixelId, collectorUrl }}>
+  (() => {
+    const EVENT_NAMES = new Set(['PageView', 'Lead', 'InitiateCheckout', 'Purchase']);
+    const ATTRIBUTION_KEYS = [
+      'utm_source',
+      'utm_medium',
+      'utm_campaign',
+      'utm_content',
+      'utm_term',
+      'fbclid',
+      'gclid',
+      'ttclid',
+      'msclkid',
+    ];
+    const CUSTOM_KEYS = [
+      'content_name',
+      'content_ids',
+      'content_type',
+      'contents',
+      'currency',
+      'num_items',
+      'value',
+    ];
+    const trackerWindow = window;
+    let pixelBootstrapped = false;
+    let consent = trackerWindow.__maestroConsent;
+    const sent = new Set();
+
+    const eventId = (candidate) => {
+      const value = typeof candidate === 'string' ? candidate.trim() : '';
+      return /^[A-Za-z0-9:_-]{1,128}$/.test(value) ? value : `browser:${crypto.randomUUID()}`;
+    };
+    const cookie = (name) =>
+      document.cookie
+        .split('; ')
+        .find((item) => item.startsWith(`${name}=`))
+        ?.slice(name.length + 1) || '';
+    const attribution = () => {
+      const search = new URLSearchParams(window.location.search);
+      const output = {};
+      for (const key of ATTRIBUTION_KEYS) {
+        const value = search.get(key)?.trim();
+        if (value && value.length <= 256) output[key] = value;
+      }
+      const fbp = cookie('_fbp');
+      const fbc = cookie('_fbc') || (output.fbclid ? `fb.1.${Date.now()}.${output.fbclid}` : '');
+      if (fbp && /^[A-Za-z0-9._-]{1,256}$/.test(fbp)) output.fbp = fbp;
+      if (fbc && /^[A-Za-z0-9._-]{1,256}$/.test(fbc)) output.fbc = fbc;
+      return output;
+    };
+    const pagePath = () =>
+      `${window.location.pathname}${window.location.hash ? window.location.hash : ''}`.slice(
+        0,
+        512
+      );
+    const referrerPath = () => {
+      try {
+        const value = document.referrer ? new URL(document.referrer) : null;
+        return value ? `${value.pathname}`.slice(0, 512) : '';
+      } catch {
+        return '';
+      }
+    };
+    const sessionId = () => {
+      try {
+        const key = 'maestro:browser-session';
+        const existing = sessionStorage.getItem(key);
+        if (existing) return existing;
+        const created = `session:${crypto.randomUUID()}`;
+        sessionStorage.setItem(key, created);
+        return created;
+      } catch {
+        return '';
+      }
+    };
+    const safeCustomData = (input) => {
+      if (!input || typeof input !== 'object' || Array.isArray(input)) return {};
+      const output = {};
+      for (const key of CUSTOM_KEYS) {
+        const value = input[key];
+        if (key === 'content_ids' && Array.isArray(value)) {
+          const ids = value.filter(
+            (id) => typeof id === 'string' && /^[A-Za-z0-9._:-]{1,180}$/.test(id)
+          );
+          if (ids.length) output[key] = ids.slice(0, 50);
+        } else if (key === 'contents' && Array.isArray(value)) {
+          const contents = value
+            .filter(
+              (item) => item && typeof item.id === 'string' && typeof item.quantity === 'number'
+            )
+            .map((item) => ({
+              id: String(item.id).slice(0, 180),
+              quantity: Number(item.quantity),
+              ...(typeof item.item_price === 'number'
+                ? { item_price: Number(item.item_price) }
+                : {}),
+            }));
+          if (contents.length) output[key] = contents.slice(0, 50);
+        } else if (key === 'content_type' && value === 'product') output[key] = value;
+        else if (key === 'currency' && typeof value === 'string' && /^[A-Za-z]{3}$/.test(value))
+          output[key] = value.toUpperCase();
+        else if (['content_name'].includes(key) && typeof value === 'string' && value.length <= 256)
+          output[key] = value;
+        else if (
+          ['num_items', 'value'].includes(key) &&
+          typeof value === 'number' &&
+          Number.isFinite(value)
+        )
+          output[key] = value;
+      }
+      return output;
+    };
+    const allowedToTrack = (purpose) =>
+      Boolean(
+        consent?.resolved &&
+        consent[purpose] === true &&
+        !(navigator.globalPrivacyControl === true && purpose !== 'necessary')
+      );
+    const bootstrapPixel = () => {
+      if (!pixelId || pixelBootstrapped || !allowedToTrack('advertising')) return;
+      pixelBootstrapped = true;
+      trackerWindow.fbq =
+        trackerWindow.fbq ||
+        function () {
+          trackerWindow.fbq.callMethod
+            ? trackerWindow.fbq.callMethod.apply(trackerWindow.fbq, arguments)
+            : trackerWindow.fbq.queue.push(arguments);
+        };
+      trackerWindow.fbq.push = trackerWindow.fbq;
+      trackerWindow.fbq.loaded = true;
+      trackerWindow.fbq.version = '2.0';
+      trackerWindow.fbq.queue = [];
+      trackerWindow.fbq('init', pixelId);
+      const script = document.createElement('script');
+      script.async = true;
+      script.src = 'https://connect.facebook.net/en_US/fbevents.js';
+      document.head.appendChild(script);
+    };
+    const trackPixel = (name, data, id) => {
+      if (!pixelId || !allowedToTrack('advertising')) return;
+      bootstrapPixel();
+      if (typeof trackerWindow.fbq !== 'function') return;
+      trackerWindow.fbq('track', name, data, { eventID: id });
+    };
+    const collect = (data, id) => {
+      if (!allowedToTrack('analytics')) return;
+      const body = {
+        schema_version: '1',
+        tenant_id: 'owned-funnel-builder',
+        site_id: window.location.hostname,
+        event_id: id,
+        event_name: 'PageView',
+        source: 'browser',
+        source_system: document.documentElement.dataset.sourceSystem || 'pages',
+        occurred_at: new Date().toISOString(),
+        visitor: {},
+        session: sessionId() ? { id: sessionId() } : {},
+        page: {
+          path: pagePath(),
+          ...(document.title ? { title: document.title } : {}),
+          ...(referrerPath() ? { referrer_path: referrerPath() } : {}),
+        },
+        attribution: attribution(),
+        identity: {},
+        commerce: {},
+        privacy: { gpc: navigator.globalPrivacyControl === true, opted_out: false },
+      };
+      const payload = JSON.stringify(body);
+      const endpoint = `${collectorUrl.replace(/\/$/, '')}`;
+      try {
+        if (navigator.sendBeacon && document.visibilityState === 'hidden') {
+          navigator.sendBeacon(endpoint, new Blob([payload], { type: 'application/json' }));
+        } else {
+          void fetch(endpoint, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            credentials: 'include',
+            body: payload,
+            keepalive: true,
+          });
+        }
+      } catch {
+        /* analytics must never block the funnel */
+      }
+    };
+    const tracker = {
+      track(name, customData, candidateId) {
+        if (!EVENT_NAMES.has(name) || name === 'PageView') return;
+        const id = eventId(candidateId);
+        if (sent.has(id)) return;
+        sent.add(id);
+        trackPixel(name, safeCustomData(customData), id);
+      },
+      collectPageView(customData, candidateId) {
+        const id = eventId(candidateId);
+        if (sent.has(id)) return;
+        sent.add(id);
+        const safe = safeCustomData(customData);
+        trackPixel('PageView', safe, id);
+        collect(safe, id);
+      },
+      canTrack(purpose = 'advertising') {
+        return allowedToTrack(purpose);
+      },
+    };
+    trackerWindow.maestroTracking = tracker;
+    const onConsent = (event) => {
+      consent = event.detail;
+      if (allowedToTrack('advertising')) bootstrapPixel();
+    };
+    window.addEventListener('maestro:consent', onConsent);
+    if (consent && allowedToTrack('advertising')) bootstrapPixel();
+    window.addEventListener('astro:after-swap', () => {
+      trackerWindow.maestroTracking = tracker;
+    });
+  })();
+</script>
