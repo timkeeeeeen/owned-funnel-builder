@@ -26,6 +26,15 @@ It does not attempt to reproduce a complete customer data platform, fifty
 destination integrations, probabilistic browser fingerprinting, or a SaaS
 control plane in the first release.
 
+## Review outcome (2026-08-04)
+
+Specialist review found the architecture directionally sound but not yet
+implementation-ready. Source-runtime recovery, bounded retention, per-source
+authorization, one browser-claim path, stable external IDs, and measurable
+per-funnel launch gates are now explicit contract requirements. These clarify
+the design; they do not add a generic CDP, probabilistic identity, or second
+commercial ledger.
+
 ## First-release boundary
 
 Ship one Maestro-owned tracking deployment for all five funnels:
@@ -135,13 +144,19 @@ first release.
 Authoritative Lead, InitiateCheckout, and Purchase events use a transactional
 source outbox. For Pages-owned funnels, the business-state mutation and a
 bounded authenticated source-outbox row are submitted in one business-D1
-`batch()` transaction. After commit, Pages drains that row to the Worker
-bridge. The Worker writes the canonical event and delivery outbox in the
-dedicated tracking D1; its scheduled scan leases and republishes pending
-source rows, so a Queue or bridge outage cannot separate a successful Pages
-business mutation from its conversion record. The public Worker never binds
-the business D1 or reads leads, payments, fulfillment rows, or raw webhook
-payloads.
+`batch()` transaction. After commit, the owning source runtime drains that
+row to the Worker bridge. Pages uses a private authenticated drain endpoint
+plus a source-owned scheduled dispatcher; it leases rows with compare-and-set
+state transitions, retries them, and acknowledges them only after the Worker
+accepts the signed envelope. Convex uses an equivalent source-owned
+cron/action and reconciliation job. If a source runtime is unavailable, its
+rows remain durable and its own monitor alerts; the Worker's scheduled handler
+scans only tracking-D1 rows and never scans a business D1. This makes recovery
+executable without violating the binding boundary. The Worker writes the
+canonical event and delivery outbox in the dedicated tracking D1, so a Queue
+or bridge outage cannot separate a successful business mutation from its
+conversion record. The public Worker never binds the business D1 or reads
+leads, payments, fulfillment rows, or raw webhook payloads.
 
 The App-Idea Evaluator and $5 Blueprint have separate commercial-state
 authorities and deployments. The tracking Worker is shared; the dedicated
@@ -152,6 +167,19 @@ checkout-session or verified-payment transition, then drain that outbox to the
 signed Worker bridge. If a source cannot provide that atomic outbox, the
 funnel remains shadow-only until provider reconciliation proves that every
 source payment maps to one tracking event.
+
+### Source bridge trust boundary
+
+Each source system has an environment-specific issuer and current/previous
+bridge key. The signed request binds the issuer, tenant, site, source system,
+funnel, owned product, timestamp, nonce, and exact body hash. The Worker checks
+that tuple against the ownership manifest before accepting the envelope; a
+valid Pages signature cannot authorize an App-Idea or Blueprint row. Source
+outbox payloads contain only bounded event data and, for Purchase, the explicit
+buyer-context allowlist plus an opaque context hash and expiry. A short-lived
+`tracking_context_token` is request-only and is never
+persisted in a source outbox, Queue message, log, Tinybird row, or destination
+payload.
 
 ### Convex-backed funnel bridge
 
@@ -203,7 +231,8 @@ D1 (the dedicated tracking D1) owns:
 - unique event claims;
 - unique per-destination delivery claims;
 - delivery attempt state and final outcomes; and
-- authoritative joins to leads, checkout sessions, and payments.
+- tracking joins/indexes to leads, checkout sessions, and payments, reconciled
+  against the commercial authorities.
 
 Tinybird receives normalized, privacy-reviewed projections for analytics. A
 Tinybird outage cannot block checkout or Meta. Because a crash after Tinybird
@@ -274,6 +303,15 @@ unmerge remain stable. Hashing is pseudonymization, not anonymization.
 Meta-required hashes are created separately inside the scoped Meta transform
 and retained only for its retry window.
 
+Every visitor also receives a separately generated opaque
+`visitor_external_id`, persisted with its creation key/version. It is not the
+raw visitor ID and is not recomputed from a rotating HMAC key, so key rotation
+cannot change Meta identity continuity. A `person_external_id` is generated
+once for the canonical person and follows redirects; deleted IDs are
+tombstoned and never reused. The browser may echo these values only as a
+correlation hint; the server-side cookie/D1 value is authoritative and a
+mismatch is ignored and alerted.
+
 The initial implementation is one transactional alias/redirect/conflict path,
 not a generic graph engine. When an incoming claim bridges two existing people,
 the D1 primary either chooses a canonical winner by a stable rule and records
@@ -289,7 +327,10 @@ characteristics are never sufficient to create or merge people.
 The collector at `events.shop.maestrogtm.com` issues these cookies with the
 explicit parent scope `Domain=shop.maestrogtm.com` so the existing Pages
 checkout backend can read the same signed identity without trusting a
-browser-supplied external ID:
+browser-supplied external ID. The Worker is the only signer. Pages verifies
+the Worker signature with a pinned verify-only public key (or calls a private
+Worker assertion endpoint if the deployed runtime cannot verify the pinned
+algorithm); Pages never receives a cookie-minting secret.
 
 - `ma_vid`: signed opaque visitor ID, `HttpOnly`, `Secure`, `SameSite=Lax`,
   `Path=/`, rolling maximum practical lifetime;
@@ -300,9 +341,11 @@ browser-supplied external ID:
 The parent-domain choice makes every hostname below `shop.maestrogtm.com` part
 of the cookie trust boundary. Launch therefore requires an inventory showing
 that no untrusted or takeover-prone sibling hostname exists. Cookie values
-include a format version and signing-key ID. Current and previous keys are
-accepted during rotation; invalid or ambiguous duplicate cookie names are
-rejected safely rather than selecting an attacker-controlled value.
+include a format version, signing-key ID, cookie name, tenant, site, and
+environment; the signature covers all of them, preventing a `ma_vid` token
+from being replayed as `ma_sid` or across environments. Current and previous
+keys are accepted during rotation; invalid or ambiguous duplicate cookie names
+are rejected safely rather than selecting an attacker-controlled value.
 
 The visitor cookie uses a rolling `Max-Age` of 34,560,000 seconds (400 days).
 Although a server can write a much later calendar expiry, modern browsers may
@@ -373,6 +416,13 @@ Meta and Tinybird projections. There is no open-ended `properties` bag. A field
 is collected only when its source, purpose, privacy category, retention, and
 destination allowlist are defined.
 
+Every event carries an explicit privacy snapshot: effective purpose decisions,
+policy version, region and region-source, GPC observation, decision source, and
+decision time. That snapshot is immutable for the event and is the input to
+both source-runtime and Worker destination gating. “All available data” means
+all fields on these reviewed allowlists—not arbitrary DOM, keystroke, or
+unbounded interaction capture.
+
 `source_system` is a controlled value (`pages`, `app_idea`, `blueprint`, or
 `event_worker`); it is never accepted as an unvalidated tenant or authority
 selector from the browser.
@@ -408,6 +458,12 @@ attribution, capture time, and approved identity hashes. Purchase joins this
 snapshot through authoritative lead/funnel metadata. The Dodo webhook's IP,
 user agent, URL, and Cloudflare geo describe Dodo, not the buyer, and are
 forbidden in Meta `user_data`.
+
+The source mutation and its source-outbox row are the only atomic boundary.
+Buyer context needed for a later Purchase is carried in that bounded,
+expiry-bearing source row (or a source-owned context table referenced by it),
+then copied into tracking D1 only after bridge acceptance. There is no claimed
+cross-database transaction between business D1/Convex and tracking D1.
 
 ## Attribution
 
@@ -464,9 +520,14 @@ encoding.
 ### Lead
 
 - Trigger: a lead passes validation and is persisted.
-- Browser supplies a random candidate event ID with the lead request.
-- For Pages-owned funnels, the server validates it and writes the lead plus
-  Lead outbox row in one D1 batch before accepting the lead.
+- Browser may supply a random candidate event ID with the lead request, but the
+  source runtime is the event-ID authority. It accepts the candidate only when
+  it is a valid, one-time, flow-bound UUID; otherwise it mints the event ID
+  after the business/outbox commit and returns that authoritative ID. A reused
+  candidate with a different payload is quarantined rather than allowing
+  first-writer poisoning.
+- For Pages-owned funnels, the server writes the lead plus Lead outbox row in
+  one D1 batch before accepting the lead.
 - The checkout API returns a named, non-PII Lead browser payload. If lead
   persistence succeeds but provider checkout creation fails, the error response
   still identifies that the lead was accepted so the browser may emit the
@@ -499,7 +560,10 @@ encoding.
 ### Purchase
 
 - Trigger: a Dodo `payment.succeeded` webhook passes signature, catalog, cart,
-  amount, currency, and revocation checks.
+  amount, currency, and revocation checks. The handler also validates the
+  provider timestamp/delivery ID within a bounded freshness window (or an
+  equivalent receipt-TTL when the provider omits a signed timestamp) and
+  records that delivery ID before any side effect.
 - A stored random event UUID is mapped by the unique source key
   `(tenant, dodo, payment_id, Purchase)`.
 - For Pages-owned funnels, the verified payment state and Purchase outbox row
@@ -559,6 +623,12 @@ Replay is an audited operator action that reopens one failed delivery, retains
 the same event ID, and refuses events blocked by a privacy tombstone or expired
 Meta window. It never mints a replacement advertising conversion.
 
+Replay, kill-switch, and deletion controls are private operator operations,
+never browser or source-runtime operations. They require privileged
+authentication, an actor, reason, request ID, and idempotency key; high-risk
+production replay/enablement requires a second approver. Every decision is
+audited, and replay after deletion or expiry is rejected.
+
 ## Meta Pixel and CAPI transform
 
 The Meta sender owns both browser and server mappings. All four events use the
@@ -606,7 +676,8 @@ identity claim and follows the same parity rule.
 
 `test_event_code` is never enabled for an entire tenant or ordinary production
 traffic. Test Events is an inspection path, not a sandbox; validation uses only
-explicit operator-owned actions and removes the code immediately afterward.
+an operator-authenticated, short-lived validation session bound to the funnel
+and event IDs, and removes the code immediately afterward.
 
 Before our sender is enabled, captured configuration evidence must show that
 Admaxxer's Meta forwarding and every legacy Pixel/CAPI sender are disabled. The
@@ -631,6 +702,9 @@ does not forward any event to Meta; otherwise it is disabled completely.
 
 - accepts only versioned, allowlisted browser events such as PageView;
 - limits body size, nesting, string lengths, and item counts;
+- requires JSON (or the explicitly documented beacon encoding), an exact
+  allowlisted Origin, and—when present—Fetch Metadata indicating same-site
+  traffic; it never accepts a missing Origin for a browser mutation;
 - validates origin and credentialed CORS behavior;
 - adds server time, cookie identity, IP, user agent, geo, and bot assessment;
 - applies privacy policy before identifiers are created, events are persisted,
@@ -645,7 +719,9 @@ Pages checkout/webhook path and its transactional outbox.
 ### `POST /v1/privacy`
 
 - works before a visitor ID or account exists;
-- uses exact-origin credentialed CORS and CSRF protection;
+- uses exact-origin credentialed CORS plus a short-lived bootstrap-issued CSRF
+  nonce bound to the signed privacy state. The nonce is required in a dedicated
+  header, and Origin/Fetch-Metadata checks remain mandatory;
 - records versioned purpose choices, notice/policy version, region source,
   timestamp, and current GPC state;
 - returns the new effective privacy state and destination gates; and
@@ -733,6 +809,13 @@ Privacy audit records retain request ID, effective choice, policy versions,
 status, and timestamps—not deleted PII. Legally required transaction records
 may be retained separately but cannot recreate a deleted tracking identity.
 
+Deletion fans out through a signed, per-source deletion bridge with a subject
+scope, request ID, idempotency key, bounded retry, and completion acknowledgement.
+The request remains pending while any source runtime, tracking D1, or Tinybird
+projection is incomplete; partial-provider deletion is recorded explicitly.
+Tombstones cover visitor, person, alias, and redirected-person scope so a later
+merge or replay cannot resurrect a deleted subject.
+
 Raw card data, passwords, credentials, keystrokes, sensitive health or precise
 location form fields, and arbitrary DOM text are forbidden regardless of
 consent state.
@@ -758,11 +841,24 @@ bounded retry snapshot. Raw PII never enters browser responses, generic Queue
 messages, Tinybird, logs, or error metadata.
 
 D1 retains active identity, outbox, claims, compact delivery state, and short
-replay context only. Tinybird owns long-term normalized event analytics. Phase
-1 uses one Queue consumer concurrency, indexed cleanup queries, and a volume
+replay context only. Tinybird owns long-term normalized event analytics. The
+tracking D1 is a tracking index/join and delivery authority; it is not
+authoritative for lead, checkout, payment, or fulfillment state. Source
+reconciliation proves those joins against each commercial authority. Phase 1
+uses one Queue consumer concurrency, indexed cleanup queries, and a volume
 estimate for the five funnels. Revisit concurrency or storage only if measured
 queue latency breaches the SLO or D1 approaches half of its current platform
 limit; do not add R2 or another database preemptively.
+
+Source-runtime outbox rows have an explicit `expires_at`, `lease_until`, and
+`redacted_at`. Their bounded payload is scrubbed of IP, user agent, Meta hashes,
+and buyer context no later than seven days after occurrence (and sooner after
+bridge acceptance when no retry is pending). Each source runtime owns that
+cleanup; the tracking Worker cannot clean a business D1 it does not bind.
+Canonical tracking rows use a redaction operation for expiring sensitive
+envelope fields rather than leaving IP/UA or Meta hashes in a monolithic JSON
+blob indefinitely. Cleanup records a watermark, oldest-expired age, and last
+successful run; a missed deadline alerts.
 
 The initial Maestro retention defaults are:
 
@@ -796,6 +892,13 @@ canonical key, `tenant_id`, `site_id`, event date, event name, funnel/offer,
 campaign dimensions, purpose-permitted pseudonymous IDs, bot state, and
 delivery state. They exclude raw PII, IP, user agent, full query strings, and
 generic event properties.
+
+Every row also carries a versioned, tenant-scoped `privacy_subject_key` (an
+HMAC of visitor/person/alias subject scope). Every Tinybird pipe and dashboard
+must filter against deletion tombstones or the subject key cannot be retained.
+Raw `fbclid`/click IDs are short-lived operational context; long-term analytics
+use a bounded or keyed projection rather than retaining raw click IDs for the
+full analytics window.
 
 The Worker uses a datasource-scoped append token and requests synchronous
 ingestion acknowledgement. Invalid rows enter a D1-recorded quarantine rather
@@ -850,6 +953,15 @@ Operators can inspect, without exposing secrets or raw PII:
 - presence rates for email, phone, external ID, `_fbp`, `_fbc`, IP, user agent,
   and attribution fields; and
 - missing or anomalous Purchase events relative to verified Dodo payments.
+
+The launch evidence records the five-funnel volume model (PageViews, Leads,
+checkouts, payments, retry rate, and peak multiplier), source-outbox oldest
+age, source-to-tracking acceptance lag, payment-to-canonical mapping lag,
+Queue oldest age, cleanup watermark, and destination latency. Alert thresholds,
+cadence, owner, notification route, deduplication/silence, and kill-switch
+action are versioned configuration—not prose defaults—and are exercised by a
+preview canary alert. Capacity is accepted only when the model and a bounded
+soak demonstrate the five-minute Purchase SLO under the configured limits.
 
 Cloudflare Queue metrics plus the D1 delivery ledger are authoritative for
 backlog/failure alerts; Tinybird cannot be the only alarm path for its own
@@ -1034,6 +1146,9 @@ additive D1 migrations while older code may still run.
 ## Acceptance criteria
 
 - The first-party collector is served from `events.shop.maestrogtm.com`.
+- Pages and each Convex source have an executable outbox drain/lease/ack/
+  reconciliation owner; the Worker never scans a business D1. Source rows and
+  canonical sensitive fields have enforced seven-day TTL/redaction.
 - The existing Pages project writes authoritative business state plus bounded
   source-outbox rows; the standalone Worker owns collection, Queue
   consumption, scheduled dispatch, cleanup, Meta, and Tinybird and binds only
@@ -1070,6 +1185,9 @@ additive D1 migrations while older code may still run.
   all four events; Meta Test Events is only receipt evidence.
 - Internal aliases use tenant-scoped HMAC; Meta-specific normalized SHA-256 is
   exact, single-pass, and bounded to the retry window.
+- External visitor/person IDs are persisted opaque values with versioned,
+  rotation-safe continuity; cookie signatures bind name, tenant, site, and
+  environment and Pages cannot mint them.
 - Queue and remote delivery are described and tested as at-least-once. Every
   retry preserves the stable destination key; ambiguous outcomes are recorded,
   Meta receives the same deduplication identifiers, and Tinybird queries
@@ -1080,6 +1198,8 @@ additive D1 migrations while older code may still run.
   advertising, sale/share-classified processing, enrichment, and pending jobs.
 - A verified operator privacy workflow covers D1, Tinybird, pending/replay
   state, suppression tombstones, retention, and documented Meta limitations.
+- DSAR deletion is signed and acknowledged by every source runtime and
+  projection, and tombstones cover visitor/person/alias/redirect scope.
 - No forbidden data or credentials appear in browser responses, logs, D1
   tracking tables, Queue payloads, Tinybird, or destination payloads.
 - Collector availability and five-minute event/Purchase resolution SLOs are

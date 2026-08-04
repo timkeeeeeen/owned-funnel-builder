@@ -83,10 +83,30 @@ Wrangler, and Woodpecker.
   records. Do not add a CMS, payment abstraction, generic destination
   framework, shared SaaS control plane, CRM adapter, RB2B adapter, or resolver
   graph in this plan.
+- The first release intentionally keeps anonymous visitors in the tracking
+  ledger, not the CRM; it collects four reviewed events rather than arbitrary
+  interaction/DOM data, and uses a practical 400-day cookie cap plus the
+  person graph. Add CRM/resolver enrichment only with a concrete provider,
+  consent, DSAR, and retention contract.
 - Every task ends with focused tests, `git diff --check`, and a small commit.
   Broad tests run only through `maestro-worker` or `host-test-slot`.
 - The plan does not authorize ad activation merely because software gates pass;
   campaigns remain paused until the per-funnel evidence gate is complete.
+
+## Review Amendments (2026-08-04)
+
+The architecture review found several underspecified boundaries. These are
+required plan changes, not optional polish:
+
+- source runtimes, not the public Worker, own source-outbox dispatch, leases,
+  acknowledgements, cleanup, and payment reconciliation;
+- Pages has one Worker-proxied browser-claim path and never binds tracking D1;
+- bridge keys and context-token verification are per source/environment and
+  bind issuer, tenant, site, funnel, and product;
+- source payloads and canonical sensitive fields have explicit expiry/redaction;
+- external IDs and cookie signatures are rotation-safe and environment-bound;
+- launch gates, migrations, observability, browser coverage, and source SHAs
+  are machine-checkable before campaign enablement.
 
 ## Delivery Order And Dependencies
 
@@ -224,6 +244,7 @@ App-Idea/Blueprint source modules without inventing their contract.
 - Create: `functions/_lib/tracking-contract.ts`
 - Create: `migrations/0010_source_tracking_outbox.sql`
 - Create: `workers/events/migrations/0001_tracking_ledger.sql`
+- Create: `workers/events/migrations/0002_tracking_scope_hardening.sql`
 - Modify: `functions/_lib/runtime.ts`
 - Modify: `tests/functions/migrations.test.mts`
 - Create: `tests/functions/tracking-contract.test.mts`
@@ -555,6 +576,12 @@ the Worker inserts the corresponding tracking-D1 mapping, canonical event, and
 outbox in one transaction. Duplicate or concurrent webhook deliveries therefore
 reuse the same event key instead of minting a second Purchase.
 
+Before source bridges are enabled, `0002_tracking_scope_hardening.sql` rebuilds
+or replaces globally scoped identity/provider keys with tenant/site/source
+scopes, adds the missing composite foreign keys, and adds a durable
+`ignored_not_owner` audit result. Cross-tenant collision/DoS fixtures must fail
+closed; a globally unique `source_event_id` alone is not sufficient.
+
 - [ ] **Step 4: Make both migration discoverers lexical and complete**
 
 Replace any hardcoded migration list with:
@@ -578,7 +605,7 @@ creates only tracking tables and cannot query a business table.
 ```bash
 rtk host-test-slot --class focused node --import tsx --test tests/functions/migrations.test.mts tests/functions/tracking-contract.test.mts
 rtk git diff --check
-rtk git add functions/_lib/tracking-contract.ts functions/_lib/runtime.ts migrations/0010_source_tracking_outbox.sql workers/events/migrations/0001_tracking_ledger.sql tests/functions/migrations.test.mts tests/functions/tracking-contract.test.mts
+rtk git add functions/_lib/tracking-contract.ts functions/_lib/runtime.ts migrations/0010_source_tracking_outbox.sql workers/events/migrations/0001_tracking_ledger.sql workers/events/migrations/0002_tracking_scope_hardening.sql tests/functions/migrations.test.mts tests/functions/tracking-contract.test.mts
 rtk git commit -m "feat: add canonical tracking ledger schema"
 ```
 
@@ -593,19 +620,22 @@ rtk git commit -m "feat: add canonical tracking ledger schema"
 - Create: `tests/functions/tracking-identity.test.mts`
 - Create: `tests/functions/tracking-privacy.test.mts`
 - Create: `tests/functions/tracking-cookie.test.mts`
+- Create or wire: `packages/tracking-contract/` (or an explicit Worker-importable
+  shared module) for cookie/privacy/CORS/identity parity
 
 **Interfaces:**
 
 ```ts
 type PrivacyPurpose = 'necessary' | 'analytics' | 'advertising' | 'identity_enrichment' | 'sale_share';
 type PrivacyDecision = { purpose: PrivacyPurpose; allowed: boolean; policyVersion: string };
-function issueSignedCookie(name: 'ma_vid' | 'ma_sid' | 'ma_privacy', value: string, keyId: string, maxAge: number): string;
+function issueSignedCookie(input: { name: 'ma_vid' | 'ma_sid' | 'ma_privacy'; value: string; keyId: string; maxAge: number; tenantId: string; siteId: string; environment: 'preview' | 'live' }, signingKey: CryptoKey): string;
 function verifySignedCookie(header: string | null, name: string, keys: Record<string, string>): string | null;
 type StoredPrivacyChoice = { purpose: PrivacyPurpose; allowed: boolean; policyVersion: string; effectiveAt: string; source: 'ui' | 'gpc' | 'operator'; region: string };
 function resolvePrivacy(request: Request, stored: StoredPrivacyChoice[], policy: { region: string; failClosed: boolean; policyVersion: string }): PrivacyDecision[];
 function deriveAliasKey(input: { tenantId: string; identifierType: string; issuerNamespace: string; normalizationVersion: string; canonicalValue: string }, key: CryptoKey): Promise<string>;
-function resolveIdentityClaim(input: { tenantId: string; aliasKey: string; verificationClass: 'asserted' | 'verified' | 'authoritative'; personId?: string }): Promise<{ personId: string | null; state: 'linked' | 'created' | 'conflict' }>;
-function corsHeaders(origin: string | null, allowedOrigin: string): Headers;
+type IdentityClaimStore = { transaction<T>(fn: (tx: IdentityClaimStore) => Promise<T>): Promise<T>; resolve(input: { tenantId: string; aliasKey: string; verificationClass: 'asserted' | 'verified' | 'authoritative'; personId?: string }): Promise<{ personId: string | null; state: 'linked' | 'created' | 'conflict' }> };
+function resolveIdentityClaim(input: { tenantId: string; aliasKey: string; verificationClass: 'asserted' | 'verified' | 'authoritative'; personId?: string }, store: IdentityClaimStore): Promise<{ personId: string | null; state: 'linked' | 'created' | 'conflict' }>;
+function corsHeaders(origin: string | null, allowedOrigins: readonly string[]): Headers;
 ```
 
 - [ ] **Step 1: Write failing security/privacy tests**
@@ -658,6 +688,13 @@ const GPC_HEADER = 'sec-gpc';
 Never infer country from a browser-controlled field, and never use IP, UA,
 screen size, or click IDs to merge people.
 
+The production Worker supplies a D1-backed `IdentityClaimStore`; the in-memory
+store is test-only. Pages and Worker import the same normalization/privacy/
+cookie contract or pass parity fixtures that prove identical decisions. Cookie
+verification uses verify-only material; no Pages runtime receives a minting
+secret. Add tests for cookie name/tenant/site/environment binding and
+cross-audience token rejection.
+
 - [ ] **Step 4: Implement exact CORS and cookie deletion**
 
 Return `Access-Control-Allow-Credentials: true`,
@@ -685,6 +722,7 @@ rtk git commit -m "feat: add first-party identity and privacy primitives"
 - Create: `functions/api/funnel/browser-events.ts`
 - Modify: `functions/_lib/funnel.ts`
 - Create: `functions/_lib/source-outbox.ts`
+- Create: `migrations/0011_source_tracking_outbox_retention.sql`
 - Modify: `tests/functions/payment.test.mts`
 - Create: `tests/functions/browser-events.test.mts`
 - Create: `tests/functions/source-outbox.test.mts`
@@ -708,14 +746,20 @@ type PurchaseCustomData = { content_ids: string[]; content_type: 'product'; valu
 type PurchaseContent = { id: string; quantity: number; item_price?: number };
 type BrowserPurchaseClaim = { payment_id: string; event_id: string; custom_data: PurchaseCustomData };
 type VerifiedPurchase = { payment_id: string; event_id: string; value: number; currency: string; contents: PurchaseContent[] };
-function claimUnseenPurchases(trackingDb: D1Database, flowToken: string): Promise<BrowserPurchaseClaim[]>;
+function claimUnseenPurchases(flowToken: string, signedWorkerClaim: (flowToken: string) => Promise<BrowserPurchaseClaim[]>): Promise<BrowserPurchaseClaim[]>;
 function toSafeBrowserPurchase(row: VerifiedPurchase): BrowserPurchaseClaim;
 ```
 
 `source-outbox.ts` immediately drains committed Pages rows to the authenticated
-Worker bridge and exposes a scheduled recovery scan. It uses the same
-source-event ID on retries, records provider mapping reuse, and never reads
-tracking-D1 from the business-D1 transaction.
+Worker bridge and exposes a source-owned scheduled recovery dispatcher. It uses
+the same source-event ID on retries, records provider mapping reuse, leases
+rows with compare-and-set plus stale-lease recovery, and never reads
+tracking-D1 from the business-D1 transaction. The migration adds
+`expires_at`, `lease_until`, `lease_owner`, `bridge_accepted_at`, and
+`redacted_at`; cleanup scrubs bounded buyer context within seven days.
+`0011_source_tracking_outbox_retention.sql` scopes source-event uniqueness to
+`(tenant_id, site_id, source_event_id)`, adds the lease/expiry/redaction columns,
+and adds an owner-result audit row for `ignored_not_owner` deliveries.
 
 - [ ] **Step 1: Extend fakes and write failing checkout/webhook tests**
 
@@ -731,11 +775,17 @@ assert.equal(await claimBrowserEvents(requestWithSameFlowToken), 0);
 Cover checkout-provider failure after durable Lead, duplicate Dodo webhook,
 duplicate and concurrent webhook deliveries with different webhook IDs mapped
 to one Dodo payment, and provider-mapping reuse,
+stale/future webhook timestamps and replayed delivery IDs,
 refund-before-success, base+bump aggregation, Dodo request headers excluded
 from buyer context, missing/wrong flow token, cross-flow token, replay, and
 cross-origin/preflight browser-claim requests.
 Test immediate-drain failure, scheduled recovery, crash-before-ack, and
 duplicate delivery of the same Pages source row.
+
+Also assert that reusing an event/source-event ID with a different canonical
+payload hash returns a conflict/quarantine result, and that a non-owning
+webhook route records a durable `ignored_not_owner` audit result without
+creating a payment, fulfillment, or Purchase.
 
 - [ ] **Step 2: Run focused tests and confirm current sequential behavior fails**
 
@@ -761,12 +811,13 @@ browser can emit it once; never guess an InitiateCheckout.
 
 Include only validated latest `fbp`/`fbc`, signed external ID, browser request
 IP/UA, sanitized verified source URL, attribution, capture time, approved
-identity HMACs, and destination-scoped Meta hashes in `tracking_buyer_context`.
+identity HMACs, and destination-scoped Meta hashes in the bounded source row.
 Pages invokes the pinned `meta_identity` transform version before sending the
 bounded bridge envelope; the Worker validates that version and never hashes an
 already-hashed value, then persists the bounded context in tracking D1. The
 Worker never reads raw checkout PII. Dodo webhook request headers and Cloudflare
-geo are never buyer context. Set an expiry at seven days from event occurrence.
+geo are never buyer context. Set an expiry at seven days from event occurrence
+and scrub source payloads after bridge acceptance when no retry is pending.
 
 - [ ] **Step 5: Implement one verified Purchase and one browser claim**
 
@@ -781,9 +832,13 @@ Add
 if (request.method !== 'POST' || request.headers.get('origin') !== STOREFRONT_ORIGIN) return json({ error: 'not_allowed' }, 403);
 if (request.headers.get('access-control-request-method')) return json({ error: 'preflight_not_allowed' }, 403);
 const flow = readBoundFlowToken(request);
-const newlyClaimed = await claimUnseenPurchases(trackingDb, flow);
+const newlyClaimed = await claimUnseenPurchases(flow, signedWorkerClaim);
 return json({ purchases: newlyClaimed.map(toSafeBrowserPurchase) });
 ```
+
+`signedWorkerClaim` calls the private Worker claim operation; Pages has no
+`TRACKING_DB` binding. The browser claim accepts a POST body or bound cookie,
+never a query-string flow token, and rejects cross-origin/preflight requests.
 
 The database claim is the correctness boundary. Reloads return no already
 claimed payment. `Referrer-Policy: strict-origin` is set on every flow page.
@@ -794,7 +849,7 @@ claimed payment. `Referrer-Policy: strict-origin` is set on every flow page.
 rtk host-test-slot --class focused node --import tsx --test tests/functions/payment.test.mts tests/functions/browser-events.test.mts
 rtk pnpm check:functions
 rtk git diff --check
-rtk git add functions/api/checkout.ts functions/api/webhooks/dodo.ts functions/api/funnel/status.ts functions/api/funnel/browser-events.ts functions/_lib/funnel.ts tests/functions/payment.test.mts tests/functions/browser-events.test.mts
+rtk git add functions/api/checkout.ts functions/api/webhooks/dodo.ts functions/api/funnel/status.ts functions/api/funnel/browser-events.ts functions/_lib/funnel.ts migrations/0011_source_tracking_outbox_retention.sql tests/functions/payment.test.mts tests/functions/browser-events.test.mts tests/functions/source-outbox.test.mts
 rtk git commit -m "feat: make Pages conversion events transactional"
 ```
 
@@ -808,11 +863,13 @@ rtk git commit -m "feat: make Pages conversion events transactional"
 - Modify: `src/components/offers/OfferCheckoutDialog.astro`
 - Modify: `src/components/blueprint/BlueprintFunnelRuntime.astro`
 - Modify: `src/scripts/blueprint-funnel-client.ts`
+- Create or verify owner: `src/components/ConsentBanner.astro`
 - Create: `functions/api/blueprint/checkout-start.ts`
 - Create: `functions/api/blueprint/checkout-status.ts`
 - Create: `tests/functions/blueprint-proxy.test.mts`
 - Modify: `tests/blueprint/contract.test.mts`
 - Create: `tests/tracking/browser-contract.test.mts`
+- Create: `tests/tracking/preview-browser.spec.mts`
 
 **Interfaces:**
 
@@ -838,6 +895,11 @@ before a verified claim, and no tracking cookie/Pixel/Tinybird before required
 consent. Assert `/v1/events` rejects `Lead`, `InitiateCheckout`, and `Purchase`,
 completion-page Purchase makes no collector request, and Admaxxer does not
 forward Meta events.
+
+If an existing consent banner cannot be identified in Task 1, this task owns
+one accessible banner plus preferences/withdrawal control wired to the
+versioned privacy policy. It must expose the effective state without blocking
+necessary checkout and must honor GPC.
 
 - [ ] **Step 2: Replace the legacy Pixel boundary with one shared tracker**
 
@@ -886,9 +948,10 @@ events to `/v1/events`.
 rtk host-test-slot --class focused pnpm test:blueprint
 rtk host-test-slot --class focused node --import tsx --test tests/tracking/browser-contract.test.mts
 rtk host-test-slot --class focused node --import tsx --test tests/functions/blueprint-proxy.test.mts
+rtk host-test-slot --class focused pnpm exec playwright test tests/tracking/preview-browser.spec.mts
 rtk pnpm check:functions
 rtk git diff --check
-rtk git add src/components/FirstPartyTracking.astro src/layouts/OfferLayout.astro src/components/offers/OfferAnalytics.astro src/components/offers/OfferCheckoutDialog.astro src/components/blueprint/BlueprintFunnelRuntime.astro src/scripts/blueprint-funnel-client.ts functions/api/blueprint/checkout-start.ts functions/api/blueprint/checkout-status.ts tests/blueprint/contract.test.mts tests/tracking/browser-contract.test.mts tests/functions/blueprint-proxy.test.mts
+rtk git add src/components/FirstPartyTracking.astro src/components/ConsentBanner.astro src/layouts/OfferLayout.astro src/components/offers/OfferAnalytics.astro src/components/offers/OfferCheckoutDialog.astro src/components/blueprint/BlueprintFunnelRuntime.astro src/scripts/blueprint-funnel-client.ts functions/api/blueprint/checkout-start.ts functions/api/blueprint/checkout-status.ts tests/blueprint/contract.test.mts tests/tracking/browser-contract.test.mts tests/tracking/preview-browser.spec.mts tests/functions/blueprint-proxy.test.mts
 rtk git commit -m "feat: wire first-party browser event parity"
 ```
 
@@ -943,7 +1006,17 @@ Routes:
 - Worker-only signed `POST /internal/browser-claims`: accepts a Pages-signed
   claim request and returns newly claimed non-PII browser payloads; it is not
   exposed as a public route and cannot create canonical events.
+- Private operator `POST /internal/operator/replay` and kill-switch operations:
+  privileged auth, actor/reason/request ID/idempotency key, optional second
+  approver, tombstone/expiry checks, and an audit row; browser/source
+  credentials are rejected.
 - `GET /healthz`: no secrets, no PII, and an external-probe-safe response.
+
+The Worker cron runs every minute with a bounded batch/time budget and a
+documented catch-up policy. Queue configuration pins max retries, retry delay,
+batch size, consumer concurrency, and DLQ linkage; config/readback tests prove
+those values and the worst-case backlog still meets the five-minute SLO under
+the recorded volume model.
 
 The runbook defines the initial SLOs (99.9% collector availability; 99% of
 permitted advertising events resolved within five minutes; every verified
@@ -981,6 +1054,11 @@ pending jobs, and have every queue consumer re-resolve the full current purpose
 map (including region, source, superseded choice, and policy version) before a
 destination send.
 
+The scheduled path records cleanup watermark/oldest-expired metrics and alerts
+when a deadline or cron run is missed. Per-funnel sender enablement is read
+atomically from the manifest at send time; a funnel rollback disables its
+Meta/Tinybird sends without requiring the global kill switch.
+
 - [ ] **Step 3: Configure preview/production bindings without secrets**
 
 `workers/events/wrangler.jsonc` binds only `TRACKING_DB`, the main Queue, and
@@ -1011,6 +1089,8 @@ this task.
 - Create: `workers/events/src/privacy-requests.ts`
 - Create: `workers/events/tests/destinations.test.mts`
 - Create: `workers/events/tests/privacy-requests.test.mts`
+- Create: `tinybird/datasources/first_party_events.datasource`
+- Create: `tinybird/pipes/first_party_events_dedup.pipe`
 - Modify: `workers/events/src/queue.ts`
 - Modify: `workers/events/src/cleanup.ts`
 
@@ -1041,6 +1121,11 @@ For each event type assert:
    values are omitted; and
 6. Tinybird receives only the named allowlist with canonical key.
 
+Also append the same canonical key twice and assert the raw datasource may
+contain two physical rows while the deduplicated pipe returns one. Provider
+fixtures must cover Meta 429/5xx, timeout-after-accept, malformed responses,
+Tinybird 4xx, bounded backoff, and no infinite retry with the same delivery key.
+
 - [ ] **Step 2: Implement the direct Meta sender**
 
 Use the pinned Graph API version and Worker secret. Build the payload from the
@@ -1053,6 +1138,10 @@ access token or raw response.
 Use a datasource-scoped append token, `wait=true`, bounded retries, and
 quarantine invalid rows in D1. Dashboards query a deduplicated view keyed by
 canonical event key; physical append uniqueness is not claimed.
+
+Version the datasource/pipe definitions, promote them to preview before any
+producer, run a schema compatibility check, and record the exact definition
+version/readback before live sends.
 
 - [ ] **Step 4: Implement retention and deletion**
 
@@ -1077,14 +1166,22 @@ Scheduled cleanup deletes raw retry context, Meta hashes, IP/UA, unresolved
 delivery context, and existing raw webhook payloads no later than seven days
 from event occurrence; diagnostics expire at ninety days, analytics at
 twenty-five months, and aliases at their configured policy deadline. Privacy
-tombstones override retention and prevent replay resurrection.
+tombstones override retention and prevent replay resurrection. Fan out a signed
+per-source deletion request and keep the request pending until every source
+runtime acknowledges the bounded subject scope; replay, partial outage, and
+person-redirect deletion are explicit test cases.
+Because canonical envelopes are stored as JSON, cleanup must rewrite/redact
+their expiring sensitive fields (or move those fields to an expiring side
+table) and test that no IP/UA/Meta hash remains after the deadline. Every
+Tinybird row carries the versioned privacy subject key used by all pipes and
+deletion filters.
 
 - [ ] **Step 5: Pass destination fixtures and commit**
 
 ```bash
 rtk host-test-slot --class focused node --import tsx --test workers/events/tests/destinations.test.mts workers/events/tests/privacy-requests.test.mts
 rtk git diff --check
-rtk git add workers/events/src/meta.ts workers/events/src/tinybird.ts workers/events/tests/destinations.test.mts workers/events/tests/privacy-requests.test.mts workers/events/src/queue.ts workers/events/src/cleanup.ts workers/events/src/privacy-requests.ts
+rtk git add workers/events/src/meta.ts workers/events/src/tinybird.ts tinybird/datasources/first_party_events.datasource tinybird/pipes/first_party_events_dedup.pipe workers/events/tests/destinations.test.mts workers/events/tests/privacy-requests.test.mts workers/events/src/queue.ts workers/events/src/cleanup.ts workers/events/src/privacy-requests.ts
 rtk git commit -m "feat: deliver Meta and Tinybird events"
 ```
 
@@ -1128,7 +1225,8 @@ type SourceEventEnvelope = {
   source_event_id: string;
   event_name: 'Lead' | 'InitiateCheckout' | 'Purchase';
   occurred_at: string;
-  tracking_context_token: string;
+  context_hash: string;
+  context_expires_at: string;
   funnel_slug: string;
   checkout_session_id?: string;
   payment_id?: string;
@@ -1148,7 +1246,8 @@ type SourceEventEnvelope = {
   };
 };
 POST /v1/source-events
-X-Maestro-Key-Id: current
+X-Maestro-Issuer: pages
+X-Maestro-Key-Id: pages-current
 X-Maestro-Timestamp: 1722643200
 X-Maestro-Nonce: 32-byte-base64url
 X-Maestro-Signature: base64url(HMAC-SHA256(key, `v1\\n${timestamp}\\n${nonce}\\n${sha256(body)}\\n${body}`))
@@ -1163,7 +1262,11 @@ only in tracking D1 for seven days, and is used to build Purchase CAPI from the
 original buyer context—not Dodo request headers. It is never sent to Queue,
 Tinybird, logs, or browser responses.
 
-`POST /api/tracking/source-browser-events` is same-origin/no-CORS. The Pages
+`tracking_context_token` is request-only: operation-specific tokens are used
+for one-shot checkout start versus short-lived status polling, with explicit
+nonce consume/lease semantics and audience checks. It is never a persisted
+source-envelope field. `POST /api/tracking/source-browser-events` is
+same-origin/no-CORS. The Pages
 proxy validates the source runtime's bound public-session token and calls a
 signed Worker-only claim operation; the Worker resolves only that funnel's
 verified canonical events in tracking D1, atomically claims each Purchase once,
@@ -1184,20 +1287,28 @@ verified source payment lacks one D1 canonical Purchase mapping.
 Verify issuer, audience, timestamp skew, nonce uniqueness, HMAC key version,
 source-system allowlist (`pages`, `app_idea`, `blueprint`), product ownership, current privacy/tombstone state,
 and source-event idempotency. Ignore browser-provided tenant/site authority.
+Read the exact raw request bytes before JSON parsing; body whitespace/key-order
+changes must fail the signature fixture. Resolve a per-source key, bind the
+signature to issuer/tenant/site/funnel/product, and reject cross-source or
+cross-audience forgery.
 
  - [ ] **Step 3: Implement Blueprint source outbox in its owning runtime**
 
 Deploy the Worker bridge receiver first. Each source runtime then deploys a
-backward-compatible producer that accepts its old browser path and the signed
-path in shadow mode; only after the Pages proxy and browser flag are green may
-the old direct browser call be rejected. Record the compatible source/runtime
-SHA set in the evidence file.
+backward-compatible producer. In shadow mode the old browser path may perform
+commerce, but its tracking side effect is a no-op/metric-only; only the signed
+source outbox emits tracking. After the proxy and browser flag are green and
+duplicate-rate evidence is zero, reject direct browser calls. Record the
+compatible source/runtime SHA set in the evidence file.
 
 At the mutation that durably stores the verified Dodo checkout-session ID,
 write the source `InitiateCheckout` row. At the verified payment mutation,
 write the source `Purchase` row with the original buyer context. Drain
 source rows server-to-server with the same source event ID. Reject direct
-browser checkout-start/status calls without the signed assertion.
+browser checkout-start/status calls without the signed assertion. Deploy an
+explicit source-runtime dispatcher/cron/action with lease, retry,
+acknowledgement, and payment-reconciliation ownership; a bridge outage must
+eventually resolve or alert within the Purchase SLO.
 
 - [ ] **Step 4: Implement App-Idea source outbox in its owning runtime**
 
@@ -1205,7 +1316,9 @@ At the durable Buildability Report/lead boundary write `Lead`. At the
 verified Build Pack Dodo payment boundary write `Purchase`. Preserve the
 existing entitlement/credit/fulfillment authority and add no duplicate
 commerce ledger. The source row carries only the bounded signed tracking
-context and provider identifiers.
+context hash/expiry and provider identifiers. Its owning runtime supplies the
+dispatcher/cron/action, lease/retry/ack state, source cleanup, and payment
+reconciliation alert; the tracking Worker cannot read its outbox directly.
 
 - [ ] **Step 5: Add concurrent duplicate-owner and reconciliation tests**
 
@@ -1255,7 +1368,12 @@ unverified source SHA.
 - Modify: `scripts/publish-cloudflare.mjs`
 - Create: `scripts/publish-events-worker.mjs`
 - Create: `scripts/provision-preview-events.mjs`
-- Create: `.woodpecker.yml`
+- Create: `scripts/apply-tracking-migrations.mjs`
+- Create: `config/source-runtime-gates.json`
+- Create: `config/observability-probe.json`
+- Create: `tests/quality/environment-resource-isolation.test.mts`
+- Create only if Task 1 confirms no external repository-local pipeline:
+  `.woodpecker.yml`
 - Modify: `package.json`
 - Modify: `docs/launch/first-party-event-pipeline-evidence.md`
 
@@ -1302,14 +1420,16 @@ scheduled execution. It references secret names only:
 `TRACKING_COOKIE_SIGNING_KEY_CURRENT`,
 `TRACKING_COOKIE_SIGNING_KEY_PREVIOUS`,
 `TRACKING_IDENTITY_HMAC_KEY_CURRENT`,
-`TRACKING_IDENTITY_HMAC_KEY_PREVIOUS`, `TRACKING_SOURCE_BRIDGE_KEY_CURRENT`,
-`TRACKING_SOURCE_BRIDGE_KEY_PREVIOUS`, `TRACKING_CONTEXT_SIGNING_KEY_CURRENT`,
-`TRACKING_CONTEXT_SIGNING_KEY_PREVIOUS`, and the Meta pixel/dataset ID. The
+`TRACKING_IDENTITY_HMAC_KEY_PREVIOUS`, per-source bridge key IDs/current and
+previous keys, per-source context-token verification keys, and the Meta
+pixel/dataset ID. The
 bridge signature covers the exact UTF-8 body bytes plus timestamp and nonce;
 current/previous keys are accepted only within the bounded rotation window.
 A binding/configuration test proves Pages has no `TRACKING_DB` binding and the
 public Worker has no business-D1 binding; only the signed Worker claim operation
-can access tracking-D1 rows.
+can access tracking-D1 rows. A matrix test/readback proves preview/live
+business D1s, tracking D1s, queues, DLQs, Tinybird datasources, Meta IDs, and
+custom domains are disjoint and required sender configuration is present.
 
 - [ ] **Step 3: Add dry-run deployment commands**
 
@@ -1333,6 +1453,14 @@ readback proves preview and live resource IDs are distinct; it never prints
 secret values and rejects a live resource ID in preview mode. A separate
 `--dry-run` performs no remote mutation.
 
+The protected migration job applies business-D1 additive migrations and
+tracking-D1 migrations in lexical order under an environment lock, records
+pending/applied versions and exact SHA, and fails closed on unknown or pending
+migrations. A forward-only rollback drill is recorded; no destructive rollback
+of an additive migration is allowed while older code may run. DNS/TLS/sibling
+inventory and an external collector probe are read back before parent-domain
+cookies are enabled.
+
 - [ ] **Step 4: Add the required Woodpecker gate**
 
 Create the repository-local Woodpecker pipeline with one deterministic PR gate:
@@ -1347,7 +1475,6 @@ steps:
       - npm run test:blueprint
       - npm run test:quality
       - node --import tsx --test tests/tracking/*.test.mts workers/events/tests/*.test.mts
-      - node --import tsx --test workers/events/tests/*.test.mts
       - npm run format:check
       - npm run lint
       - npm run typecheck
@@ -1361,6 +1488,7 @@ steps:
       - node scripts/provision-preview-events.mjs --environment preview
     when:
       event: [manual]
+      branch: [main]
 ```
 
 The required status is the repository's existing Woodpecker verification
@@ -1368,7 +1496,9 @@ status. The preview job is manual and launch-gated; it is not part of the PR
 status. If the authority is configured outside this repository, Task 1 records
 the exact external config owner and this file is not duplicated; the same
 commands and status contract remain mandatory. The gate never receives live
-provider secrets and never deploys.
+provider secrets and never deploys. Manual provisioning additionally requires
+a protected environment approver and an exact reviewed SHA input; arbitrary
+manual runs and live resource IDs are rejected.
 
 - [ ] **Step 5: Pass quality and configuration gates and commit**
 
@@ -1378,7 +1508,7 @@ rtk pnpm validate:config
 rtk pnpm check:functions
 rtk pnpm exec wrangler deploy --config workers/events/wrangler.jsonc --dry-run
 rtk git diff --check
-rtk git add config/dodo-funnel-ownership.json config/cloudflare-event-abuse-limits.json tests/quality/dodo-funnel-ownership.test.mts tests/quality/tracking-d1-binding.test.mts wrangler.jsonc workers/events/wrangler.jsonc scripts/publish-cloudflare.mjs scripts/publish-events-worker.mjs scripts/provision-preview-events.mjs package.json .woodpecker.yml docs/launch/first-party-event-pipeline-evidence.md
+rtk git add config/dodo-funnel-ownership.json config/cloudflare-event-abuse-limits.json config/source-runtime-gates.json config/observability-probe.json tests/quality/dodo-funnel-ownership.test.mts tests/quality/tracking-d1-binding.test.mts tests/quality/environment-resource-isolation.test.mts wrangler.jsonc workers/events/wrangler.jsonc scripts/publish-cloudflare.mjs scripts/publish-events-worker.mjs scripts/provision-preview-events.mjs scripts/apply-tracking-migrations.mjs package.json .woodpecker.yml docs/launch/first-party-event-pipeline-evidence.md
 rtk git commit -m "ci: add first-party deployment contracts"
 ```
 
@@ -1394,6 +1524,11 @@ fixture delivery, browser/server parity, privacy/retention, source
 reconciliation, and one live $1 canary per paid stage. It consumes operator
 approval and owner-entered card data only during the explicitly scheduled live
 step.
+
+It consumes `config/source-runtime-gates.json`, which names each source repo,
+exact commit, required Woodpecker status, focused contract/migration commands,
+and clean-base evidence. Missing or unverified App-Idea/Blueprint rows fail
+their funnel gate.
 
 - [ ] **Step 1: Run repository gates on the exact committed SHA**
 
@@ -1414,10 +1549,15 @@ is red.
 
 - [ ] **Step 2: Deploy isolated preview through Woodpecker**
 
-Deploy the exact reviewed SHA to preview with Meta delivery off and separate
+Apply the reviewed migrations and deploy the exact reviewed SHA/artifact digest
+through the protected preview job, with Meta delivery off and separate
 D1/Queue/DLQ/Tinybird resources. Prove bootstrap, PageView, Lead,
 InitiateCheckout, source bridges, Dodo signature fixtures, Queue retries,
 privacy suppression, tombstones, cleanup, and no-secret/raw-PII leakage.
+Run the real preview Playwright suite for navigation/beacon delivery, consent
+and cookie/CORS behavior, Pixel/CAPI event IDs, completion claims, reload, and
+replay. Read back DNS/TLS/sibling ownership, external probe success, alert
+routing, and cleanup watermark before parent-domain cookies are enabled.
 
 - [ ] **Step 3: Capture Meta/Tinybird validation evidence**
 
@@ -1426,6 +1566,11 @@ exact pre-send CAPI fixture. Assert identical
 `(event_name,event_id,pixel_id)`, field normalization, buyer-context source,
 Tinybird canonical key, and request/trace IDs. Meta Test Events proves receipt
 only, not normalization or deduplication.
+
+Record source-outbox age, source-to-tracking lag, payment-to-canonical lag,
+Queue age, destination latency, duplicate rate, and field-presence thresholds
+for each funnel. No “green” value may be entered without a metric, window,
+exact SHA, and owner signoff.
 
 - [ ] **Step 4: Run the approved live $1 canary matrix**
 
@@ -1482,6 +1627,13 @@ and rollback/pause rule. The three existing Pages offer JSON files remain the
 commercial source of truth; App-Idea and Blueprint copy is keyed to their
 observed source-runtime files.
 
+Each row also has a machine-readable gate record with exact software/source
+SHAs, preview evidence IDs, minimum event sample/window, maximum duplicate
+rate, maximum source/Queue/destination latency, required field-presence floor,
+privacy/DSAR status, canary/refund status, approver, and rollback action. The
+validator refuses `campaign_enabled` unless every threshold is present and
+green for that funnel.
+
 - [ ] **Step 2: Apply only approved copy changes**
 
 Run the existing content/catalog generators and contract tests. Do not add
@@ -1511,6 +1663,17 @@ rtk git commit -m "docs: record five-funnel campaign readiness"
 ```
 
 ## Self-Review And Review Gates
+
+The 2026-08-04 review is closed only when the implementation demonstrates:
+
+- executable source-runtime drain/recovery and source-side retention;
+- one Worker-proxied Pages claim path with no tracking-D1 Pages binding;
+- per-source bridge/context-token authorization and raw-body signature tests;
+- scoped tenant/site uniqueness, payload-hash conflict handling, webhook
+  freshness, and person/alias deletion tombstones;
+- protected migration/deploy/readback, Tinybird promotion, queue/cron config,
+  browser Playwright evidence, probe/alert evidence, and measurable campaign
+  gates.
 
 Before implementation, run a local plan audit:
 
