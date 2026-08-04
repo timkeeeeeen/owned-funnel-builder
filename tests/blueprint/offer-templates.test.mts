@@ -33,6 +33,11 @@ test('video-lead comparison reuses the original offer content and checkout', asy
     'utf8'
   );
   assert.match(comparisonRoute, /getOffer\('owned-funnel-builder-video-lead'\)/);
+  assert.match(
+    comparisonRoute,
+    /if \(!offer\) throw new Error\('Missing video lead comparison offer\.'\);/,
+    'the explicit static route must fail closed when its comparison content is unavailable'
+  );
   assert.match(comparisonRoute, /<VideoLeadOfferLandingPage offer=\{offer\} \/>/);
 });
 
