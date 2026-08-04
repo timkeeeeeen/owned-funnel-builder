@@ -263,7 +263,7 @@ async function verifyEventContext(
       buyer_context_json: string;
       flow_binding: string;
       expires_at: string;
-    } | null = null;
+    } | null;
     try {
       row = await env.TRACKING_DB.prepare(
         `SELECT tenant_id, site_id, funnel_slug, flow_binding, server_subject_ref,

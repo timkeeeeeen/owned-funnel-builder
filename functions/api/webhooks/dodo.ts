@@ -267,7 +267,7 @@ async function markPaymentSucceeded(
     )
     .bind(tenantId, siteId, paymentId)
     .first<{ source_event_id: string; claim_state?: string; claim_until?: string | null }>();
-  let ownershipClaimed = false;
+  let ownershipClaimed: boolean;
   if (existingMapping) {
     const existingOutbox = await database
       .prepare(
