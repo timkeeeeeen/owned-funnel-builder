@@ -331,14 +331,6 @@ export async function onRequestPost({ request, env }: PagesContext): Promise<Res
   if (!webhookId || !webhookSignature || !webhookTimestamp) {
     return json({ error: 'Webhook signature headers are missing.' }, 400);
   }
-  const timestamp = Number(webhookTimestamp);
-  if (
-    !Number.isSafeInteger(timestamp) ||
-    Math.abs(Math.floor(Date.now() / 1000) - timestamp) > WEBHOOK_TIMESTAMP_SKEW_SECONDS
-  ) {
-    return json({ error: 'Webhook timestamp is stale.' }, 400);
-  }
-
   const apiKey = readEnvironmentValue(env, 'DODO_PAYMENTS_API_KEY');
   const webhookKey = readEnvironmentValue(env, 'DODO_PAYMENTS_WEBHOOK_KEY');
   const environment = readEnvironmentValue(env, 'DODO_PAYMENTS_ENVIRONMENT');
@@ -361,8 +353,22 @@ export async function onRequestPost({ request, env }: PagesContext): Promise<Res
         'webhook-timestamp': webhookTimestamp,
       },
     }) as WebhookPayload;
-  } catch {
+  } catch (error) {
+    if (
+      error instanceof Error &&
+      ['Message timestamp too old', 'Message timestamp too new'].includes(error.message)
+    ) {
+      return json({ error: 'Webhook timestamp is stale.' }, 400);
+    }
     return json({ error: 'Webhook signature is invalid.' }, 401);
+  }
+
+  const timestamp = Number(webhookTimestamp);
+  if (
+    !Number.isSafeInteger(timestamp) ||
+    Math.abs(Math.floor(Date.now() / 1000) - timestamp) > WEBHOOK_TIMESTAMP_SKEW_SECONDS
+  ) {
+    return json({ error: 'Webhook timestamp is stale.' }, 400);
   }
 
   try {
