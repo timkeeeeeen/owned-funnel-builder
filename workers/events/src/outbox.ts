@@ -62,6 +62,7 @@ export async function persistCanonicalEvent(
   env: OutboxEnv,
   input: unknown,
   privacy: PrivacyState,
+  privacySubjectId?: string,
   now = new Date()
 ): Promise<PersistResult> {
   const event = validateCanonicalEvent(input);
@@ -77,18 +78,48 @@ export async function persistCanonicalEvent(
   const timestamp = now.toISOString();
   const database = env.TRACKING_DB;
   const payload = JSON.stringify({ ...event, privacy: privacySnapshot(privacy) });
+  const canonicalPayloadHash = await digest(payload);
   const existing = await database
-    .prepare('SELECT event_key FROM tracking_events WHERE event_key = ? LIMIT 1')
+    .prepare(
+      'SELECT event_key, canonical_payload_hash FROM tracking_events WHERE event_key = ? LIMIT 1'
+    )
     .bind(key)
-    .first<{ event_key: string }>();
-  if (existing) return { eventKey: key, accepted: true, suppressed, destinations: selected };
+    .first<{ event_key: string; canonical_payload_hash: string }>();
+  if (existing) {
+    if (existing.canonical_payload_hash === canonicalPayloadHash)
+      return { eventKey: key, accepted: true, suppressed, destinations: selected };
+    await database
+      .prepare(
+        `INSERT INTO tracking_dlq_records
+         (dlq_id, event_key, schema_version, reason, attempt_count, payload_hash, created_at)
+         VALUES (?, ?, '1', 'canonical_payload_hash_mismatch', 0, ?, ?)`
+      )
+      .bind(crypto.randomUUID(), key, canonicalPayloadHash, timestamp)
+      .run();
+    await database
+      .prepare(
+        `UPDATE tracking_deliveries SET state = 'outcome_unknown', outcome = 'quarantined',
+         last_error = 'canonical_payload_hash_mismatch', updated_at = ? WHERE event_key = ?`
+      )
+      .bind(timestamp, key)
+      .run();
+    await database
+      .prepare(
+        `UPDATE tracking_outbox SET state = 'outcome_unknown',
+         last_error = 'canonical_payload_hash_mismatch', updated_at = ? WHERE event_key = ?`
+      )
+      .bind(timestamp, key)
+      .run();
+    throw new Error('canonical_payload_hash_mismatch');
+  }
   const statements: D1PreparedStatement[] = [
     statement(
       database,
       `INSERT INTO tracking_events
        (event_key, tenant_id, site_id, event_name, event_id, source_system, occurred_at,
-        received_at, envelope_json, privacy_state_json, bot_state, created_at)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        received_at, envelope_json, privacy_state_json, bot_state, created_at,
+        canonical_payload_hash, privacy_subject_id)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
        ON CONFLICT(event_key) DO NOTHING`,
       [
         key,
@@ -103,6 +134,8 @@ export async function persistCanonicalEvent(
         JSON.stringify(privacySnapshot(privacy)),
         'unknown',
         timestamp,
+        canonicalPayloadHash,
+        privacySubjectId ?? null,
       ]
     ),
     statement(
@@ -118,8 +151,9 @@ export async function persistCanonicalEvent(
         database,
         `INSERT INTO tracking_deliveries
          (delivery_key, tenant_id, site_id, event_key, destination, state,
-          attempt_count, created_at, updated_at)
-         VALUES (?, ?, ?, ?, ?, 'pending', 0, ?, ?)
+          attempt_count, created_at, updated_at, destination_payload_hash,
+          transform_version, transform_metadata_json)
+         VALUES (?, ?, ?, ?, ?, 'pending', 0, ?, ?, ?, '1', '{}')
          ON CONFLICT(event_key, destination) DO NOTHING`,
         [
           `${key}:${destination}`,
@@ -129,6 +163,7 @@ export async function persistCanonicalEvent(
           destination,
           timestamp,
           timestamp,
+          canonicalPayloadHash,
         ]
       )
     ),

@@ -80,6 +80,7 @@ async function BunlessMigration(): Promise<string> {
     new URL('../migrations/0001_tracking_ledger.sql', import.meta.url),
     new URL('../migrations/0002_tracking_scope_hardening.sql', import.meta.url),
     new URL('../migrations/0003_csrf_nonce_bindings.sql', import.meta.url),
+    new URL('../migrations/0004_delivery_safety.sql', import.meta.url),
   ];
   const chunks = [] as string[];
   for (const file of files)
@@ -182,7 +183,11 @@ test('bootstrap requires exact host/origin and returns non-cacheable signed cook
   assert.equal('privacy' in body, false);
   assert.equal('visitor_ready' in body, false);
   assert.equal(
-    (bindings.__database.prepare('SELECT count(*) AS count FROM tracking_events').get() as { count: number }).count,
+    (
+      bindings.__database.prepare('SELECT count(*) AS count FROM tracking_events').get() as {
+        count: number;
+      }
+    ).count,
     0
   );
   assert.equal(response.headers.get('access-control-expose-headers'), 'x-csrf-nonce');
@@ -207,25 +212,31 @@ test('bootstrap requires exact host/origin and returns non-cacheable signed cook
 
 test('one privacy action atomically consumes its bound nonce and returns server-effective purposes', async () => {
   const bindings = await env();
-  const firstBootstrap = await worker.fetch(request('/v1/bootstrap'), bindings as never, {} as never);
-  const privacyCookie = (firstBootstrap.headers.get('set-cookie') ?? '')
-    .split(',')
-    .find((cookie) => cookie.trim().startsWith('ma_privacy='))
-    ?.split(';', 1)[0]
-    ?.trim() ?? '';
+  const firstBootstrap = await worker.fetch(
+    request('/v1/bootstrap'),
+    bindings as never,
+    {} as never
+  );
+  const privacyCookie =
+    (firstBootstrap.headers.get('set-cookie') ?? '')
+      .split(',')
+      .find((cookie) => cookie.trim().startsWith('ma_privacy='))
+      ?.split(';', 1)[0]
+      ?.trim() ?? '';
   const nonce = firstBootstrap.headers.get('x-csrf-nonce') ?? '';
   const choiceId = `choice:${crypto.randomUUID()}`;
-  const action = () => request('/v1/privacy', {
-    method: 'POST',
-    headers: { cookie: privacyCookie, 'x-csrf-nonce': nonce },
-    body: JSON.stringify({
-      schema_version: '1',
-      choice_id: choiceId,
-      policy_version: '2026-08-04',
-      action: 'customize',
-      purposes: { analytics: true, advertising: false },
-    }),
-  });
+  const action = () =>
+    request('/v1/privacy', {
+      method: 'POST',
+      headers: { cookie: privacyCookie, 'x-csrf-nonce': nonce },
+      body: JSON.stringify({
+        schema_version: '1',
+        choice_id: choiceId,
+        policy_version: '2026-08-04',
+        action: 'customize',
+        purposes: { analytics: true, advertising: false },
+      }),
+    });
 
   const accepted = await worker.fetch(action(), bindings as never, {} as never);
   assert.equal(accepted.status, 202);
@@ -238,29 +249,48 @@ test('one privacy action atomically consumes its bound nonce and returns server-
   });
   assert.equal((await worker.fetch(action(), bindings as never, {} as never)).status, 409);
   const consumed = bindings.__database
-    .prepare('SELECT consumed_at, choice_id, policy_version, action FROM tracking_csrf_nonces WHERE nonce = ?')
+    .prepare(
+      'SELECT consumed_at, choice_id, policy_version, action FROM tracking_csrf_nonces WHERE nonce = ?'
+    )
     .get(nonce) as Record<string, unknown>;
   assert.equal(typeof consumed.consumed_at, 'string');
   assert.equal(consumed.choice_id, choiceId);
   assert.equal(consumed.policy_version, '2026-08-04');
   assert.equal(consumed.action, 'customize');
   const choices = bindings.__database
-    .prepare('SELECT purpose, choice FROM tracking_privacy_choices WHERE choice_key LIKE ? ORDER BY purpose')
+    .prepare(
+      'SELECT purpose, choice FROM tracking_privacy_choices WHERE choice_key LIKE ? ORDER BY purpose'
+    )
     .all(`${choiceId}:%`) as Array<{ purpose: string; choice: string }>;
-  assert.deepEqual(choices.map((choice) => ({ ...choice })), [
-    { purpose: 'advertising', choice: 'deny' },
-    { purpose: 'analytics', choice: 'allow' },
-  ]);
+  assert.deepEqual(
+    choices.map((choice) => ({ ...choice })),
+    [
+      { purpose: 'advertising', choice: 'deny' },
+      { purpose: 'analytics', choice: 'allow' },
+    ]
+  );
 
   const secondBootstrap = await worker.fetch(
     request('/v1/bootstrap', { headers: { cookie: privacyCookie } }),
     bindings as never,
     {} as never
   );
-  assert.match(
-    ((await secondBootstrap.clone().json()) as { tracking_context_hash: string })
-      .tracking_context_hash,
-    /^v1\.current\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]{43}$/
+  const contextHash = ((await secondBootstrap.clone().json()) as { tracking_context_hash: string })
+    .tracking_context_hash;
+  assert.match(contextHash, /^v1\.current\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]{43}$/);
+  assert.equal(
+    (
+      await worker.fetch(
+        request('/v1/events', {
+          method: 'POST',
+          headers: { cookie: privacyCookie, 'x-tracking-context-hash': contextHash },
+          body: JSON.stringify(pageView({ event_id: 'evt_privacy_withdrawal' })),
+        }),
+        { ...bindings, TRACKING_CONTEXT_VERIFY: undefined } as never,
+        {} as never
+      )
+    ).status,
+    202
   );
   const withdrawId = `choice:${crypto.randomUUID()}`;
   const withdrawn = await worker.fetch(
@@ -283,13 +313,35 @@ test('one privacy action atomically consumes its bound nonce and returns server-
   );
   assert.equal(withdrawn.status, 202);
   assert.notEqual(withdrawId, choiceId);
-  assert.deepEqual((await withdrawn.json() as { purposes: string[] }).purposes, ['necessary']);
+  assert.deepEqual(((await withdrawn.json()) as { purposes: string[] }).purposes, ['necessary']);
   assert.deepEqual(
     bindings.__database
-      .prepare('SELECT action FROM tracking_csrf_nonces WHERE consumed_at IS NOT NULL ORDER BY consumed_at, action')
+      .prepare(
+        'SELECT action FROM tracking_csrf_nonces WHERE consumed_at IS NOT NULL ORDER BY consumed_at, action'
+      )
       .all()
       .map((row) => ({ ...row })),
     [{ action: 'customize' }, { action: 'withdraw' }]
+  );
+  assert.equal(
+    (bindings.__database.prepare('SELECT state FROM tracking_outbox').get() as { state: string })
+      .state,
+    'suppressed'
+  );
+  assert.deepEqual(
+    bindings.__database
+      .prepare('SELECT state FROM tracking_deliveries ORDER BY destination')
+      .all()
+      .map((row) => ({ ...row })),
+    [{ state: 'suppressed' }]
+  );
+  assert.equal(
+    (
+      bindings.__database
+        .prepare('SELECT count(*) AS count FROM tracking_suppression_tombstones WHERE reason = ?')
+        .get('privacy_withdrawal') as { count: number }
+    ).count,
+    1
   );
 });
 
@@ -441,20 +493,18 @@ test('collector rejects a context binding that does not verify', async () => {
 
 test('bootstrap policy version is accepted while a stale version is rejected', async () => {
   const { TRACKING_POLICY_VERSION: _legacyPolicyVersion, ...bindings } = await env();
-  const bootstrap = await worker.fetch(
-    request('/v1/bootstrap'),
-    bindings as never,
-    {} as never
-  );
+  const bootstrap = await worker.fetch(request('/v1/bootstrap'), bindings as never, {} as never);
   const { policy_version: policyVersion } = (await bootstrap.json()) as { policy_version: string };
   assert.equal(policyVersion, '2026-08-04');
 
   const accepted = await worker.fetch(
     request('/v1/events', {
       method: 'POST',
-      body: JSON.stringify(pageView({
-        privacy: { policy_version: policyVersion, region: 'US', gpc: false, opted_out: false },
-      })),
+      body: JSON.stringify(
+        pageView({
+          privacy: { policy_version: policyVersion, region: 'US', gpc: false, opted_out: false },
+        })
+      ),
     }),
     bindings as never,
     {} as never
@@ -464,9 +514,11 @@ test('bootstrap policy version is accepted while a stale version is rejected', a
   const stale = await worker.fetch(
     request('/v1/events', {
       method: 'POST',
-      body: JSON.stringify(pageView({
-        privacy: { policy_version: '2026-08-03', region: 'US', gpc: false, opted_out: false },
-      })),
+      body: JSON.stringify(
+        pageView({
+          privacy: { policy_version: '2026-08-03', region: 'US', gpc: false, opted_out: false },
+        })
+      ),
     }),
     bindings as never,
     {} as never
@@ -502,35 +554,42 @@ test('collector rejects stale, deleted, and cross-funnel context snapshots', asy
 });
 
 test('source runtime readiness requires the launch dependencies', () => {
-  assert.equal(sourceRuntimeReady('pages', [{
-    source: 'pages',
-    source_sha: 'a'.repeat(40),
-    status: 'enabled',
-    context_verifier: 'signed',
-    outbox_reconciliation_owner: 'maestro-platform',
-    dodo_ownership_readback: 'verified',
-  }]), true);
+  assert.equal(
+    sourceRuntimeReady('pages', [
+      {
+        source: 'pages',
+        source_sha: 'a'.repeat(40),
+        status: 'enabled',
+        context_verifier: 'signed',
+        outbox_reconciliation_owner: 'maestro-platform',
+        dodo_ownership_readback: 'verified',
+      },
+    ]),
+    true
+  );
 });
 
 test('source bridge rejects raw buyer context', () => {
-  assert.throws(() => sourceEnvelopeToCanonical(
-    {
-      schema_version: '1',
-      event_id: 'initiate_checkout:session_1',
-      event_name: 'InitiateCheckout',
-      occurred_at: '2026-08-04T12:00:00.000Z',
-      context_hash: 'a'.repeat(64),
-      identity: { lead_id: 'lead_1', funnel_id: 'owned-funnel-builder' },
-      commerce: { content_ids: ['owned-funnel-builder'], content_type: 'product' },
-      privacy: { policy_version: '2026-08-04', region: 'US', gpc: false, opted_out: false },
-      buyer_context: {
-        attribution: { fbclid: 'browser-controlled' },
-        event_source_url: 'https://evil.example.test/controlled-path',
+  assert.throws(() =>
+    sourceEnvelopeToCanonical(
+      {
+        schema_version: '1',
+        event_id: 'initiate_checkout:session_1',
+        event_name: 'InitiateCheckout',
+        occurred_at: '2026-08-04T12:00:00.000Z',
+        context_hash: 'a'.repeat(64),
+        identity: { lead_id: 'lead_1', funnel_id: 'owned-funnel-builder' },
+        commerce: { content_ids: ['owned-funnel-builder'], content_type: 'product' },
+        privacy: { policy_version: '2026-08-04', region: 'US', gpc: false, opted_out: false },
+        buyer_context: {
+          attribution: { fbclid: 'browser-controlled' },
+          event_source_url: 'https://evil.example.test/controlled-path',
+        },
       },
-    },
-    'pages',
-    { TRACKING_TENANT_ID: 'tenant_demo', TRACKING_SITE_ID: 'site_demo' } as never
-  ));
+      'pages',
+      { TRACKING_TENANT_ID: 'tenant_demo', TRACKING_SITE_ID: 'site_demo' } as never
+    )
+  );
 });
 
 test('health output is probe-safe and never echoes secrets or raw identity', async () => {
@@ -579,12 +638,17 @@ test('GPC suppresses advertising browser events without turning the signal into 
 
 test('privacy request returns only a request id and state', async () => {
   const bindings = await env();
-  const firstBootstrap = await worker.fetch(request('/v1/bootstrap'), bindings as never, {} as never);
-  const privacyCookie = (firstBootstrap.headers.get('set-cookie') ?? '')
-    .split(',')
-    .find((cookie) => cookie.trim().startsWith('ma_privacy='))
-    ?.split(';', 1)[0]
-    ?.trim() ?? '';
+  const firstBootstrap = await worker.fetch(
+    request('/v1/bootstrap'),
+    bindings as never,
+    {} as never
+  );
+  const privacyCookie =
+    (firstBootstrap.headers.get('set-cookie') ?? '')
+      .split(',')
+      .find((cookie) => cookie.trim().startsWith('ma_privacy='))
+      ?.split(';', 1)[0]
+      ?.trim() ?? '';
   const csrf = firstBootstrap.headers.get('x-csrf-nonce') ?? '';
   assert.match(privacyCookie, /^ma_privacy=v2\./);
   const forgedChoice = await worker.fetch(
@@ -711,6 +775,52 @@ test('source bridge rejects a shadow runtime before persistence', async () => {
   assert.equal(forged.status, 403);
 });
 
+test('source bridge rejects reduced envelopes while its runtime is shadow-only', async () => {
+  const bindings = await env();
+  const sourceKey = 'pages-source-bridge-key';
+  const payload = JSON.stringify({
+    schema_version: '1',
+    event_id: 'initiate_checkout:session_1',
+    event_name: 'InitiateCheckout',
+    occurred_at: new Date().toISOString(),
+    flow_token_hash: 'a'.repeat(64),
+    identity: { lead_id: 'lead_1', funnel_id: 'funnel_1' },
+    commerce: { content_ids: ['owned-funnel-builder'], content_type: 'product' },
+    buyer_context: { attribution: { fbclid: 'fbclid_1' } },
+  });
+  const timestamp = String(Math.floor(Date.now() / 1000));
+  const nonce = 'nonce-pages-reduced-1';
+  const signature = await crypto.subtle.sign(
+    'HMAC',
+    await crypto.subtle.importKey(
+      'raw',
+      new TextEncoder().encode(sourceKey),
+      { name: 'HMAC', hash: 'SHA-256' },
+      false,
+      ['sign']
+    ),
+    new TextEncoder().encode(`${timestamp}.${nonce}.${payload}`)
+  );
+  const hex = Array.from(new Uint8Array(signature), (byte) =>
+    byte.toString(16).padStart(2, '0')
+  ).join('');
+  const response = await worker.fetch(
+    request('/v1/source-events', {
+      method: 'POST',
+      headers: {
+        'x-tracking-source': 'pages',
+        'x-tracking-timestamp': timestamp,
+        'x-tracking-nonce': nonce,
+        'x-tracking-signature': hex,
+      },
+      body: payload,
+    }),
+    { ...bindings, TRACKING_PAGES_BRIDGE_KEY_CURRENT: sourceKey },
+    {} as never
+  );
+  assert.equal(response.status, 403);
+});
+
 test('scope mismatch is rejected and leaves a durable ignored-not-owner audit', async () => {
   const bindings = await env();
   const response = await worker.fetch(
@@ -740,6 +850,47 @@ test('internal browser claims cannot be called without a Worker context signatur
     {} as never
   );
   assert.equal(response.status, 401);
+});
+
+test('operator kill switch is durable, attributed, and idempotently audited', async () => {
+  const bindings = await env();
+  const response = await worker.fetch(
+    request('/internal/operator/kill-switch', {
+      method: 'POST',
+      headers: { authorization: 'Bearer operator-secret' },
+      body: JSON.stringify({
+        enabled: true,
+        actor: 'on-call@example.test',
+        reason: 'provider mismatch',
+        request_id: 'request_12345678',
+        idempotency_key: 'idem_12345678',
+      }),
+    }),
+    { ...bindings, TRACKING_OPERATOR_TOKEN: 'operator-secret' } as never,
+    {} as never
+  );
+  assert.equal(response.status, 200);
+  assert.deepEqual(
+    {
+      ...(bindings.__database
+        .prepare('SELECT paused, actor, reason, request_id FROM tracking_runtime_controls')
+        .get() as Record<string, unknown>),
+    },
+    {
+      paused: 1,
+      actor: 'on-call@example.test',
+      reason: 'provider mismatch',
+      request_id: 'request_12345678',
+    }
+  );
+  assert.equal(
+    (
+      bindings.__database
+        .prepare('SELECT count(*) AS count FROM tracking_operator_audits')
+        .get() as { count: number }
+    ).count,
+    1
+  );
 });
 
 test('collector rejects oversized request bodies before D1 work', async () => {

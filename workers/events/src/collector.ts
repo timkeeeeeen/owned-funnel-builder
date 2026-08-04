@@ -32,6 +32,7 @@ import {
   loadPrivacyState,
   allows,
   privacyBody,
+  suppressPendingForSubject,
 } from './privacy.ts';
 import { persistCanonicalEvent, type QueueLike } from './outbox.ts';
 import { healthResponse, jsonResponse, redactError } from './observability.ts';
@@ -66,7 +67,9 @@ type EventContext = {
   subject_deleted: boolean;
   policy_version: string;
 };
-type TrackingContextVerifier = (contextHash: string) => EventContext | null | Promise<EventContext | null>;
+type TrackingContextVerifier = (
+  contextHash: string
+) => EventContext | null | Promise<EventContext | null>;
 type TrackingContextSigner = (context: EventContext) => string | Promise<string>;
 
 function base64url(value: Uint8Array): string {
@@ -84,7 +87,8 @@ function decodeBase64url(value: string): Uint8Array | null {
         .replace(/_/g, '/')
         .padEnd(Math.ceil(value.length / 4) * 4, '=')
     );
-    return Uint8Array.from(binary, (character) => character.charCodeAt(0));
+    const decoded = Uint8Array.from(binary, (character) => character.charCodeAt(0));
+    return base64url(decoded) === value ? decoded : null;
   } catch {
     return null;
   }
@@ -209,17 +213,15 @@ export function sourceRuntimeReady(
 ): boolean {
   const runtime = runtimes.find(
     (item) => item && typeof item === 'object' && (item as { source?: unknown }).source === source
-  ) as
-    | Record<string, unknown>
-    | undefined;
+  ) as Record<string, unknown> | undefined;
   return Boolean(
     runtime &&
-      runtime.status !== 'shadow' &&
-      typeof runtime.source_sha === 'string' &&
-      /^[a-f0-9]{40,64}$/i.test(runtime.source_sha) &&
-      runtime.context_verifier === 'signed' &&
-      runtime.outbox_reconciliation_owner &&
-      runtime.dodo_ownership_readback === 'verified'
+    runtime.status !== 'shadow' &&
+    typeof runtime.source_sha === 'string' &&
+    /^[a-f0-9]{40,64}$/i.test(runtime.source_sha) &&
+    runtime.context_verifier === 'signed' &&
+    runtime.outbox_reconciliation_owner &&
+    runtime.dodo_ownership_readback === 'verified'
   );
 }
 
@@ -227,8 +229,8 @@ async function verifyEventContext(
   env: CollectorEnv,
   event: CanonicalEvent,
   contextHash: string | null
-): Promise<boolean> {
-  if (!contextHash) return false;
+): Promise<EventContext | null> {
+  if (!contextHash) return null;
   const verifier = env.TRACKING_CONTEXT_VERIFY;
   const context =
     typeof verifier === 'function'
@@ -236,7 +238,7 @@ async function verifyEventContext(
         ? await verifier(contextHash)
         : null
       : await verifyTrackingContextToken(env, contextHash);
-  if (!context) return false;
+  if (!context) return null;
   const rolloutContext = rolloutState.context;
   const policyVersion = String(privacyPolicy.policy_version);
   if (
@@ -249,8 +251,8 @@ async function verifyEventContext(
     context.policy_version !== policyVersion ||
     event.privacy.policy_version !== policyVersion
   )
-    return false;
-  return true;
+    return null;
+  return context;
 }
 const PUBLIC_BROWSER_EVENTS = new Set<EventName>(['PageView']);
 const AUTHORITATIVE_EVENTS = new Set<EventName>(['Lead', 'InitiateCheckout', 'Purchase']);
@@ -462,7 +464,12 @@ async function bootstrap(request: Request, env: CollectorEnv): Promise<Response>
     return jsonError('not_allowed', 403, request, env);
   const visitor = await visitorId(request, env);
   const privacySubject = await privacySubjectId(request, env);
-  const state = await loadPrivacyState(request, env, visitor ?? undefined, privacySubject ?? undefined);
+  const state = await loadPrivacyState(
+    request,
+    env,
+    visitor ?? undefined,
+    privacySubject ?? undefined
+  );
   const nonce = createCsrfNonce();
   const nextPrivacySubject = privacySubject ?? `privacy_${crypto.randomUUID()}`;
   await env.TRACKING_DB.prepare(
@@ -487,21 +494,22 @@ async function bootstrap(request: Request, env: CollectorEnv): Promise<Response>
     (decision) =>
       (decision.purpose === 'analytics' || decision.purpose === 'advertising') && decision.allowed
   );
-  const context = state.resolved && trackingAllowed
-    ? await env.TRACKING_DB.prepare(
-        `SELECT context_hash FROM tracking_csrf_nonces
+  const context =
+    state.resolved && trackingAllowed
+      ? await env.TRACKING_DB.prepare(
+          `SELECT context_hash FROM tracking_csrf_nonces
          WHERE tenant_id = ? AND site_id = ? AND privacy_subject_id = ?
            AND policy_version = ? AND consumed_at IS NOT NULL AND context_hash IS NOT NULL
          ORDER BY consumed_at DESC LIMIT 1`
-      )
-        .bind(
-          textEnv(env, 'TRACKING_TENANT_ID', 'default'),
-          textEnv(env, 'TRACKING_SITE_ID', 'default'),
-          nextPrivacySubject,
-          state.policyVersion
         )
-        .first<{ context_hash: string }>()
-    : null;
+          .bind(
+            textEnv(env, 'TRACKING_TENANT_ID', 'default'),
+            textEnv(env, 'TRACKING_SITE_ID', 'default'),
+            nextPrivacySubject,
+            state.policyVersion
+          )
+          .first<{ context_hash: string }>()
+      : null;
   const response = jsonResponse(
     {
       schema_version: '1',
@@ -565,8 +573,12 @@ async function browserEvents(
     return jsonError('authoritative_event_requires_source_bridge', 403, request, env);
   if (candidate.source_system !== 'event_worker')
     return jsonError('invalid_browser_source', 403, request, env);
-  if (!(await verifyEventContext(env, candidate, request.headers.get('x-tracking-context-hash'))))
-    return jsonError('invalid_context', 403, request, env);
+  const eventContext = await verifyEventContext(
+    env,
+    candidate,
+    request.headers.get('x-tracking-context-hash')
+  );
+  if (!eventContext) return jsonError('invalid_context', 403, request, env);
   const visitor = await visitorId(request, env);
   const privacySubject = await privacySubjectId(request, env);
   const state = await loadPrivacyState(
@@ -581,10 +593,20 @@ async function browserEvents(
     else await observation;
   }
   if (state.gpc && !allows(state, 'advertising')) {
-    await persistCanonicalEvent(env, projectedEvent(candidate, state), state);
+    await persistCanonicalEvent(
+      env,
+      projectedEvent(candidate, state),
+      state,
+      eventContext.subject_id
+    );
     return jsonResponse({ accepted: true, suppressed: true }, 202, cors(request, env));
   }
-  await persistCanonicalEvent(env, projectedEvent(candidate, state), state);
+  await persistCanonicalEvent(
+    env,
+    projectedEvent(candidate, state),
+    state,
+    eventContext.subject_id
+  );
   return jsonResponse({ accepted: true, suppressed: false }, 202, cors(request, env));
 }
 
@@ -636,8 +658,16 @@ export function sourceEnvelopeToCanonical(
       ? (input.identity as Record<string, unknown>)
       : {};
   const identity: Record<string, string> = {};
-  for (const key of ['lead_id', 'funnel_id', 'checkout_id', 'order_id', 'payment_id', 'external_id']) {
-    if (typeof rawIdentity[key] === 'string' && rawIdentity[key]) identity[key] = rawIdentity[key] as string;
+  for (const key of [
+    'lead_id',
+    'funnel_id',
+    'checkout_id',
+    'order_id',
+    'payment_id',
+    'external_id',
+  ]) {
+    if (typeof rawIdentity[key] === 'string' && rawIdentity[key])
+      identity[key] = rawIdentity[key] as string;
   }
   const rawPrivacy =
     input.privacy && typeof input.privacy === 'object' && !Array.isArray(input.privacy)
@@ -729,14 +759,26 @@ async function sourceEvents(request: Request, env: CollectorEnv): Promise<Respon
     return jsonError('event_scope_mismatch', 403, request, env);
   }
   const contextHash =
-    body && typeof body === 'object' && !Array.isArray(body) &&
-      typeof (body as Record<string, unknown>).context_hash === 'string'
+    body &&
+    typeof body === 'object' &&
+    !Array.isArray(body) &&
+    typeof (body as Record<string, unknown>).context_hash === 'string'
       ? (body as Record<string, string>).context_hash
       : null;
-  if (!(await verifyEventContext(env, event, contextHash)))
-    return jsonError('invalid_context', 403, request, env);
-  const state = await loadPrivacyState(request, env, event.visitor.visitor_id);
-  const result = await persistCanonicalEvent(env, projectedEvent(event, state), state);
+  const eventContext = await verifyEventContext(env, event, contextHash);
+  if (!eventContext) return jsonError('invalid_context', 403, request, env);
+  const state = await loadPrivacyState(
+    request,
+    env,
+    eventContext.subject_id,
+    eventContext.subject_id
+  );
+  const result = await persistCanonicalEvent(
+    env,
+    projectedEvent(event, state),
+    state,
+    eventContext.subject_id
+  );
   return jsonResponse(
     { accepted: true, event_key: result.eventKey, suppressed: result.suppressed },
     202,
@@ -806,14 +848,29 @@ async function privacyMutation(request: Request, env: CollectorEnv): Promise<Res
     .run();
   if (!consumed.success || Number(consumed.meta?.changes ?? 0) !== 1)
     return jsonError('nonce_consumed', 409, request, env);
-  const state = await loadPrivacyState(request, env, visitor ?? undefined, privacySubject ?? undefined);
+  if (!body.purposes.analytics && !body.purposes.advertising) {
+    await suppressPendingForSubject(
+      env,
+      privacySubject ?? visitor!,
+      body.choiceId,
+      'privacy_withdrawal'
+    );
+  }
+  const state = await loadPrivacyState(
+    request,
+    env,
+    visitor ?? undefined,
+    privacySubject ?? undefined
+  );
   return jsonResponse(
     {
       accepted: true,
       choice_id: body.choiceId,
       resolved: state.resolved,
       policy_version: state.policyVersion,
-      purposes: state.decisions.filter((decision) => decision.allowed).map((decision) => decision.purpose),
+      purposes: state.decisions
+        .filter((decision) => decision.allowed)
+        .map((decision) => decision.purpose),
     },
     202,
     cors(request, env)
@@ -938,6 +995,43 @@ async function browserClaims(request: Request, env: CollectorEnv): Promise<Respo
   );
 }
 
+function operatorMetadata(input: Record<string, unknown>): {
+  actor: string;
+  reason: string;
+  requestId: string;
+  idempotencyKey: string;
+  secondApprover: string | null;
+} | null {
+  const actor = input.actor;
+  const reason = input.reason;
+  const requestId = input.request_id;
+  const idempotencyKey = input.idempotency_key;
+  const secondApprover = input.second_approver;
+  if (
+    typeof actor !== 'string' ||
+    !/^[A-Za-z0-9@._:-]{3,128}$/.test(actor) ||
+    typeof reason !== 'string' ||
+    reason.trim().length < 8 ||
+    reason.length > 256 ||
+    typeof requestId !== 'string' ||
+    !/^[A-Za-z0-9:_-]{8,128}$/.test(requestId) ||
+    typeof idempotencyKey !== 'string' ||
+    !/^[A-Za-z0-9:_-]{8,128}$/.test(idempotencyKey) ||
+    (secondApprover !== undefined &&
+      (typeof secondApprover !== 'string' ||
+        !/^[A-Za-z0-9@._:-]{3,128}$/.test(secondApprover) ||
+        secondApprover === actor))
+  )
+    return null;
+  return {
+    actor,
+    reason: reason.trim(),
+    requestId,
+    idempotencyKey,
+    secondApprover: typeof secondApprover === 'string' ? secondApprover : null,
+  };
+}
+
 async function operatorRoute(request: Request, env: CollectorEnv): Promise<Response> {
   const configured = textEnv(env, 'TRACKING_OPERATOR_TOKEN');
   if (!configured || request.headers.get('authorization') !== `Bearer ${configured}`)
@@ -946,23 +1040,67 @@ async function operatorRoute(request: Request, env: CollectorEnv): Promise<Respo
   if (!body || typeof body !== 'object' || Array.isArray(body))
     return jsonError('invalid_request', 400, request, env);
   const input = body as Record<string, unknown>;
+  const metadata = operatorMetadata(input);
+  if (!metadata) return jsonError('invalid_operator_audit', 400, request, env);
   const path = new URL(request.url).pathname;
   if (path === '/internal/operator/kill-switch') {
     if (typeof input.enabled !== 'boolean') return jsonError('invalid_request', 400, request, env);
-    env.TRACKING_KILL_SWITCH = input.enabled ? 'true' : 'false';
-    await env.TRACKING_DB.prepare(
-      `INSERT INTO tracking_scope_audits
-         (audit_id, tenant_id, site_id, source_system, result, reason, created_at)
-         VALUES (?, ?, ?, 'operator', 'accepted', ?, ?)`
-    )
-      .bind(
+    const tenantId = textEnv(env, 'TRACKING_TENANT_ID', 'default');
+    const siteId = textEnv(env, 'TRACKING_SITE_ID', 'default');
+    const now = new Date().toISOString();
+    const statements = [
+      env.TRACKING_DB.prepare(
+        `INSERT INTO tracking_runtime_controls
+         (control_key, tenant_id, site_id, paused, actor, reason, request_id,
+          second_approver, updated_at)
+         VALUES ('global', ?, ?, ?, ?, ?, ?, ?, ?)
+         ON CONFLICT(control_key) DO UPDATE SET paused = excluded.paused,
+           actor = excluded.actor, reason = excluded.reason, request_id = excluded.request_id,
+           second_approver = excluded.second_approver, updated_at = excluded.updated_at`
+      ).bind(
+        tenantId,
+        siteId,
+        input.enabled ? 1 : 0,
+        metadata.actor,
+        metadata.reason,
+        metadata.requestId,
+        metadata.secondApprover,
+        now
+      ),
+      env.TRACKING_DB.prepare(
+        `INSERT INTO tracking_operator_audits
+         (audit_id, tenant_id, site_id, operation, actor, reason, request_id,
+          idempotency_key, second_approver, created_at)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+         ON CONFLICT(tenant_id, site_id, idempotency_key) DO NOTHING`
+      ).bind(
         crypto.randomUUID(),
-        textEnv(env, 'TRACKING_TENANT_ID', 'default'),
-        textEnv(env, 'TRACKING_SITE_ID', 'default'),
-        input.enabled ? 'kill_switch_enabled' : 'kill_switch_disabled',
-        new Date().toISOString()
-      )
-      .run();
+        tenantId,
+        siteId,
+        input.enabled ? 'kill_switch_pause' : 'kill_switch_resume',
+        metadata.actor,
+        metadata.reason,
+        metadata.requestId,
+        metadata.idempotencyKey,
+        metadata.secondApprover,
+        now
+      ),
+    ];
+    if (!input.enabled) {
+      statements.push(
+        env.TRACKING_DB.prepare(
+          `UPDATE tracking_deliveries SET state = 'retryable', outcome = NULL,
+           last_error = NULL, updated_at = ? WHERE state = 'paused'`
+        ).bind(now),
+        env.TRACKING_DB.prepare(
+          `UPDATE tracking_outbox SET state = 'retryable', next_attempt_at = ?,
+           last_error = NULL, updated_at = ? WHERE state = 'paused'`
+        ).bind(now, now)
+      );
+    }
+    const results = await env.TRACKING_DB.batch(statements);
+    if (results.some((result) => !result.success))
+      return jsonError('operator_write_failed', 503, request, env);
     return jsonResponse({ accepted: true, enabled: input.enabled });
   }
   if (path === '/internal/operator/replay') {

@@ -35,7 +35,7 @@ export async function runCleanup(
       )
       .bind(cutoff)
       .run();
-    expiredDeliveries = delivery.meta?.changes ?? 0;
+    expiredDeliveries += delivery.meta?.changes ?? 0;
     await database
       .prepare(
         `DELETE FROM tracking_outbox
@@ -70,8 +70,9 @@ export async function reclaimExpiredLeases(
     const result = await database
       .prepare(
         `UPDATE tracking_deliveries
-         SET state = 'retryable', lease_until = NULL, updated_at = ?
-         WHERE state = 'sending' AND lease_until IS NOT NULL AND lease_until < ?`
+         SET state = 'retryable', lease_until = NULL, lease_deadline = NULL,
+           lease_owner = NULL, updated_at = ?
+         WHERE state = 'sending' AND lease_deadline IS NOT NULL AND lease_deadline < ?`
       )
       .bind(timestamp, timestamp)
       .run();

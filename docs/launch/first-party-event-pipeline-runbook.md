@@ -24,6 +24,13 @@ missed run is an alert, not permission to run an unbounded catch-up. Operators
 replay a bounded set through the authenticated operator route and retain the
 same event/destination key.
 
+The launch volume model is a 10-event/second peak. The main consumer is pinned
+to 50-message batches, four concurrent consumers, a 15-second retry delay, and
+five automatic retries before the DLQ. At four batches/minute per consumer the
+conservative capacity is 800 events/minute, so a one-minute 600-event peak
+clears within the five-minute SLO. Revisit concurrency only when measured
+provider latency invalidates that model; never hide backlog by raising retries.
+
 ## Route and trust boundaries
 
 `TRACKING_HOST` and `TRACKING_ALLOWED_ORIGINS` are exact allowlists. Public
@@ -48,10 +55,12 @@ it pins Host but intentionally does not require an Origin header.
   and composite source-scoped nonce idempotency. Raw buyer identity is not
   accepted.
 - `POST /internal/browser-claims` is Worker-only and requires a context HMAC;
-  it returns safe payment identifiers only. It cannot create canonical events.
+  it cannot create canonical events. Keep it shadow-only until the Task 8
+  committed-source contract and safe claim payload tests are reviewed.
 - `POST /internal/operator/replay` and `/internal/operator/kill-switch` require
-  the operator bearer credential. Every operation is bounded, auditable, and
-  rejects browser/source credentials.
+  the operator bearer credential plus actor, reason, request ID, and
+  idempotency key; high-risk runs may require a distinct second approver. Every
+  operation is bounded, auditable, and rejects browser/source credentials.
 
 ## Queue and D1 recovery
 
@@ -64,11 +73,21 @@ written to `tracking_dlq_records` before acknowledgement. The DLQ consumer
 does not automatically resend; replay is an explicit operator action.
 
 The canonical event, outbox row, and destination rows are inserted through one
-D1 batch. Duplicate event IDs reuse the event key. The source bridge and
-provider mapping schema is hardened by
-`workers/events/migrations/0002_tracking_scope_hardening.sql`; public traffic
-is forbidden until the migration runner has applied both migrations in lexical
-order and recorded the exact release SHA.
+D1 batch, including canonical and destination payload hashes. Duplicate event
+IDs reuse the event key only when the canonical hash also matches. Migration
+`0004_delivery_safety.sql` adds the hash, transform, lease-owner, fencing-token,
+durable kill-switch, and operator-audit contract. Public traffic is forbidden
+until the migration runner has applied `0001` through `0004` in lexical order
+under the forward-only lock and recorded the exact reviewed release SHA.
+
+## Secret binding contract
+
+Wrangler commits binding names and key IDs only. Provision secret values out of
+band for `TRACKING_CONTEXT_SIGNING_KEY_CURRENT`, optional
+`TRACKING_CONTEXT_SIGNING_KEY_PREVIOUS`, cookie-signing keys, identity HMAC
+keys, per-source bridge keys, the operator token, and destination credentials.
+Never place those values in Wrangler vars, logs, the runbook, or D1. Context
+signing must fail closed when the current secret is absent.
 
 ## Change and rollback procedure
 

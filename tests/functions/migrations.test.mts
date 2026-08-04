@@ -103,4 +103,24 @@ test('tracking migration creates only tracking tables', async () => {
   assert.ok(tables.some(({ name }) => name === 'tracking_events'));
   assert.ok(tables.every(({ name }) => name === 'sqlite_sequence' || name.startsWith('tracking_')));
   assert.throws(() => database.prepare('SELECT * FROM checkout_leads').all());
+
+  const eventColumns = database.prepare('PRAGMA table_info(tracking_events)').all();
+  assert.ok(eventColumns.some(({ name }) => name === 'canonical_payload_hash'));
+  assert.ok(eventColumns.some(({ name }) => name === 'privacy_subject_id'));
+  const deliveryColumns = database.prepare('PRAGMA table_info(tracking_deliveries)').all();
+  for (const name of [
+    'destination_payload_hash',
+    'transform_version',
+    'transform_metadata_json',
+    'lease_owner',
+    'fencing_token',
+    'lease_deadline',
+  ]) {
+    assert.ok(
+      deliveryColumns.some((column) => column.name === name),
+      `missing ${name}`
+    );
+  }
+  assert.ok(tables.some(({ name }) => name === 'tracking_runtime_controls'));
+  assert.ok(tables.some(({ name }) => name === 'tracking_operator_audits'));
 });

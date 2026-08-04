@@ -199,6 +199,50 @@ export async function recordGpcObservation(
   }
 }
 
+export async function suppressPendingForSubject(
+  env: Record<string, unknown>,
+  subjectId: string,
+  choiceId: string,
+  reason = 'privacy_withdrawal'
+): Promise<void> {
+  const database = env.TRACKING_DB as D1Database | undefined;
+  if (!database) throw new Error('tracking_database_unavailable');
+  const tenantId = envString(env, 'TRACKING_TENANT_ID', 'default');
+  const siteId = envString(env, 'TRACKING_SITE_ID', 'default');
+  const now = new Date().toISOString();
+  const eventScope = `SELECT event_key FROM tracking_events
+    WHERE tenant_id = ? AND site_id = ? AND privacy_subject_id = ?`;
+  const statements = [
+    database
+      .prepare(
+        `INSERT INTO tracking_suppression_tombstones
+         (suppression_key, tenant_id, site_id, visitor_id, reason, created_at)
+         VALUES (?, ?, ?, ?, ?, ?)
+         ON CONFLICT(suppression_key) DO UPDATE SET reason = excluded.reason,
+           created_at = excluded.created_at`
+      )
+      .bind(`privacy:${choiceId}`, tenantId, siteId, subjectId, reason, now),
+    database
+      .prepare(
+        `UPDATE tracking_deliveries
+         SET state = 'suppressed', outcome = 'suppressed', lease_until = NULL,
+           lease_deadline = NULL, lease_owner = NULL, last_error = ?, updated_at = ?
+         WHERE event_key IN (${eventScope})
+           AND state IN ('pending', 'retryable', 'sending', 'paused')`
+      )
+      .bind(reason, now, tenantId, siteId, subjectId),
+    database
+      .prepare(
+        `UPDATE tracking_outbox SET state = 'suppressed', last_error = ?, updated_at = ?
+         WHERE event_key IN (${eventScope})
+           AND state IN ('pending', 'retryable', 'sending', 'paused')`
+      )
+      .bind(reason, now, tenantId, siteId, subjectId),
+  ];
+  const results = await database.batch(statements);
+  if (results.some((result) => !result.success)) throw new Error('privacy_suppression_failed');
+}
+
 export function privacyBody(value: unknown): {
   choiceId: string;
   policyVersion: string;
