@@ -58,17 +58,19 @@ async function env() {
     TRACKING_POLICY_VERSION: '2026-08',
     TRACKING_REGION: 'US',
     TRACKING_FAIL_CLOSED: false,
-    TRACKING_CONTEXT_VERIFY: (hash: string) => hash === 'a'.repeat(64)
-      ? {
-          tenant_id: 'tenant_demo',
-          site_id: 'site_demo',
-          funnel_id: 'owned-funnel-builder',
-          subject_id: 'worker-subject',
-          subject_deleted: false,
-          policy_version: '2026-08-04',
-        }
-      : null,
-    TRACKING_CONTEXT_SIGN: () => 'a'.repeat(64),
+    TRACKING_CONTEXT_SIGNING_KEY_CURRENT: 'production-shaped-context-secret-key-2026',
+    TRACKING_CONTEXT_SIGNING_KEY_ID_CURRENT: 'current',
+    TRACKING_CONTEXT_VERIFY: (hash: string) =>
+      hash === 'a'.repeat(64)
+        ? {
+            tenant_id: 'tenant_demo',
+            site_id: 'site_demo',
+            funnel_id: 'owned-funnel-builder',
+            subject_id: 'worker-subject',
+            subject_deleted: false,
+            policy_version: '2026-08-04',
+          }
+        : null,
     __database: database,
   } as const;
 }
@@ -208,6 +210,11 @@ test('one privacy action atomically consumes its bound nonce and returns server-
     bindings as never,
     {} as never
   );
+  assert.match(
+    ((await secondBootstrap.clone().json()) as { tracking_context_hash: string })
+      .tracking_context_hash,
+    /^v1\.current\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]{43}$/
+  );
   const withdrawId = `choice:${crypto.randomUUID()}`;
   const withdrawn = await worker.fetch(
     request('/v1/privacy', {
@@ -237,6 +244,28 @@ test('one privacy action atomically consumes its bound nonce and returns server-
       .map((row) => ({ ...row })),
     [{ action: 'customize' }, { action: 'withdraw' }]
   );
+});
+
+test('privacy grants fail closed when the production context-signing secret is missing', async () => {
+  const { TRACKING_CONTEXT_SIGNING_KEY_CURRENT: _missing, ...bindings } = await env();
+  const bootstrap = await worker.fetch(request('/v1/bootstrap'), bindings as never, {} as never);
+  const cookie = (bootstrap.headers.get('set-cookie') ?? '').split(';', 1)[0];
+  const response = await worker.fetch(
+    request('/v1/privacy', {
+      method: 'POST',
+      headers: { cookie, 'x-csrf-nonce': bootstrap.headers.get('x-csrf-nonce') ?? '' },
+      body: JSON.stringify({
+        schema_version: '1',
+        choice_id: `choice:${crypto.randomUUID()}`,
+        policy_version: '2026-08-04',
+        action: 'accept',
+        purposes: { analytics: true, advertising: true },
+      }),
+    }),
+    bindings as never,
+    {} as never
+  );
+  assert.equal(response.status, 503);
 });
 
 test('browser collector accepts PageView, is idempotent, and blocks authoritative events', async () => {

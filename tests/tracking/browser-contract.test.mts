@@ -22,9 +22,13 @@ test('the browser has one consent-gated tracker and no legacy Admaxxer pixel bou
   assert.match(tracker, /source_system:\s*['"]event_worker['"]/);
   assert.match(tracker, /x-csrf-nonce/);
   assert.match(tracker, /x-tracking-context-hash/);
+  assert.match(tracker, /v1\\\./);
   assert.match(tracker, /policy_version/);
   assert.match(tracker, /effectivePurposes/);
-  assert.match(tracker, /sent\.add\(id\)[\s\S]*trackPixel\(['"]PageView['"][\s\S]*collect\(safe, id/);
+  assert.match(
+    tracker,
+    /sent\.add\(id\)[\s\S]*trackPixel\(['"]PageView['"][\s\S]*collect\(safe, id/
+  );
   assert.doesNotMatch(tracker, /sent\.add\(id\)[\s\S]{0,250}ensureBootstrap/);
   assert.match(tracker, /new URL\(configuredCollectorUrl\)/);
   assert.match(tracker, /events\.shop\.maestrogtm\.com/);

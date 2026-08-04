@@ -1,4 +1,6 @@
 {
+  // Secret bindings are provisioned by Task 6 with `wrangler secret put`; values are never committed:
+  // TRACKING_CONTEXT_SIGNING_KEY_CURRENT and TRACKING_CONTEXT_SIGNING_KEY_PREVIOUS.
   "name": "maestro-first-party-events",
   "main": "src/index.ts",
   "compatibility_date": "2026-08-01",
@@ -38,6 +40,7 @@
     "TRACKING_ENVIRONMENT": "preview",
     "TRACKING_POLICY_VERSION": "2026-08-04",
     "TRACKING_REGION": "US",
+    "TRACKING_CONTEXT_SIGNING_KEY_ID_CURRENT": "preview-current",
     "TRACKING_IP_RATE_LIMIT": "60",
     "TRACKING_VISITOR_RATE_LIMIT": "120",
     "TRACKING_TENANT_RATE_LIMIT": "10000",
@@ -77,6 +80,7 @@
       },
       "vars": {
         "TRACKING_ENVIRONMENT": "live",
+        "TRACKING_CONTEXT_SIGNING_KEY_ID_CURRENT": "live-current",
         "EVENTS_DLQ_NAME": "maestro-events-live-dlq",
       },
     },

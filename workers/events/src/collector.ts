@@ -39,6 +39,7 @@ import { healthResponse, jsonResponse, redactError } from './observability.ts';
 export type CollectorEnv = Record<string, unknown> & {
   TRACKING_DB: D1Database;
   EVENTS_QUEUE?: QueueLike;
+  TRACKING_CONTEXT_SIGN?: TrackingContextSigner;
   TRACKING_CONTEXT_VERIFY?: TrackingContextVerifier;
 };
 
@@ -68,7 +69,50 @@ type EventContext = {
 type TrackingContextVerifier = (contextHash: string) => EventContext | null | Promise<EventContext | null>;
 type TrackingContextSigner = (context: EventContext) => string | Promise<string>;
 
-function projectedEvent(event: CanonicalEvent, state: { decisions: Parameters<typeof projectPermittedFields>[1] }): CanonicalEvent {
+function base64url(value: Uint8Array): string {
+  let binary = '';
+  for (const byte of value) binary += String.fromCharCode(byte);
+  return btoa(binary).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+}
+
+async function signTrackingContext(
+  env: CollectorEnv,
+  context: EventContext
+): Promise<string | null> {
+  if (typeof env.TRACKING_CONTEXT_SIGN === 'function') return env.TRACKING_CONTEXT_SIGN(context);
+  const secret = env.TRACKING_CONTEXT_SIGNING_KEY_CURRENT;
+  const keyId = textEnv(env, 'TRACKING_CONTEXT_SIGNING_KEY_ID_CURRENT');
+  if (typeof secret !== 'string' || secret.length < 32 || !/^[A-Za-z0-9_-]{1,64}$/.test(keyId))
+    return null;
+  const key = await crypto.subtle.importKey(
+    'raw',
+    new TextEncoder().encode(secret),
+    { name: 'HMAC', hash: 'SHA-256' },
+    false,
+    ['sign']
+  );
+  const payload = base64url(
+    new TextEncoder().encode(
+      JSON.stringify([
+        context.tenant_id,
+        context.site_id,
+        context.funnel_id,
+        context.subject_id,
+        context.subject_deleted ? 1 : 0,
+        context.policy_version,
+        Math.floor(Date.now() / 1000) + 300,
+      ])
+    )
+  );
+  const unsigned = `v1.${keyId}.${payload}`;
+  const signature = await crypto.subtle.sign('HMAC', key, new TextEncoder().encode(unsigned));
+  return `${unsigned}.${base64url(new Uint8Array(signature))}`;
+}
+
+function projectedEvent(
+  event: CanonicalEvent,
+  state: { decisions: Parameters<typeof projectPermittedFields>[1] }
+): CanonicalEvent {
   validateTrackingArtifacts(trackingControls);
   return projectPermittedFields(event, state.decisions, trackingFieldPolicy);
 }
@@ -625,12 +669,9 @@ async function privacyMutation(request: Request, env: CollectorEnv): Promise<Res
   if (!visitor && !privacySubject) return jsonError('verification_required', 403, request, env);
   const policyVersion = String(privacyPolicy.policy_version);
   if (body.policyVersion !== policyVersion) return jsonError('stale_policy', 409, request, env);
-  const signer = env.TRACKING_CONTEXT_SIGN as TrackingContextSigner | undefined;
   const trackingAllowed = body.purposes.analytics || body.purposes.advertising;
-  if (trackingAllowed && typeof signer !== 'function')
-    return jsonError('context_signer_unavailable', 503, request, env);
   const contextHash = trackingAllowed
-    ? await signer!({
+    ? await signTrackingContext(env, {
         tenant_id: textEnv(env, 'TRACKING_TENANT_ID', 'default'),
         site_id: textEnv(env, 'TRACKING_SITE_ID', 'default'),
         funnel_id: rolloutState.context.bound_funnel,
@@ -639,7 +680,14 @@ async function privacyMutation(request: Request, env: CollectorEnv): Promise<Res
         policy_version: policyVersion,
       })
     : null;
-  if (contextHash && !/^[A-Za-z0-9_-]{16,256}$/.test(contextHash))
+  if (trackingAllowed && !contextHash)
+    return jsonError('context_signer_unavailable', 503, request, env);
+  if (
+    contextHash &&
+    !/^(?:[A-Za-z0-9_-]{16,256}|v1\.[A-Za-z0-9_-]{1,64}\.[A-Za-z0-9_-]{16,512}\.[A-Za-z0-9_-]{43})$/.test(
+      contextHash
+    )
+  )
     return jsonError('invalid_signed_context', 503, request, env);
   const now = new Date().toISOString();
   const consumed = await env.TRACKING_DB.prepare(
