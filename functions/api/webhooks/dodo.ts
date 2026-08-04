@@ -2,6 +2,7 @@ import DodoPayments from 'dodopayments';
 
 import { getProductDefinition } from '../../_generated/funnels';
 import { recordAdmaxxerPayment } from '../../_lib/admaxxer';
+import { minorUnitsToMajor } from '../../_lib/admaxxer';
 import { deliverPurchase } from '../../_lib/fulfillment';
 import {
   cleanString,
@@ -11,6 +12,12 @@ import {
   type Environment,
   type PagesContext,
 } from '../../_lib/runtime';
+import {
+  drainSourceEvent,
+  providerMappingStatement,
+  sourceOutboxStatement,
+  sourcePayloadHash,
+} from '../../_lib/source-outbox';
 
 interface PaymentEventData {
   payment_id?: unknown;
@@ -158,7 +165,8 @@ async function markPaymentSucceeded(
   env: Environment,
   database: D1Database,
   data: PaymentEventData,
-  metadata: Record<string, string>
+  metadata: Record<string, string>,
+  webhookId: string
 ): Promise<void> {
   const paymentId = cleanString(data.payment_id, 180);
   const leadId = metadata.lead_id;
@@ -177,37 +185,101 @@ async function markPaymentSucceeded(
   await assertPaymentMatchesCatalog(database, data, metadata);
 
   const now = new Date().toISOString();
-  if (metadata.step_key) {
+  const tenantId = cleanString(env.TRACKING_TENANT_ID, 128) || 'owned-funnel-builder';
+  const siteId = cleanString(env.TRACKING_SITE_ID, 128) || 'shop.maestrogtm.com';
+  const existingMapping = await database
+    .prepare(
+      `SELECT source_event_id FROM source_tracking_provider_mappings
+       WHERE tenant_id = ? AND site_id = ? AND provider = 'dodo'
+         AND provider_object_id = ? AND event_name = 'Purchase'`
+    )
+    .bind(tenantId, siteId, paymentId)
+    .first<{ source_event_id: string }>();
+  if (existingMapping) {
     await database
       .prepare(
+        `INSERT INTO source_tracking_delivery_audit (
+          tenant_id, site_id, source_event_id, owner, result, created_at
+        ) VALUES (?, ?, ?, ?, 'ignored_not_owner', ?)`
+      )
+      .bind(tenantId, siteId, existingMapping.source_event_id, webhookId, now)
+      .run();
+    return;
+  }
+  const businessStatements = [];
+  if (metadata.step_key) {
+    businessStatements.push(
+      database.prepare(
         `UPDATE funnel_step_runs
          SET status = 'accepted', dodo_payment_id = ?, updated_at = ?
          WHERE funnel_id = ? AND step_key = ?`
       )
       .bind(paymentId, now, funnelId, metadata.step_key)
-      .run();
+    );
   } else {
     const customerId = cleanString(data.customer?.customer_id ?? data.customer_id, 180);
     const paymentMethodId = cleanString(data.payment_method_id, 180);
     if (!customerId) throw new Error('The payment event is missing the customer ID.');
-    await database
-      .prepare(
+    businessStatements.push(
+      database.prepare(
         `UPDATE funnel_runs
          SET base_status = 'succeeded', base_payment_id = ?, dodo_customer_id = ?,
              dodo_payment_method_id = COALESCE(dodo_payment_method_id, ?), updated_at = ?
          WHERE id = ?`
       )
       .bind(paymentId, customerId, paymentMethodId || null, now, funnelId)
-      .run();
-    await database
-      .prepare(
+    );
+    businessStatements.push(
+      database.prepare(
         `UPDATE checkout_leads
          SET status = 'converted', dodo_payment_id = ?, updated_at = ?
          WHERE id = ?`
       )
       .bind(paymentId, now, leadId)
-      .run();
+    );
   }
+
+  const contents = [metadata.product_key, metadata.bump_product_key]
+    .filter(Boolean)
+    .map((id) => ({ id, quantity: 1 }));
+  const flow = await database
+    .prepare('SELECT token_hash FROM funnel_runs WHERE id = ?')
+    .bind(funnelId)
+    .first<{ token_hash: string }>();
+  const currency = cleanString(data.currency, 3).toUpperCase();
+  const purchaseSourceEventId = `purchase:${paymentId}`;
+  const purchasePayload = {
+    schema_version: '1',
+    event_id: purchaseSourceEventId,
+    event_name: 'Purchase',
+    occurred_at: now,
+    identity: {
+      lead_id: leadId,
+      funnel_id: funnelId,
+      payment_id: paymentId,
+      flow_token_hash: cleanString(flow?.token_hash, 128),
+    },
+    commerce: {
+      payment_id: paymentId,
+      value: minorUnitsToMajor(data.total_amount as number, currency),
+      currency,
+      contents,
+    },
+  };
+  const purchaseEvent = {
+    tenantId,
+    siteId,
+    sourceEventId: purchaseSourceEventId,
+    eventName: 'Purchase' as const,
+    occurredAt: now,
+    payload: purchasePayload,
+    payloadHash: await sourcePayloadHash(purchasePayload),
+  };
+  businessStatements.push(sourceOutboxStatement(database, purchaseEvent));
+  businessStatements.push(providerMappingStatement(database, purchaseEvent, 'dodo', paymentId));
+  const businessResult = await database.batch(businessStatements);
+  if (businessResult.some((result) => !result.success)) throw new Error('Payment capture failed.');
+  if (env.TRACKING_SOURCE_BRIDGE) await drainSourceEvent(database, env, purchaseSourceEventId);
 
   if (!getProductDefinition(productKey)) throw new Error('Purchased product is not configured.');
   await deliverPurchase(env, database, { paymentId, productKey, leadId, provider: 'dodo' });
@@ -328,7 +400,7 @@ export async function processDodoWebhookPayload(
     const isOwnedFunnelEvent = source === 'owned-funnel-builder';
     const isIntentionalNoOp = source === 'owned-funnel-diagnostic' || !source;
     if (eventType === 'payment.succeeded' && payload.data && isOwnedFunnelEvent) {
-      await markPaymentSucceeded(env, database, payload.data, metadata);
+      await markPaymentSucceeded(env, database, payload.data, metadata, webhookId);
     } else if (eventType === 'payment.failed' && isOwnedFunnelEvent) {
       await markPaymentFailed(database, metadata);
     } else if (

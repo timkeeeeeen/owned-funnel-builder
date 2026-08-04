@@ -20,6 +20,7 @@ import {
   stripeRequest,
   validateStripeCheckoutUrl,
 } from '../_lib/stripe';
+import { drainSourceEvent, sourceOutboxStatement, sourcePayloadHash } from '../_lib/source-outbox';
 import { MARKETING_CONSENT_COPY, MARKETING_CONSENT_VERSION } from '../../src/data/emailConsent';
 
 interface CheckoutRequest {
@@ -96,6 +97,31 @@ function sanitizeAdmaxxerVisitorId(value: unknown): string {
   return ADMAXXER_VISITOR_ID_PATTERN.test(visitorId) ? visitorId : '';
 }
 
+function trackingCookie(request: Request, name: 'fbp' | 'fbc'): string {
+  const value = request.headers
+    .get('cookie')
+    ?.split(';')
+    .map((part) => part.trim().split('='))
+    .find(([key]) => key === `_${name}`)?.[1];
+  return value && /^[A-Za-z0-9._-]{1,256}$/.test(value) ? value : '';
+}
+
+function safeSourceUrl(value: string): string {
+  try {
+    const url = new URL(value);
+    return url.protocol === 'https:' ? `${url.origin}${url.pathname}` : '';
+  } catch {
+    return '';
+  }
+}
+
+function sourceScope(env: PagesContext['env'], requestUrl: URL): { tenantId: string; siteId: string } {
+  return {
+    tenantId: cleanString(env.TRACKING_TENANT_ID, 128) || 'owned-funnel-builder',
+    siteId: cleanString(env.TRACKING_SITE_ID, 128) || requestUrl.hostname,
+  };
+}
+
 async function parseRequest(request: Request): Promise<CheckoutRequest> {
   const contentLength = Number(request.headers.get('content-length') ?? '0');
   if (contentLength > MAX_BODY_BYTES) {
@@ -165,6 +191,7 @@ export async function onRequestPost(context: PagesContext): Promise<Response> {
 
   let leadId = '';
   let offerSlug = '';
+  let leadEvent: { event_id: string; event_name: 'Lead' } | null = null;
 
   try {
     const input = await parseRequest(request);
@@ -226,8 +253,32 @@ export async function onRequestPost(context: PagesContext): Promise<Response> {
       (request as Request & { cf?: { country?: unknown } }).cf?.country,
       2
     ).toUpperCase();
-
-    const insertResult = await env.LEADS.prepare(
+    const scope = sourceScope(env, requestUrl);
+    const buyerContext = {
+      ...(trackingCookie(request, 'fbp') ? { fbp: trackingCookie(request, 'fbp') } : {}),
+      ...(trackingCookie(request, 'fbc') ? { fbc: trackingCookie(request, 'fbc') } : {}),
+      ...(cleanString(request.headers.get('cf-connecting-ip'), 64)
+        ? { client_ip_address: cleanString(request.headers.get('cf-connecting-ip'), 64) }
+        : {}),
+      ...(cleanString(request.headers.get('user-agent'), 512)
+        ? { client_user_agent: cleanString(request.headers.get('user-agent'), 512) }
+        : {}),
+      ...(safeSourceUrl(referrer) ? { source_url: safeSourceUrl(referrer) } : {}),
+      attribution,
+      captured_at: now,
+    };
+    const leadSourceEventId = `lead:${leadId}`;
+    const leadPayload = {
+      schema_version: '1',
+      event_id: leadSourceEventId,
+      event_name: 'Lead',
+      occurred_at: now,
+      flow_token_hash: flowTokenHash,
+      identity: { lead_id: leadId, funnel_id: funnelId },
+      buyer_context: buyerContext,
+    };
+    leadEvent = { event_id: leadSourceEventId, event_name: 'Lead' };
+    const leadStatement = env.LEADS.prepare(
       `INSERT INTO checkout_leads (
         id, email, offer_slug, placement, marketing_consent, consent_version,
         attribution_json, referrer, country, status, bump_selected, admaxxer_visitor_id,
@@ -249,12 +300,12 @@ export async function onRequestPost(context: PagesContext): Promise<Response> {
         paymentProvider,
         now,
         now
-      )
-      .run();
-    if (!insertResult.success) throw new Error('Lead capture failed.');
+      );
+
+    const businessStatements = [leadStatement];
 
     if (marketingOptIn) {
-      const subscriberResult = await env.LEADS.prepare(
+      businessStatements.push(env.LEADS.prepare(
         `INSERT INTO email_subscribers (
           id, email, offer_slug, status, consent_version, consent_copy,
           source_placement, consented_at, created_at, updated_at
@@ -274,35 +325,42 @@ export async function onRequestPost(context: PagesContext): Promise<Response> {
           now,
           now,
           now
-        )
-        .run();
-      if (!subscriberResult.success) throw new Error('Marketing opt-in could not be recorded.');
-      await env.LEADS.prepare(
+        ));
+      businessStatements.push(env.LEADS.prepare(
         "DELETE FROM email_suppressions WHERE email = ? AND reason = 'unsubscribe'"
       )
-        .bind(email)
-        .run();
+        .bind(email));
     }
 
-    const funnelResult = await env.LEADS.prepare(
+    businessStatements.push(env.LEADS.prepare(
       `INSERT INTO funnel_runs (
         id, lead_id, offer_slug, token_hash, payment_provider, created_at, updated_at
       ) VALUES (?, ?, ?, ?, ?, ?, ?)`
     )
-      .bind(funnelId, leadId, offerSlug, flowTokenHash, paymentProvider, now, now)
-      .run();
-    if (!funnelResult.success) throw new Error('Checkout funnel initialization failed.');
+      .bind(funnelId, leadId, offerSlug, flowTokenHash, paymentProvider, now, now));
 
     for (const step of definition.upsells) {
-      const stepResult = await env.LEADS.prepare(
+      businessStatements.push(env.LEADS.prepare(
         `INSERT INTO funnel_step_runs (
           id, funnel_id, step_key, ordinal, created_at, updated_at
         ) VALUES (?, ?, ?, ?, ?, ?)`
       )
-        .bind(crypto.randomUUID(), funnelId, step.key, step.ordinal, now, now)
-        .run();
-      if (!stepResult.success) throw new Error('Checkout step initialization failed.');
+        .bind(crypto.randomUUID(), funnelId, step.key, step.ordinal, now, now));
     }
+    businessStatements.push(
+      sourceOutboxStatement(env.LEADS, {
+        tenantId: scope.tenantId,
+        siteId: scope.siteId,
+        sourceEventId: leadSourceEventId,
+        eventName: 'Lead',
+        occurredAt: now,
+        payload: leadPayload,
+        payloadHash: await sourcePayloadHash(leadPayload),
+      })
+    );
+    const businessResult = await env.LEADS.batch(businessStatements);
+    if (businessResult.some((result) => !result.success)) throw new Error('Lead capture failed.');
+    if (env.TRACKING_SOURCE_BRIDGE) await drainSourceEvent(env.LEADS, env, leadSourceEventId);
 
     const configuredReturnUrl =
       paymentProvider === 'dodo' ? readEnvironmentValue(env, 'DODO_PAYMENTS_RETURN_URL') : '';
@@ -353,13 +411,25 @@ export async function onRequestPost(context: PagesContext): Promise<Response> {
       const sessionId = cleanString(session.id, 180);
       if (!sessionId) throw new Error('Stripe did not return a checkout session ID.');
 
-      await env.LEADS.prepare(
+      const initiateEventId = `initiate_checkout:${sessionId}`;
+      const initiatePayload = {
+        schema_version: '1', event_id: initiateEventId, event_name: 'InitiateCheckout', occurred_at: new Date().toISOString(),
+        flow_token_hash: flowTokenHash, identity: { lead_id: leadId, funnel_id: funnelId }, buyer_context: buyerContext,
+      };
+      await env.LEADS.batch([
+        env.LEADS.prepare(
         `UPDATE checkout_leads
          SET status = 'session_created', stripe_session_id = ?, updated_at = ?
          WHERE id = ?`
       )
-        .bind(sessionId, new Date().toISOString(), leadId)
-        .run();
+        .bind(sessionId, new Date().toISOString(), leadId),
+        sourceOutboxStatement(env.LEADS, {
+          tenantId: scope.tenantId, siteId: scope.siteId, sourceEventId: initiateEventId,
+          eventName: 'InitiateCheckout', occurredAt: initiatePayload.occurred_at, payload: initiatePayload,
+          payloadHash: await sourcePayloadHash(initiatePayload),
+        }),
+      ]);
+      if (env.TRACKING_SOURCE_BRIDGE) await drainSourceEvent(env.LEADS, env, initiateEventId);
 
       return json({ checkoutUrl, mode: checkoutMode, provider: paymentProvider });
     }
@@ -447,13 +517,25 @@ export async function onRequestPost(context: PagesContext): Promise<Response> {
     const sessionId = cleanString(providerPayload.session_id, 160);
     if (!sessionId) throw new Error('Dodo response did not contain a session ID.');
 
-    await env.LEADS.prepare(
+    const initiateEventId = `initiate_checkout:${sessionId}`;
+    const initiatePayload = {
+      schema_version: '1', event_id: initiateEventId, event_name: 'InitiateCheckout', occurred_at: new Date().toISOString(),
+      flow_token_hash: flowTokenHash, identity: { lead_id: leadId, funnel_id: funnelId }, buyer_context: buyerContext,
+    };
+    await env.LEADS.batch([
+      env.LEADS.prepare(
       `UPDATE checkout_leads
        SET status = 'session_created', dodo_session_id = ?, updated_at = ?
        WHERE id = ?`
     )
-      .bind(sessionId, new Date().toISOString(), leadId)
-      .run();
+      .bind(sessionId, new Date().toISOString(), leadId),
+      sourceOutboxStatement(env.LEADS, {
+        tenantId: scope.tenantId, siteId: scope.siteId, sourceEventId: initiateEventId,
+        eventName: 'InitiateCheckout', occurredAt: initiatePayload.occurred_at, payload: initiatePayload,
+        payloadHash: await sourcePayloadHash(initiatePayload),
+      }),
+    ]);
+    if (env.TRACKING_SOURCE_BRIDGE) await drainSourceEvent(env.LEADS, env, initiateEventId);
 
     return json({ checkoutUrl, mode: checkoutMode, provider: paymentProvider });
   } catch (error) {
@@ -485,7 +567,13 @@ export async function onRequestPost(context: PagesContext): Promise<Response> {
     }
 
     console.error('Checkout request failed.', { leadId, offerSlug });
-    return json({ error: 'Checkout is temporarily unavailable. Please try again.' }, 502);
+    return json(
+      {
+        error: 'Checkout is temporarily unavailable. Please try again.',
+        ...(leadEvent ? { lead: leadEvent } : {}),
+      },
+      502
+    );
   }
 }
 

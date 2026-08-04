@@ -42,7 +42,7 @@ class FakeStatement implements D1PreparedStatement {
   private values: Array<string | number | null> = [];
 
   constructor(
-    private readonly query: string,
+    readonly query: string,
     private readonly handler: Handler
   ) {}
 
@@ -78,6 +78,7 @@ class FakeStatement implements D1PreparedStatement {
 class FakeDatabase implements D1Database {
   readonly calls: Array<{ query: string; values: Array<string | number | null>; method: Method }> =
     [];
+  readonly batches: string[][] = [];
 
   constructor(private readonly handler: Handler) {}
 
@@ -88,8 +89,11 @@ class FakeDatabase implements D1Database {
     });
   }
 
-  async batch(_statements: D1PreparedStatement[]): Promise<D1RunResult[]> {
-    return [];
+  async batch(statements: D1PreparedStatement[]): Promise<D1RunResult[]> {
+    this.batches.push(
+      statements.map((statement) => (statement as FakeStatement).query)
+    );
+    return Promise.all(statements.map((statement) => statement.run()));
   }
 }
 
@@ -270,6 +274,7 @@ test('checkout creates the configured cart, bump, steps, and first upsell return
     database.calls.filter((call) => call.query.includes('INSERT INTO funnel_step_runs')).length,
     2
   );
+  assert.equal(database.batches.at(-1)?.join('\n').includes('source_tracking_outbox'), true);
 });
 
 test('checkout validates the canonical consent version and sanitizes source placement', async () => {
