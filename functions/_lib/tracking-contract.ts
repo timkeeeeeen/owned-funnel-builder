@@ -1,10 +1,50 @@
-export type EventName = 'PageView' | 'ViewContent' | 'InitiateCheckout' | 'Purchase';
+export type EventName = 'PageView' | 'Lead' | 'InitiateCheckout' | 'Purchase';
 export type SourceSystem = 'pages' | 'app_idea' | 'blueprint' | 'event_worker';
 export type DestinationName = 'meta' | 'tinybird';
 export type DeliveryState =
   'pending' | 'sending' | 'delivered' | 'retryable' | 'permanent' | 'outcome_unknown';
 export type PrivacyPurpose =
   'necessary' | 'analytics' | 'advertising' | 'identity_enrichment' | 'sale_share';
+
+type CommerceContent = { id: string; quantity: number; item_price?: number };
+type EventCommerce = {
+  PageView: Record<never, never>;
+  Lead: {
+    offer_id?: string;
+    product_id?: string;
+    content_id?: string;
+    content_name?: string;
+    content_ids?: string[];
+    content_type?: string;
+    quantity?: number;
+    value?: number;
+    currency?: string;
+    num_items?: number;
+    contents?: CommerceContent[];
+  };
+  InitiateCheckout: {
+    offer_id?: string;
+    product_id?: string;
+    content_ids?: string[];
+    content_type?: string;
+    quantity?: number;
+    value?: number;
+    currency?: string;
+    num_items?: number;
+    contents?: CommerceContent[];
+  };
+  Purchase: {
+    order_id?: string;
+    payment_id?: string;
+    content_ids?: string[];
+    content_type?: string;
+    quantity?: number;
+    value?: number;
+    currency?: string;
+    num_items?: number;
+    contents?: CommerceContent[];
+  };
+};
 
 type EventEnvelope<Name extends EventName> = {
   schema_version: '1';
@@ -20,10 +60,7 @@ type EventEnvelope<Name extends EventName> = {
   page: Record<string, string>;
   attribution: Record<string, string>;
   identity: Record<string, string>;
-  commerce: Record<
-    string,
-    string | number | Array<{ id: string; quantity: number; item_price?: number }>
-  >;
+  commerce: EventCommerce[Name];
   privacy: Record<string, string | boolean>;
   device?: Record<string, string | number>;
   geo?: Record<string, string>;
@@ -31,11 +68,11 @@ type EventEnvelope<Name extends EventName> = {
 
 export type CanonicalEvent =
   | EventEnvelope<'PageView'>
-  | EventEnvelope<'ViewContent'>
+  | EventEnvelope<'Lead'>
   | EventEnvelope<'InitiateCheckout'>
   | EventEnvelope<'Purchase'>;
 
-type MetaContent = { id: string; quantity: number; item_price?: number };
+type MetaContent = CommerceContent;
 type MetaPayload = {
   event_name: EventName;
   event_time: number;
@@ -77,7 +114,7 @@ export type DestinationProjection =
       payload: CanonicalEvent;
     };
 
-const eventNames = new Set<EventName>(['PageView', 'ViewContent', 'InitiateCheckout', 'Purchase']);
+const eventNames = new Set<EventName>(['PageView', 'Lead', 'InitiateCheckout', 'Purchase']);
 const sourceSystems = new Set<SourceSystem>(['pages', 'app_idea', 'blueprint', 'event_worker']);
 const sectionKeys = {
   visitor: ['id', 'visitor_id', 'person_id'],
@@ -120,7 +157,19 @@ const sectionKeys = {
 } as const;
 const commerceKeys: Record<EventName, readonly string[]> = {
   PageView: [],
-  ViewContent: ['content_id', 'content_name', 'content_type', 'quantity', 'value', 'currency'],
+  Lead: [
+    'offer_id',
+    'product_id',
+    'content_id',
+    'content_name',
+    'content_ids',
+    'content_type',
+    'quantity',
+    'value',
+    'currency',
+    'num_items',
+    'contents',
+  ],
   InitiateCheckout: [
     'offer_id',
     'product_id',
@@ -185,7 +234,7 @@ function allowedObject(
         field,
         `${name}.${key}`,
         key === 'user_agent' ? 512 : 256,
-        key === 'user_agent'
+        key === 'user_agent' || /(?:^|_)(?:id|[a-z]+_id)$/.test(key)
       );
     else if (type === 'number' && typeof field === 'number' && Number.isFinite(field))
       output[key] = field;
@@ -195,10 +244,10 @@ function allowedObject(
   return output;
 }
 
-function commerce(value: unknown, eventName: EventName): CanonicalEvent['commerce'] {
+function commerce<Name extends EventName>(value: unknown, eventName: Name): EventCommerce[Name] {
   const input = record(value, 'commerce');
   const allowed = new Set(commerceKeys[eventName]);
-  const output: CanonicalEvent['commerce'] = {};
+  const output: Record<string, unknown> = {};
   for (const [key, field] of Object.entries(input)) {
     if (!allowed.has(key) || /(?:email|phone|token|properties)/i.test(key))
       invalid(`commerce.${key} is not allowed`);
@@ -225,15 +274,18 @@ function commerce(value: unknown, eventName: EventName): CanonicalEvent['commerc
           invalid('commerce.contents has invalid values');
         }
         return {
-          id: safeString(content.id, 'commerce.contents.id'),
+          id: safeString(content.id, 'commerce.contents.id', 256, true),
           quantity: content.quantity,
           ...(content.item_price === undefined ? {} : { item_price: content.item_price }),
         };
       });
+    } else if (key === 'content_ids') {
+      if (!Array.isArray(field)) invalid('commerce.content_ids must be an array');
+      output.content_ids = field.map((id) => safeString(id, 'commerce.content_ids'));
     } else if (typeof field === 'number' && Number.isFinite(field)) output[key] = field;
     else output[key] = safeString(field, `commerce.${key}`);
   }
-  return output;
+  return output as EventCommerce[Name];
 }
 
 export function validateCanonicalEvent(input: unknown): CanonicalEvent {
@@ -263,14 +315,14 @@ export function validateCanonicalEvent(input: unknown): CanonicalEvent {
   if (event.source !== 'browser' && event.source !== 'server') invalid('source is not supported');
   if (!sourceSystems.has(event.source_system as SourceSystem))
     invalid('source_system is not supported');
-  const occurredAt = safeString(event.occurred_at, 'occurred_at');
+  const occurredAt = safeString(event.occurred_at, 'occurred_at', 64, true);
   if (Number.isNaN(Date.parse(occurredAt))) invalid('occurred_at must be an ISO date');
   const event_name = event.event_name as EventName;
   return {
     schema_version: '1',
-    tenant_id: safeString(event.tenant_id, 'tenant_id', 128),
-    site_id: safeString(event.site_id, 'site_id', 128),
-    event_id: safeString(event.event_id, 'event_id', 128),
+    tenant_id: safeString(event.tenant_id, 'tenant_id', 128, true),
+    site_id: safeString(event.site_id, 'site_id', 128, true),
+    event_id: safeString(event.event_id, 'event_id', 128, true),
     event_name,
     source: event.source,
     source_system: event.source_system as SourceSystem,
@@ -322,7 +374,7 @@ function metaContents(value: unknown): MetaContent[] {
       invalid('meta.contents.item_price must be a number');
     }
     return {
-      id: safeString(content.id, 'meta.contents.id'),
+      id: safeString(content.id, 'meta.contents.id', 256, true),
       quantity: content.quantity,
       ...(content.item_price === undefined ? {} : { item_price: content.item_price }),
     };
@@ -376,7 +428,7 @@ function metaPayload(value: unknown): MetaPayload {
   const output: MetaPayload = {
     event_name: input.event_name as EventName,
     event_time: input.event_time,
-    event_id: safeString(input.event_id, 'meta.event_id', 128),
+    event_id: safeString(input.event_id, 'meta.event_id', 128, true),
     action_source: 'website',
   };
   if (input.event_source_path !== undefined)
@@ -486,8 +538,8 @@ export function validateDestinationProjection(input: unknown): DestinationProjec
   if (!eventNames.has(projection.event_name as EventName))
     invalid('destination projection has an invalid event_name');
   const event_name = projection.event_name as EventName;
-  const event_id = safeString(projection.event_id, 'destination event_id', 128);
-  const occurred_at = safeString(projection.occurred_at, 'destination occurred_at');
+  const event_id = safeString(projection.event_id, 'destination event_id', 128, true);
+  const occurred_at = safeString(projection.occurred_at, 'destination occurred_at', 64, true);
   if (Number.isNaN(Date.parse(occurred_at))) invalid('destination occurred_at must be an ISO date');
   if (projection.destination === 'meta') {
     const payload = metaPayload(projection.payload);

@@ -25,12 +25,37 @@ const event = {
 } as const;
 
 test('accepts only the four version-one canonical events', () => {
-  assert.equal(validateCanonicalEvent(event).event_name, 'PageView');
-  assert.throws(() => validateCanonicalEvent({ event_name: 'ViewContent' }));
-  for (const event_name of ['ViewContent', 'InitiateCheckout', 'Purchase']) {
+  for (const event_name of ['PageView', 'Lead', 'InitiateCheckout', 'Purchase']) {
     assert.equal(validateCanonicalEvent({ ...event, event_name }).event_name, event_name);
   }
-  assert.throws(() => validateCanonicalEvent({ ...event, event_name: 'Lead' }));
+  assert.throws(() => validateCanonicalEvent({ ...event, event_name: 'ViewContent' }));
+});
+
+test('applies event-specific commerce allowlists', () => {
+  const lead = validateCanonicalEvent({
+    ...event,
+    event_name: 'Lead',
+    commerce: {
+      offer_id: 'blueprint',
+      content_ids: ['blueprint'],
+      content_type: 'product',
+      value: 5,
+      currency: 'USD',
+      num_items: 1,
+    },
+  });
+  assert.deepEqual(lead.commerce.content_ids, ['blueprint']);
+  assert.throws(() => validateCanonicalEvent({ ...event, commerce: { offer_id: 'blueprint' } }));
+  assert.throws(() =>
+    validateCanonicalEvent({ ...event, event_name: 'Lead', commerce: { payment_id: 'pmt' } })
+  );
+  assert.throws(() =>
+    validateCanonicalEvent({
+      ...event,
+      event_name: 'Purchase',
+      commerce: { content_ids: 'blueprint' },
+    })
+  );
 });
 
 test('rejects unknown, sensitive, and oversized event fields', () => {
