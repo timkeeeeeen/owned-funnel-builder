@@ -142,7 +142,12 @@ async function markStripePaymentSucceeded(
     context_expires_at: new Date(Date.now() + 10 * 60_000).toISOString(),
     funnel_slug: metadata.offer_slug || funnelId, product_id: productKey, payment_id: paymentId,
     value: minorUnitsToMajor(typeof payment.amount_received === 'number' ? payment.amount_received : payment.amount, cleanString(payment.currency, 3).toUpperCase()),
-    currency: cleanString(payment.currency, 3).toUpperCase(), num_items: 1,
+    currency: cleanString(payment.currency, 3).toUpperCase(), num_items: metadata.bump_product_key ? 2 : 1,
+    content_ids: [productKey, ...(metadata.bump_product_key ? [metadata.bump_product_key] : [])],
+    contents: [
+      { id: productKey, quantity: 1 },
+      ...(metadata.bump_product_key ? [{ id: metadata.bump_product_key, quantity: 1 }] : []),
+    ],
     privacy_snapshot: JSON.parse(flow.privacy_snapshot_json || '{}'),
   };
   const event = { tenantId: cleanString(env.TRACKING_TENANT_ID, 128) || 'owned-funnel-builder', siteId: cleanString(env.TRACKING_SITE_ID, 128) || 'default', sourceEventId, eventName: 'Purchase' as const, occurredAt: now, payload, payloadHash: await sourcePayloadHash(payload) };

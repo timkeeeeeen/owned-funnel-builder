@@ -245,6 +245,7 @@ async function markPaymentSucceeded(
     product_id: metadata.product_key,
     payment_id: paymentId,
     value: minorUnitsToMajor(data.total_amount as number, currency), currency, num_items: contents.length,
+    content_ids: contents.map((item) => item.id), contents,
     privacy_snapshot: JSON.parse(flow.privacy_snapshot_json || '{}'),
   };
   const purchaseEvent = {

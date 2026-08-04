@@ -713,6 +713,8 @@ export function sourceEnvelopeToCanonical(
         ...(envelope.value !== undefined ? { value: envelope.value } : {}),
         ...(envelope.currency ? { currency: envelope.currency } : {}),
         ...(envelope.num_items !== undefined ? { num_items: envelope.num_items } : {}),
+        ...(envelope.content_ids ? { content_ids: envelope.content_ids } : {}),
+        ...(envelope.contents ? { contents: envelope.contents } : {}),
       }
     : envelope.payment_id ? { payment_id: envelope.payment_id, ...(envelope.value !== undefined ? { value: envelope.value } : {}), ...(envelope.currency ? { currency: envelope.currency } : {}) } : {};
   const snapshot = envelope.privacy_snapshot;

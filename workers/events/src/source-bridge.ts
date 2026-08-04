@@ -197,6 +197,8 @@ export function parseSourceEventEnvelope(value: unknown, source: SourceSystem): 
   if (input.value !== undefined && (typeof input.value !== 'number' || !Number.isFinite(input.value) || input.value <= 0)) throw new TypeError('invalid_source_envelope');
   if (input.currency !== undefined && (typeof input.currency !== 'string' || !/^[A-Z]{3}$/.test(input.currency))) throw new TypeError('invalid_source_envelope');
   if (input.num_items !== undefined && (!Number.isSafeInteger(input.num_items) || (input.num_items as number) < 0)) throw new TypeError('invalid_source_envelope');
+  if (input.content_ids !== undefined && (!Array.isArray(input.content_ids) || input.content_ids.length > 50 || input.content_ids.some((id) => typeof id !== 'string' || !/^[A-Za-z0-9._:-]{1,180}$/.test(id)))) throw new TypeError('invalid_source_envelope');
+  if (input.contents !== undefined && (!Array.isArray(input.contents) || input.contents.length > 50 || input.contents.some((item) => !item || typeof item !== 'object' || typeof (item as Record<string, unknown>).id !== 'string' || !Number.isSafeInteger((item as Record<string, unknown>).quantity)))) throw new TypeError('invalid_source_envelope');
   const snapshot = validatePrivacySnapshot(input.privacy_snapshot);
   if (!snapshot) throw new TypeError('invalid_privacy_snapshot');
   return { ...input, privacy_snapshot: snapshot } as SourceEventEnvelope;
