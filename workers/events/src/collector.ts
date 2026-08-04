@@ -847,13 +847,16 @@ async function contextExchange(request: Request, env: CollectorEnv): Promise<Res
   if (!verified || typeof verified !== 'object' || Array.isArray(verified))
     return jsonError('invalid_context', 403, request, env);
   const context = verified as Record<string, unknown>;
+  const requestedFlowBinding = typeof input.flow_binding === 'string' && /^[a-f0-9]{64}$/i.test(input.flow_binding)
+    ? input.flow_binding
+    : '';
   const tenantId = textEnv(env, 'TRACKING_TENANT_ID', 'default');
   const siteId = textEnv(env, 'TRACKING_SITE_ID', 'default');
   const exchange: ContextExchange = {
     tenant_id: tenantId,
     site_id: siteId,
     funnel_slug: typeof context.funnel_slug === 'string' ? context.funnel_slug : String(context.funnel_id ?? ''),
-    flow_binding: typeof context.flow_binding === 'string' ? context.flow_binding : String(context.funnel_id ?? ''),
+    flow_binding: requestedFlowBinding || (typeof context.flow_binding === 'string' ? context.flow_binding : String(context.funnel_id ?? '')),
     server_subject_ref: typeof context.server_subject_ref === 'string' ? context.server_subject_ref : String(context.subject_id ?? ''),
     privacy_snapshot: (context.privacy_snapshot ?? {
       schema_version: '1', server_subject_ref: String(context.subject_id ?? context.server_subject_ref ?? ''),

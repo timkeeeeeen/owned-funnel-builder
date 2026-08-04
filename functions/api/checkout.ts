@@ -167,13 +167,14 @@ const CONTEXT_TOKEN_PATTERN = /^v1\.[A-Za-z0-9_-]{1,64}\.[A-Za-z0-9_-]{16,512}\.
 
 async function exchangeTrackingContext(
   env: PagesContext['env'],
-  token: string
+  token: string,
+  flowBinding = ''
 ): Promise<{ contextHash: string; contextExpiresAt: string; privacySnapshot: PrivacySnapshot } | null> {
   const bridge = env.TRACKING_SOURCE_BRIDGE;
   if (!bridge || typeof bridge !== 'object' || !('fetch' in bridge) || !CONTEXT_TOKEN_PATTERN.test(token)) return null;
   const keyValue = cleanString(env.TRACKING_PAGES_BRIDGE_KEY_CURRENT, 4096);
   if (keyValue.length < 16) return null;
-  const body = JSON.stringify({ tracking_context_token: token });
+  const body = JSON.stringify({ tracking_context_token: token, ...(flowBinding ? { flow_binding: flowBinding } : {}) });
   const timestamp = String(Math.floor(Date.now() / 1000));
   const nonce = base64url(crypto.getRandomValues(new Uint8Array(32)));
   const key = await crypto.subtle.importKey('raw', new TextEncoder().encode(keyValue), { name: 'HMAC', hash: 'SHA-256' }, false, ['sign']);
@@ -364,7 +365,7 @@ export async function onRequestPost(context: PagesContext): Promise<Response> {
     const scope = sourceScope(env, requestUrl);
     const requestedContextToken = cleanString(input.trackingContextToken, 4096) || cleanString(request.headers.get('x-tracking-context-token'), 4096);
     const exchangedContext = requestedContextToken
-      ? await exchangeTrackingContext(env, requestedContextToken)
+      ? await exchangeTrackingContext(env, requestedContextToken, flowTokenHash)
       : null;
     if (env.TRACKING_SOURCE_BRIDGE && requestedContextToken && !exchangedContext)
       throw new RequestError('Checkout context is unavailable.', 503, 'tracking_context_unavailable');
