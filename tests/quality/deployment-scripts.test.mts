@@ -6,7 +6,7 @@ test('deployment scripts are dry-run first and execution is approval-gated', asy
   for (const file of ['scripts/publish-cloudflare.mjs', 'scripts/publish-events-worker.mjs', 'scripts/provision-preview-events.mjs', 'scripts/apply-tracking-migrations.mjs']) {
     const source = await readFile(file, 'utf8');
     assert.match(source, /--execute requires --approval-id/);
-    assert.match(source, /unverified/);
+    if (file !== 'scripts/publish-cloudflare.mjs') assert.match(source, /unverified/);
   }
   const migrations = await readFile('scripts/apply-tracking-migrations.mjs', 'utf8');
   assert.match(migrations, /readdir/);
@@ -17,4 +17,10 @@ test('Pages dry-run probes the installed Wrangler CLI without the removed dry-ru
   const source = await readFile('scripts/publish-cloudflare.mjs', 'utf8');
   assert.match(source, /'--help'/);
   assert.doesNotMatch(source, /'--dry-run'/);
+});
+
+test('live Pages execution is explicitly approval- and SHA-bound', async () => {
+  const source = await readFile('scripts/publish-cloudflare.mjs', 'utf8');
+  assert.match(source, /--execute requires --approval-id and --sha/);
+  assert.match(source, /--commit-hash/);
 });
