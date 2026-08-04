@@ -1,7 +1,8 @@
 # First-Party Event Pipeline Spec Review
 
 Date: 2026-08-04  
-Reviewers: architecture/privacy and delivery/operations passes
+Reviewers: architecture/privacy, delivery/operations, and independent
+privacy/security passes
 
 ## Verdict
 
@@ -33,6 +34,19 @@ boundaries.
 - A 400-day browser cookie is the practical continuity limit; durable
   continuity comes from a verified person identity, not a claimed 30-year
   cookie.
+
+## Additional hardening changes
+
+- Added executable consent-banner, GPC, CSRF/fetch-metadata, cache/log
+  redaction, and cost controls.
+- Removed the Blueprint GET/token contradiction and made the Pages claim path
+  Worker-only; source outboxes persist only opaque context references.
+- Isolated bridge keys per source/runtime and added exact-SHA, migration,
+  preview-resource, and crash-safe canary gates.
+- Added field-level retention across source authorities, queues, logs, provider
+  copies, Tinybird, and source-runtime erasure receipts.
+- Made the tracking domain/cookie relationship an explicit gate for App-Idea and
+  Blueprint and marked stale Admaxxer instructions superseded.
 
 ## Remaining launch blockers
 

@@ -81,8 +81,9 @@ requires them.
   claim permits it.
 - Deliver matching browser Pixel and server CAPI events with stable Meta
   deduplication inputs and controlled browser emission.
-- Include every available field on the explicit event and destination
-  allowlists, subject to purpose, consent, retention, and minimization rules.
+- Include every available field that is explicitly allowlisted and permitted by
+  purpose, consent, retention, provenance, and minimization rules. Availability
+  alone is never a reason to collect or forward a field.
 - Preserve first-touch and latest-touch attribution.
 - Make event receipt, transformation, delivery, retry, and failure inspectable.
 - Keep the event contract, identity rules, cookie configuration, and
@@ -199,11 +200,14 @@ audience, tenant/site, funnel, candidate event ID, nonce, expiry, and current
 privacy state, but no raw PII or cookie value. The browser passes that token and
 the candidate event ID to same-origin Pages proxy routes (for Blueprint,
 `POST /api/blueprint/checkout-start` and
-`GET /api/blueprint/checkout-status`). Those routes validate cookies, consent,
+`POST /api/blueprint/checkout-status`). Those routes validate cookies, consent,
 flow/session binding, and schema, then make the server-to-server Convex call.
 Convex verifies the token signature/audience/expiry/nonce and rejects direct
 browser checkout calls or altered packets. The bridge is replay-safe and the
-Worker rechecks privacy and idempotency when the source outbox is drained. A
+Worker rechecks privacy and idempotency when the source outbox is drained. No
+raw click ID, token, or provider context is placed in a URL, referrer, or
+durable source row; cross-domain handoff uses only the short-lived opaque
+context reference and field-policy-approved values. A
 Convex `InitiateCheckout` is emitted only when the source mutation durably
 stores a verified Dodo checkout-session ID, never when an action merely accepts
 or queues a request. A verified Dodo payment emits one `Purchase` through the
@@ -269,6 +273,49 @@ No core collector, identity, or delivery code contains a Maestro hostname,
 dataset ID, offer slug, product ID, or credential. Preview and production use
 separate D1 databases, Queues/DLQs, Tinybird datasources/tokens, cookie names or
 scopes, and Meta delivery configuration.
+
+The first-party domain is a launch-blocking invariant, not a deployment
+preference. Every public funnel surface must either resolve under the approved
+`*.shop.maestrogtm.com` same-site namespace (so the parent cookie is actually
+first-party) or use its own collector hostname and host-only cookie with an
+explicit, consented server-side identity handoff. CORS cannot make a cookie
+first-party across unrelated registrable domains. The trusted-host artifact
+records the exact browser host, collector host, cookie scope, DNS/CNAME/TLS
+readback, and rejects `pages.dev`, `workers.dev`, or an unowned sibling in
+live configuration.
+
+### Required pre-launch control artifacts
+
+The following versioned, machine-readable artifacts are launch prerequisites;
+prose or an operator assertion is insufficient:
+
+| Artifact | Required proof | Launch effect |
+| --- | --- | --- |
+| `config/trusted-hosts.json` | DNS, TLS, CNAME ownership, HSTS, CSP/referrer policy, no user-content sibling, no alternate `workers.dev` route, and continuous drift probe | Blocks parent-domain cookie issuance until green |
+| `config/privacy-policy.json` | Per-region/state purpose decisions, unknown-region behavior, GPC/opt-out precedence, sensitive-data/minor handling, legal owner/version approval, and Meta LDU/data-processing options | Blocks the affected funnel's campaign gate |
+| `config/tracking-field-policy.json` | Source, purpose, consent, destination, exact TTL, deletion path, and trust provenance for every field (including `fbclid`, `fbp`, `fbc`, IP, and UA) | Blocks collection or destination mapping for an unlisted field |
+| `config/source-runtime-manifest.json` | Source repository, exact SHA, bridge contract version, environment, and required CI status | Blocks deployment when a producer is missing, unreachable, or incompatible |
+| `docs/launch/provider-capability-readback.md` | Tinybird/Meta deletion capability, token scopes, log retention, DPA/subprocessor review, and per-destination deletion SLA | Blocks jurisdictions whose deletion contract is unsupported |
+
+The host probe runs continuously after launch. HSTS, CSP, and a strict
+`event_source_url` path allowlist are part of the trusted-host contract.
+
+### Consent experience is an enforced product boundary
+
+The privacy policy artifact is not a substitute for a user-facing control. In
+prior-consent regions every launch page must present an accessible,
+non-preselected consent banner before creating tracking state. It must offer
+`Accept all`, `Reject all`, and `Customize` actions, describe purposes and
+destinations in plain language, provide a durable way to reopen preferences,
+and make the reject path no harder to use than the accept path. No tracking
+request may be queued while the banner is unresolved. A recorded choice is
+versioned and purpose-specific; changing the policy version or receiving GPC
+re-evaluates the gates without treating an old opt-in as current consent.
+
+Browser tests cover banner loading, keyboard/focus access, each action,
+custom-purpose toggles, reopen/withdrawal, stale-policy reset, and GPC. The
+launch artifact records the approved notice version and legal owner; an
+unreviewed banner or missing purpose description blocks the affected funnel.
 
 ## First-party identity model
 
@@ -347,22 +394,29 @@ from being replayed as `ma_sid` or across environments. Current and previous
 keys are accepted during rotation; invalid or ambiguous duplicate cookie names
 are rejected safely rather than selecting an attacker-controlled value.
 
-The visitor cookie uses a rolling `Max-Age` of 34,560,000 seconds (400 days).
-Although a server can write a much later calendar expiry, modern browsers may
-cap or purge it earlier. The collector refreshes the allowed lifetime on valid,
-purpose-permitted first-party activity. The person graph, not a claimed
-thirty-year browser cookie, provides durable continuity after identification.
+The visitor cookie uses a rolling `Max-Age` of 34,560,000 seconds (400 days),
+subject to an absolute policy-controlled identity horizon and re-consent/renewal
+rule. Activity cannot refresh it indefinitely. Although a server can write a
+much later calendar expiry, modern browsers may cap or purge it earlier. The
+person graph, not a claimed thirty-year browser cookie, provides durable
+continuity after identification.
 
 Before required tracking consent exists, the collector may set only the
 purpose-limited `ma_privacy` choice cookie. It does not set `ma_vid` or `ma_sid`
 in a prior-consent region until the relevant category is granted. Cookie
 deletion uses the exact original Domain, Path, and security attributes.
 
+The browser withdrawal handler also clears first-party storage and any
+browser-cleareable `_fbp`/`_fbc` state, aborts queued beacons, and disables the
+Pixel before acknowledging the change. Vendor-managed cookies that cannot be
+cleared remain covered by the server tombstone; no new Pixel/CAPI event may be
+sent after withdrawal.
+
 The raw visitor ID is never exposed to browser JavaScript. `GET /v1/bootstrap`
-sets the cookies and returns a non-secret, destination-safe external ID derived
-from the visitor ID for native browser destinations. Browser-provided copies of
-that value are correlation inputs only; the server's signed cookie is identity
-authority.
+sets the cookies and returns a non-secret, destination-scoped keyed external ID
+only after the required purpose is permitted; before that it returns no visitor,
+session, or external ID. Browser-provided copies of that value are correlation
+inputs only; the server's signed cookie is identity authority.
 
 ### Cookie deletion and returning visitors
 
@@ -424,8 +478,10 @@ all fields on these reviewed allowlists—not arbitrary DOM, keystroke, or
 unbounded interaction capture.
 
 `source_system` is a controlled value (`pages`, `app_idea`, `blueprint`, or
-`event_worker`); it is never accepted as an unvalidated tenant or authority
-selector from the browser.
+the internal-only `event_worker`); it is never accepted as an unvalidated
+tenant or authority selector from the browser. `event_worker` cannot submit a
+source-authority Lead/InitiateCheckout/Purchase and is covered by a separate
+internal-origin test.
 
 The allowlisted context can include:
 
@@ -450,6 +506,13 @@ explicit campaign/click-ID allowlist, and values are length-limited. IP-derived
 geo is analytics context only; it is not repackaged as customer-supplied Meta
 city, state, postal code, or country. Secrets, raw credentials, forbidden PII,
 and unrelated internal fields cannot enter the queue or a destination payload.
+
+The default policy is deny: extra click IDs, screen/viewport fields, precise
+geo, and page titles are omitted unless an event-specific purpose and
+destination require them. Canonical paths come from the trusted route catalog;
+campaign, referrer, title, and attribution values are rejected when they match
+email/phone/credential patterns, exceed bounds, or contain an unapproved
+query/path. Rejection diagnostics are generic and never echo the input.
 
 At checkout, the server persists a bounded buyer-context snapshot against the
 lead/funnel: validated latest `fbp` and `fbc`, destination-safe external ID,
@@ -733,6 +796,16 @@ exact allowlisted origin, sets `Access-Control-Allow-Credentials: true` and
 `Vary: Origin`, allows only minimal methods/headers, and rejects `null`, suffix
 matches, wrong Host/Origin pairs, unapproved ports, and unapproved schemes.
 
+Every cookie-authenticated mutating route also requires JSON `Content-Type`, a
+bootstrap-issued short-lived anti-CSRF token (a signed double-submit token is
+sufficient), and Fetch Metadata checks. Missing or invalid tokens,
+ambiguous/absent Origin, and `Sec-Fetch-Site: cross-site` requests are
+rejected; CORS is defense in depth, not CSRF authentication. Bootstrap,
+privacy, event receipt, claim, and proxy responses are `Cache-Control:
+no-store`, vary on `Origin`, `Cookie`, and `Sec-GPC`, and are excluded from CDN
+caching. Access logs and diagnostics redact cookies, tokens, URLs/query
+strings, IP, and provider error bodies.
+
 ## Bot and abuse protection
 
 The collector runs behind Cloudflare's WAF and rate limiting. Origin and CORS
@@ -758,6 +831,14 @@ active. Bot output is a risk classification, not guaranteed detection. Abuse
 tests must show that public collector traffic cannot forge authoritative
 events or create unbounded D1, Queue, Tinybird, or Meta cost.
 
+The deployment also has explicit spend and capacity ceilings for D1 writes,
+Queue messages, Tinybird rows, and Meta calls. On breach, intake or the
+affected destination enters a fail-closed/degraded state, emits an alert, and
+preserves bounded outbox state for replay. Preview has zero live-destination
+budget and rejects production resource identifiers. These ceilings and the
+operator who can raise them are versioned in the launch evidence; a
+rate-limit test alone is not evidence of cost control.
+
 ## Privacy behavior
 
 Privacy is evaluated by purpose in both browser and server before identifiers
@@ -765,9 +846,10 @@ are created, events are persisted, native destinations are loaded, or jobs are
 delivered. Initial purpose categories are necessary operations, analytics,
 advertising, and identity enrichment.
 
-For US visitors, configured analytics and advertising begin immediately unless
-the visitor has opted out or sends Global Privacy Control, consistent with the
-approved launch behavior. `Sec-GPC: 1` is evaluated on every applicable
+Only purposes explicitly marked allowed by the approved
+`config/privacy-policy.json` for the resolved jurisdiction may begin. Unknown or
+low-confidence region, minor, and sensitive-data states fail closed; there is
+no universal US default. `Sec-GPC: 1` is evaluated on every applicable
 request; current GPC or any stored opt-out wins over stale opt-in. GPC
 suppresses advertising, sale/share-classified processing, future resolver
 enrichment, and similarly classified CRM sync.
@@ -804,6 +886,14 @@ by the tombstone and expire under the Queue retention policy. Previously
 accepted destination data is deleted only where that provider exposes a
 supported mechanism; the operator record states plainly when accepted Meta
 data cannot be retracted and documents the downstream request procedure.
+
+The deletion workflow also invokes authenticated, non-enumerating erasure
+contracts in the Pages and Convex source authorities for source outboxes,
+buyer-context snapshots, payment-linked tracking metadata, backups, and logs.
+Each source returns a signed completion/exception receipt with a deadline and
+legal-retention basis; missing source capability blocks that funnel. Requests
+use verified operator/subject challenges and generic responses, never a
+cookie/person lookup that reveals whether a record exists.
 
 Privacy audit records retain request ID, effective choice, policy versions,
 status, and timestamps—not deleted PII. Legally required transaction records
@@ -878,6 +968,16 @@ marketing/analytics retention. Legally required accounting and transaction
 records use a separate purpose and cannot extend tracking retention. Defaults
 are deployment configuration, not hidden constants.
 
+The same field-level deadlines apply to Pages/Convex source outboxes,
+provider-mapping rows, canonical envelopes, Queue/DLQ copies, retry snapshots,
+Worker/Cloudflare logs, Tinybird physical duplicates, exports, and backups.
+Source runtimes must redact or purge buyer context, IP/UA, click IDs, and
+destination hashes before their deadline and re-check suppression tombstones
+before replay. Cleanup deadlines use server receipt or authoritative provider
+time, never an untrusted client `occurred_at`; race tests cover cleanup that
+overlaps an in-flight retry. Source-runtime deletion and backup/restore
+readbacks are part of the same privacy evidence.
+
 ## Tinybird projection
 
 Tinybird receives append-only normalized projections for:
@@ -907,6 +1007,13 @@ failure, dashboards query a deduplicated view keyed by the canonical event key;
 raw physical uniqueness is not promised. Tinybird datasource and pipe
 definitions are version-controlled and promoted before a producer sends a new
 schema.
+
+Append and read/query credentials are separate least-privilege secrets. No
+public pipe exposes person-level data; dashboards enforce tenant/site and
+purpose filters, restrict small cohorts where required, and audit exports. The
+provider capability readback covers physical duplicates, replicas, backups,
+logs, deletion/TTL behavior, a numeric completion deadline, and an owner for
+any residual retention.
 
 Tinybird ingestion is an independent destination with its own retries. It is
 never called directly from the browser and never gates checkout.
@@ -1196,6 +1303,9 @@ additive D1 migrations while older code may still run.
 - Prior-consent regions receive no tracking cookies, Tinybird row, native pixel,
   CRM sync, or resolver call before consent. US opt-out and GPC suppress
   advertising, sale/share-classified processing, enrichment, and pending jobs.
+- Prior-consent regions show an accessible, non-preselected banner with
+  accept/reject/customize controls, and the unresolved state produces no
+  tracking request or destination job.
 - A verified operator privacy workflow covers D1, Tinybird, pending/replay
   state, suppression tombstones, retention, and documented Meta limitations.
 - DSAR deletion is signed and acknowledged by every source runtime and

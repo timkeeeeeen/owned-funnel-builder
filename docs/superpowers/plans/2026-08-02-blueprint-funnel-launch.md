@@ -1,5 +1,10 @@
 # Authority Snapshot And CMO Game Plan Launch Implementation Plan
 
+> **Superseded:** Tracking, identity, consent, and destination steps in this
+> historical plan are replaced by
+> `docs/superpowers/plans/2026-08-03-first-party-event-pipeline.md`. Do not
+> enable Admaxxer or any legacy Meta sender from this document.
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use
 > superpowers:executing-plans to implement this plan task-by-task. Steps use
 > checkbox (`- [ ]`) syntax for tracking.
