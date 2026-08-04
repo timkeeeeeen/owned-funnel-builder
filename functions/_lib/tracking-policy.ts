@@ -93,7 +93,14 @@ function providerCapabilities(value: unknown, required: Set<DestinationName>): v
     covered.add(destination);
     const readback = object(provider.readback, 'providerCapabilities.provider.readback');
     if (!['unverified', 'verified'].includes(String(readback.status))) throw new TypeError('invalid provider readback');
-    if (provider.enabled && (readback.status !== 'verified' || typeof readback.timestamp !== 'string' || typeof readback.reviewed_sha !== 'string' || typeof readback.operator !== 'string')) throw new TypeError('verified provider readback required');
+    if (
+      provider.enabled &&
+      (readback.status !== 'verified' ||
+        !['timestamp', 'reviewed_sha', 'operator', 'exact_api_token_scope', 'deletion_ttl', 'replica_backup_log_retention', 'dpa_subprocessor_owner'].every(
+          (field) => typeof readback[field] === 'string' && readback[field]
+        ))
+    )
+      throw new TypeError('verified provider readback required');
   }
   for (const destination of required) if (!covered.has(destination)) throw new TypeError('provider capability missing');
 }
@@ -107,7 +114,12 @@ function rolloutState(value: unknown, runtimes: Record<string, unknown>[]): void
   for (const [funnel, state] of Object.entries(states)) {
     const source = funnelSources[funnel];
     if (!['shadow', 'pilot', 'enabled'].includes(String(state)) || !sources.has(source as SourceSystem)) throw new TypeError('invalid rollout state');
-    if (source === 'pages' && funnel !== pilot && state !== 'shadow') throw new TypeError('selected Pages pilot required');
+    if (
+      source === 'pages' &&
+      ((funnel === pilot && state !== 'shadow' && !runtimes.some((item) => item.source === 'pages' && item.status !== 'shadow')) ||
+        (funnel !== pilot && state !== 'shadow' && states[pilot] !== 'enabled'))
+    )
+      throw new TypeError('selected Pages pilot required');
     if ((source === 'app_idea' || source === 'blueprint') && state !== 'shadow' && !runtimes.some((item) => item.source === source && item.status !== 'shadow')) throw new TypeError('source rollout dependencies required');
   }
 }

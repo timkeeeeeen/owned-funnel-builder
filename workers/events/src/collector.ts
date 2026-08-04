@@ -57,9 +57,63 @@ const trackingControls = {
 };
 const trackingFieldPolicy = fieldPolicy.rules as TrackingFieldRule[];
 
+type EventContext = {
+  context_hash: string;
+  tenant_id: string;
+  site_id: string;
+  funnel_id: string;
+  subject_id: string;
+  subject_deleted: boolean;
+  policy_version: string;
+};
+
 function projectedEvent(event: CanonicalEvent, state: { decisions: Parameters<typeof projectPermittedFields>[1] }): CanonicalEvent {
   validateTrackingArtifacts(trackingControls);
   return projectPermittedFields(event, state.decisions, trackingFieldPolicy);
+}
+
+function sourceRuntimeReady(source: SourceSystem): boolean {
+  const runtime = sourceRuntimeManifest.runtimes.find((item) => item.source === source) as
+    | Record<string, unknown>
+    | undefined;
+  return Boolean(
+    runtime &&
+      runtime.status !== 'shadow' &&
+      typeof runtime.source_sha === 'string' &&
+      /^[a-f0-9]{40,64}$/i.test(runtime.source_sha) &&
+      runtime.context_verifier === 'signed' &&
+      runtime.outbox_reconciliation_owner &&
+      runtime.dodo_ownership_readback === 'verified'
+  );
+}
+
+async function verifyEventContext(
+  request: Request,
+  env: CollectorEnv,
+  event: CanonicalEvent
+): Promise<boolean> {
+  const context: EventContext = {
+    context_hash: request.headers.get('x-tracking-context-hash') ?? '',
+    tenant_id: request.headers.get('x-tracking-context-tenant') ?? '',
+    site_id: request.headers.get('x-tracking-context-site') ?? '',
+    funnel_id: request.headers.get('x-tracking-context-funnel') ?? '',
+    subject_id: request.headers.get('x-tracking-context-subject') ?? '',
+    subject_deleted: request.headers.get('x-tracking-context-subject-deleted') === 'true',
+    policy_version: request.headers.get('x-tracking-context-policy-version') ?? '',
+  };
+  const subject = event.identity.lead_id ?? event.identity.visitor_id ?? event.visitor.id;
+  if (
+    !/^[a-f0-9]{64}$/i.test(context.context_hash) ||
+    context.subject_deleted ||
+    context.tenant_id !== event.tenant_id ||
+    context.site_id !== event.site_id ||
+    context.funnel_id !== event.identity.funnel_id ||
+    context.subject_id !== subject ||
+    context.policy_version !== event.privacy.policy_version
+  )
+    return false;
+  const verifier = env.TRACKING_CONTEXT_VERIFY;
+  return typeof verifier === 'function' && Boolean(await (verifier as (value: EventContext) => unknown)(context));
 }
 const PUBLIC_BROWSER_EVENTS = new Set<EventName>(['PageView']);
 const AUTHORITATIVE_EVENTS = new Set<EventName>(['Lead', 'InitiateCheckout', 'Purchase']);
@@ -315,6 +369,8 @@ async function browserEvents(
     return jsonError('authoritative_event_requires_source_bridge', 403, request, env);
   if (candidate.source_system !== 'event_worker')
     return jsonError('invalid_browser_source', 403, request, env);
+  if (!(await verifyEventContext(request, env, candidate)))
+    return jsonError('invalid_context', 403, request, env);
   const visitor = await visitorId(request, env);
   const state = await loadPrivacyState(request, env, visitor ?? candidate.visitor.visitor_id);
   if (state.gpc) {
@@ -352,6 +408,7 @@ async function sourceEvents(request: Request, env: CollectorEnv): Promise<Respon
   if (!exactHost(request, env)) return jsonError('not_allowed', 403, request, env);
   const source = request.headers.get('x-tracking-source') as SourceSystem | null;
   if (!source || !SOURCE_SYSTEMS.has(source)) return jsonError('invalid_source', 401, request, env);
+  if (!sourceRuntimeReady(source)) return jsonError('source_runtime_not_ready', 403, request, env);
   const timestamp = request.headers.get('x-tracking-timestamp') ?? '';
   const nonce = request.headers.get('x-tracking-nonce') ?? '';
   const signature = request.headers.get('x-tracking-signature') ?? '';
@@ -404,8 +461,10 @@ async function sourceEvents(request: Request, env: CollectorEnv): Promise<Respon
     );
     return jsonError('event_scope_mismatch', 403, request, env);
   }
+  if (!(await verifyEventContext(request, env, event)))
+    return jsonError('invalid_context', 403, request, env);
   const state = await loadPrivacyState(request, env, event.visitor.visitor_id);
-  const result = await persistCanonicalEvent(env, event, state);
+  const result = await persistCanonicalEvent(env, projectedEvent(event, state), state);
   return jsonResponse(
     { accepted: true, event_key: result.eventKey, suppressed: result.suppressed },
     202,

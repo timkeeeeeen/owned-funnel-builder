@@ -194,6 +194,22 @@ test('launch readiness requires exact source SHAs and verified provider readback
   }));
   assert.throws(() => validateTrackingArtifacts({
     ...controls,
+    providerCapabilities: {
+      ...providerCapabilities,
+      providers: [
+        {
+          destination: 'tinybird',
+          enabled: true,
+          readback: { status: 'verified', timestamp: '2026-08-04T00:00:00.000Z' },
+        },
+        ...(providerCapabilities.providers as unknown[]).filter(
+          (provider) => (provider as { destination?: string }).destination === 'meta'
+        ),
+      ],
+    },
+  }));
+  assert.throws(() => validateTrackingArtifacts({
+    ...controls,
     sourceRuntimeManifest: {
       ...sourceRuntimeManifest,
       runtimes: [{ source: 'pages', source_sha: 'UNVERIFIED', status: 'pilot' }],
@@ -220,5 +236,30 @@ test('rollout blocks Pages advancement without its selected pilot and source dep
   assert.throws(() => validateTrackingArtifacts({
     ...controls,
     rolloutState: { ...rolloutState, funnels: { ...(rolloutState.funnels as object), 'app-idea-evaluator': 'pilot' } },
+  }));
+  const readyPages = {
+    source: 'pages',
+    source_sha: 'a'.repeat(40),
+    status: 'enabled',
+    context_verifier: 'signed',
+    outbox_reconciliation_owner: 'maestro-platform',
+    dodo_ownership_readback: 'verified',
+  };
+  assert.doesNotThrow(() => validateTrackingArtifacts({
+    ...controls,
+    sourceRuntimeManifest: {
+      ...sourceRuntimeManifest,
+      runtimes: [readyPages, ...(sourceRuntimeManifest.runtimes as unknown[]).filter(
+        (runtime) => (runtime as { source?: string }).source !== 'pages'
+      )],
+    },
+    rolloutState: {
+      ...rolloutState,
+      funnels: {
+        ...(rolloutState.funnels as object),
+        'owned-funnel-builder': 'enabled',
+        'vibe-code-anything': 'pilot',
+      },
+    },
   }));
 });

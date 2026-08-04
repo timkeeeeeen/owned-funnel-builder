@@ -57,6 +57,7 @@ async function env() {
     TRACKING_POLICY_VERSION: '2026-08',
     TRACKING_REGION: 'US',
     TRACKING_FAIL_CLOSED: false,
+    TRACKING_CONTEXT_VERIFY: (context: { context_hash: string }) => context.context_hash === 'a'.repeat(64),
     __database: database,
   } as const;
 }
@@ -78,6 +79,13 @@ function request(path: string, init: RequestInit = {}) {
     headers: {
       origin: 'https://shop.example.test',
       'content-type': 'application/json',
+      'x-tracking-context-hash': 'a'.repeat(64),
+      'x-tracking-context-tenant': 'tenant_demo',
+      'x-tracking-context-site': 'site_demo',
+      'x-tracking-context-funnel': 'owned-funnel-builder',
+      'x-tracking-context-subject': 'visitor_1',
+      'x-tracking-context-subject-deleted': 'false',
+      'x-tracking-context-policy-version': '2026-08',
       ...init.headers,
     },
   });
@@ -96,7 +104,7 @@ const pageView = (overrides: Record<string, unknown> = {}) => ({
   session: { id: 'session_1' },
   page: { path: '/owned-funnel-builder', type: 'offer' },
   attribution: { fbclid: 'fbclid_1', fbp: 'fb.1.1', fbc: 'fb.1.2' },
-  identity: { visitor_id: 'visitor_1', external_id: 'external_1' },
+  identity: { visitor_id: 'visitor_1', funnel_id: 'owned-funnel-builder', external_id: 'external_1' },
   commerce: {},
   privacy: { policy_version: '2026-08', region: 'US', gpc: false, opted_out: false },
   ...overrides,
@@ -178,6 +186,16 @@ test('collector applies the shared field policy before persistence', async () =>
   assert.deepEqual(stored.session, {});
 });
 
+test('collector rejects a context binding that does not verify', async () => {
+  const bindings = await env();
+  const response = await worker.fetch(
+    request('/v1/events', { method: 'POST', body: JSON.stringify(pageView()) }),
+    { ...bindings, TRACKING_CONTEXT_VERIFY: () => false },
+    {} as never
+  );
+  assert.equal(response.status, 403);
+});
+
 test('health output is probe-safe and never echoes secrets or raw identity', async () => {
   const bindings = await env();
   const response = await worker.fetch(
@@ -246,7 +264,7 @@ test('privacy request returns only a request id and state', async () => {
   assert.equal('subject_data' in body, false);
 });
 
-test('signed source bridge accepts authoritative events only with a source-scoped HMAC', async () => {
+test('source bridge rejects a shadow runtime before persistence', async () => {
   const bindings = await env();
   const sourceKey = 'pages-source-bridge-key';
   const payload = JSON.stringify(
@@ -289,7 +307,7 @@ test('signed source bridge accepts authoritative events only with a source-scope
     { ...bindings, TRACKING_PAGES_BRIDGE_KEY_CURRENT: sourceKey },
     {} as never
   );
-  assert.equal(response.status, 202);
+  assert.equal(response.status, 403);
   const forged = await worker.fetch(
     request('/v1/source-events', {
       method: 'POST',
@@ -304,7 +322,7 @@ test('signed source bridge accepts authoritative events only with a source-scope
     { ...bindings, TRACKING_PAGES_BRIDGE_KEY_CURRENT: sourceKey },
     {} as never
   );
-  assert.equal(forged.status, 401);
+  assert.equal(forged.status, 403);
 });
 
 test('scope mismatch is rejected and leaves a durable ignored-not-owner audit', async () => {
