@@ -1,0 +1,84 @@
+{
+  "name": "maestro-first-party-events",
+  "main": "src/index.ts",
+  "compatibility_date": "2026-08-01",
+  "compatibility_flags": ["nodejs_compat"],
+  "workers_dev": false,
+  "triggers": { "crons": ["* * * * *"] },
+  "d1_databases": [
+    {
+      "binding": "TRACKING_DB",
+      "database_name": "maestro-tracking-preview",
+      "database_id": "replace-with-preview-tracking-d1-id",
+      "migrations_dir": "migrations",
+    },
+  ],
+  "queues": {
+    "producers": [
+      { "binding": "EVENTS_QUEUE", "queue": "maestro-events-preview" },
+      { "binding": "EVENTS_DLQ", "queue": "maestro-events-preview-dlq" },
+    ],
+    "consumers": [
+      {
+        "queue": "maestro-events-preview",
+        "max_batch_size": 50,
+        "max_batch_timeout": 30,
+        "max_retries": 5,
+        "dead_letter_queue": "maestro-events-preview-dlq",
+      },
+      {
+        "queue": "maestro-events-preview-dlq",
+        "max_batch_size": 10,
+        "max_batch_timeout": 30,
+        "max_retries": 0,
+      },
+    ],
+  },
+  "vars": {
+    "TRACKING_ENVIRONMENT": "preview",
+    "TRACKING_POLICY_VERSION": "2026-08",
+    "TRACKING_REGION": "US",
+    "TRACKING_IP_RATE_LIMIT": "60",
+    "TRACKING_VISITOR_RATE_LIMIT": "120",
+    "TRACKING_TENANT_RATE_LIMIT": "10000",
+    "EVENTS_DLQ_NAME": "maestro-events-preview-dlq",
+  },
+  "env": {
+    "production": {
+      "name": "maestro-first-party-events-live",
+      "d1_databases": [
+        {
+          "binding": "TRACKING_DB",
+          "database_name": "maestro-tracking-live",
+          "database_id": "replace-with-live-tracking-d1-id",
+          "migrations_dir": "migrations",
+        },
+      ],
+      "queues": {
+        "producers": [
+          { "binding": "EVENTS_QUEUE", "queue": "maestro-events-live" },
+          { "binding": "EVENTS_DLQ", "queue": "maestro-events-live-dlq" },
+        ],
+        "consumers": [
+          {
+            "queue": "maestro-events-live",
+            "max_batch_size": 50,
+            "max_batch_timeout": 30,
+            "max_retries": 5,
+            "dead_letter_queue": "maestro-events-live-dlq",
+          },
+          {
+            "queue": "maestro-events-live-dlq",
+            "max_batch_size": 10,
+            "max_batch_timeout": 30,
+            "max_retries": 0,
+          },
+        ],
+      },
+      "vars": {
+        "TRACKING_ENVIRONMENT": "live",
+        "EVENTS_DLQ_NAME": "maestro-events-live-dlq",
+      },
+    },
+  },
+}

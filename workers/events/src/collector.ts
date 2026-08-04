@@ -1,0 +1,620 @@
+import type {
+  CanonicalEvent,
+  EventName,
+  SourceSystem,
+} from '../../../functions/_lib/tracking-contract.ts';
+import { validateCanonicalEvent } from '../../../functions/_lib/tracking-contract.ts';
+import type { D1Database } from '../../../functions/_lib/runtime.ts';
+import {
+  corsHeaders,
+  createCsrfNonce,
+  sameOriginNoCors,
+} from '../../../functions/_lib/tracking-cors.ts';
+import {
+  issueSignedCookie,
+  verifySignedCookie,
+  type CookieContext,
+  type TrackingCookieName,
+} from '../../../functions/_lib/tracking-cookie.ts';
+import {
+  recordGpcObservation,
+  loadPrivacyState,
+  allows,
+  privacyBody,
+  recordPrivacyChoice,
+} from './privacy.ts';
+import { persistCanonicalEvent, type QueueLike } from './outbox.ts';
+import { healthResponse, jsonResponse, redactError } from './observability.ts';
+
+export type CollectorEnv = Record<string, unknown> & {
+  TRACKING_DB: D1Database;
+  EVENTS_QUEUE?: QueueLike;
+};
+
+export type ExecutionContextLike = { waitUntil?(promise: Promise<unknown>): void };
+
+const EVENT_MAX_BYTES = 64 * 1024;
+const BODY_MAX_DEPTH = 8;
+const BODY_MAX_ITEMS = 100;
+const PUBLIC_BROWSER_EVENTS = new Set<EventName>(['PageView']);
+const AUTHORITATIVE_EVENTS = new Set<EventName>(['Lead', 'InitiateCheckout', 'Purchase']);
+const SOURCE_SYSTEMS = new Set<SourceSystem>(['pages', 'app_idea', 'blueprint']);
+
+type Counter = { window: number; count: number };
+const counters = new Map<string, Counter>();
+const destinationSpend = new Map<string, Counter>();
+
+function textEnv(env: Record<string, unknown>, key: string, fallback = ''): string {
+  const value = env[key];
+  return typeof value === 'string' && value.trim() ? value.trim().slice(0, 4096) : fallback;
+}
+
+function allowedOrigins(env: Record<string, unknown>): string[] {
+  return textEnv(env, 'TRACKING_ALLOWED_ORIGINS', '')
+    .split(',')
+    .map((value) => value.trim())
+    .filter(Boolean);
+}
+
+function allowedHost(env: Record<string, unknown>, request: Request): string {
+  return textEnv(env, 'TRACKING_HOST', new URL(request.url).host);
+}
+
+function exactHost(request: Request, env: Record<string, unknown>): boolean {
+  const configured = allowedHost(env, request);
+  return (
+    new URL(request.url).host === configured &&
+    (!request.headers.get('host') || request.headers.get('host') === configured)
+  );
+}
+
+function exactOrigin(request: Request, env: Record<string, unknown>): boolean {
+  const origin = request.headers.get('origin');
+  const origins = allowedOrigins(env);
+  return !!origin && origins.length > 0 && origins.includes(origin);
+}
+
+function cors(request: Request, env: Record<string, unknown>): Headers {
+  return corsHeaders(request.headers.get('origin'), allowedOrigins(env), {
+    host: new URL(request.url).host,
+    allowedHost: allowedHost(env, request),
+    preflightMethod: request.headers.get('access-control-request-method'),
+    requestedHeaders: request.headers.get('access-control-request-headers'),
+  });
+}
+
+function boundedCounter(
+  map: Map<string, Counter>,
+  key: string,
+  limit: number,
+  windowMs: number
+): boolean {
+  const now = Date.now();
+  const current = map.get(key);
+  if (!current || now - current.window >= windowMs) {
+    map.set(key, { window: now, count: 1 });
+    return true;
+  }
+  if (current.count >= limit) return false;
+  current.count += 1;
+  return true;
+}
+
+function budget(env: Record<string, unknown>, request: Request): boolean {
+  const ip =
+    request.headers.get('cf-connecting-ip') ??
+    request.headers.get('x-forwarded-for')?.split(',')[0]?.trim() ??
+    'unknown';
+  const cookie = request.headers.get('cookie')?.slice(0, 256) ?? 'anonymous';
+  const tenant = textEnv(env, 'TRACKING_TENANT_ID', 'default');
+  const ipLimit = Number(env.TRACKING_IP_RATE_LIMIT) || 60;
+  const visitorLimit = Number(env.TRACKING_VISITOR_RATE_LIMIT) || 120;
+  const tenantLimit = Number(env.TRACKING_TENANT_RATE_LIMIT) || 10_000;
+  return (
+    boundedCounter(counters, `ip:${ip}`, ipLimit, 60_000) &&
+    boundedCounter(counters, `cookie:${cookie}`, visitorLimit, 60_000) &&
+    boundedCounter(counters, `tenant:${tenant}`, tenantLimit, 3_600_000)
+  );
+}
+
+function safeJson(value: unknown): boolean {
+  const walk = (current: unknown, depth: number): boolean => {
+    if (depth > BODY_MAX_DEPTH) return false;
+    if (Array.isArray(current))
+      return current.length <= BODY_MAX_ITEMS && current.every((item) => walk(item, depth + 1));
+    if (!current || typeof current !== 'object') return true;
+    const entries = Object.entries(current);
+    return entries.length <= BODY_MAX_ITEMS && entries.every(([, item]) => walk(item, depth + 1));
+  };
+  return walk(value, 0);
+}
+
+async function readBody(request: Request): Promise<unknown> {
+  const length = Number(request.headers.get('content-length') ?? 0);
+  if (length > EVENT_MAX_BYTES) throw new TypeError('body_too_large');
+  const text = await request.text();
+  if (new TextEncoder().encode(text).byteLength > EVENT_MAX_BYTES)
+    throw new TypeError('body_too_large');
+  if (!text) throw new TypeError('body_required');
+  const body = JSON.parse(text) as unknown;
+  if (!safeJson(body)) throw new TypeError('body_limits_exceeded');
+  return body;
+}
+
+function cookieContext(env: Record<string, unknown>): CookieContext {
+  const environment = textEnv(env, 'TRACKING_ENVIRONMENT', 'preview');
+  if (environment !== 'preview' && environment !== 'live')
+    throw new TypeError('invalid_environment');
+  return {
+    tenantId: textEnv(env, 'TRACKING_TENANT_ID', 'default'),
+    siteId: textEnv(env, 'TRACKING_SITE_ID', 'default'),
+    environment,
+  };
+}
+
+function cookieKeys(env: Record<string, unknown>): Record<string, CryptoKey> {
+  const keys: Record<string, CryptoKey> = {};
+  for (const [name, idName] of [
+    ['TRACKING_COOKIE_SIGNING_KEY_CURRENT', 'TRACKING_COOKIE_SIGNING_KEY_ID_CURRENT'],
+    ['TRACKING_COOKIE_SIGNING_KEY_PREVIOUS', 'TRACKING_COOKIE_SIGNING_KEY_ID_PREVIOUS'],
+  ] as const) {
+    const key = env[name];
+    const id = textEnv(env, idName, name.includes('CURRENT') ? 'current' : 'previous');
+    if (key && typeof key === 'object' && 'type' in key) keys[id] = key as CryptoKey;
+  }
+  return keys;
+}
+
+function cookieDomain(env: Record<string, unknown>): string {
+  return textEnv(env, 'TRACKING_COOKIE_DOMAIN', 'shop.maestrogtm.com');
+}
+
+async function signedCookie(
+  env: Record<string, unknown>,
+  name: TrackingCookieName,
+  value: string,
+  maxAge: number
+): Promise<string> {
+  const key = env.TRACKING_COOKIE_SIGNING_KEY_CURRENT;
+  if (!key || typeof key !== 'object' || !('type' in key))
+    throw new Error('cookie_signing_key_unavailable');
+  const result = await issueSignedCookie(
+    {
+      ...cookieContext(env),
+      name,
+      value,
+      keyId: textEnv(env, 'TRACKING_COOKIE_SIGNING_KEY_ID_CURRENT', 'current'),
+      maxAge,
+    },
+    key as CryptoKey
+  );
+  return result.replace('Domain=shop.maestrogtm.com', `Domain=${cookieDomain(env)}`);
+}
+
+async function visitorId(request: Request, env: Record<string, unknown>): Promise<string | null> {
+  const keys = cookieKeys(env);
+  if (!Object.keys(keys).length) return null;
+  return verifySignedCookie(request.headers.get('cookie'), 'ma_vid', keys, cookieContext(env));
+}
+
+function jsonError(
+  code: string,
+  status: number,
+  request: Request,
+  env: Record<string, unknown>
+): Response {
+  const headers = cors(request, env);
+  return jsonResponse({ error: code }, status, headers);
+}
+
+async function recordScopeAudit(
+  env: CollectorEnv,
+  sourceSystem: string,
+  sourceEventId: string,
+  result: 'ignored_not_owner' | 'rejected_scope',
+  reason: string
+): Promise<void> {
+  await env.TRACKING_DB.prepare(
+    `INSERT INTO tracking_scope_audits
+       (audit_id, tenant_id, site_id, source_system, source_event_id, result, reason, created_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?)`
+  )
+    .bind(
+      crypto.randomUUID(),
+      textEnv(env, 'TRACKING_TENANT_ID', 'default'),
+      textEnv(env, 'TRACKING_SITE_ID', 'default'),
+      sourceSystem,
+      sourceEventId,
+      result,
+      reason.slice(0, 256),
+      new Date().toISOString()
+    )
+    .run();
+}
+
+async function bootstrap(request: Request, env: CollectorEnv): Promise<Response> {
+  if (!exactHost(request, env) || !exactOrigin(request, env))
+    return jsonError('not_allowed', 403, request, env);
+  const visitor = (await visitorId(request, env)) ?? `visitor_${crypto.randomUUID()}`;
+  const state = await loadPrivacyState(request, env, visitor);
+  const nonce = createCsrfNonce();
+  const response = jsonResponse(
+    {
+      schema_version: '1',
+      visitor_id: visitor,
+      privacy: state.decisions,
+      policy_version: state.policyVersion,
+      purposes: state.decisions
+        .filter((decision) => decision.allowed)
+        .map((decision) => decision.purpose),
+    },
+    200,
+    cors(request, env)
+  );
+  response.headers.set('x-csrf-nonce', nonce);
+  if (!(await visitorId(request, env))) {
+    response.headers.append('Set-Cookie', await signedCookie(env, 'ma_vid', visitor, 34_560_000));
+    response.headers.append(
+      'Set-Cookie',
+      await signedCookie(env, 'ma_sid', `session_${crypto.randomUUID()}`, 1_800)
+    );
+    response.headers.append(
+      'Set-Cookie',
+      await signedCookie(env, 'ma_privacy', `policy_${state.policyVersion}`, 34_560_000)
+    );
+  }
+  return response;
+}
+
+async function browserEvents(
+  request: Request,
+  env: CollectorEnv,
+  ctx: ExecutionContextLike
+): Promise<Response> {
+  const body = await readBody(request);
+  const candidate = validateCanonicalEvent(body);
+  if (
+    candidate.tenant_id !== textEnv(env, 'TRACKING_TENANT_ID', 'default') ||
+    candidate.site_id !== textEnv(env, 'TRACKING_SITE_ID', 'default')
+  ) {
+    await recordScopeAudit(
+      env,
+      candidate.source_system,
+      candidate.event_id,
+      'ignored_not_owner',
+      'event_scope_mismatch'
+    );
+    return jsonError('event_scope_mismatch', 403, request, env);
+  }
+  if (!PUBLIC_BROWSER_EVENTS.has(candidate.event_name) || candidate.source !== 'browser')
+    return jsonError('authoritative_event_requires_source_bridge', 403, request, env);
+  if (candidate.source_system !== 'event_worker')
+    return jsonError('invalid_browser_source', 403, request, env);
+  const visitor = await visitorId(request, env);
+  const state = await loadPrivacyState(request, env, visitor ?? candidate.visitor.visitor_id);
+  if (state.gpc) {
+    const observation = recordGpcObservation(env, visitor ?? candidate.visitor.visitor_id);
+    if (ctx.waitUntil) ctx.waitUntil(observation);
+    else await observation;
+  }
+  if (state.gpc && !allows(state, 'advertising')) {
+    await persistCanonicalEvent(env, candidate, state);
+    return jsonResponse({ accepted: true, suppressed: true }, 202, cors(request, env));
+  }
+  await persistCanonicalEvent(env, candidate, state);
+  return jsonResponse({ accepted: true, suppressed: false }, 202, cors(request, env));
+}
+
+function sourceKey(env: Record<string, unknown>, source: SourceSystem): unknown {
+  return env[`TRACKING_${source.toUpperCase()}_BRIDGE_KEY_CURRENT`];
+}
+
+async function importHmacKey(value: unknown): Promise<CryptoKey | null> {
+  if (value && typeof value === 'object' && 'type' in value) return value as CryptoKey;
+  if (typeof value !== 'string' || value.length < 16 || value.length > 4096) return null;
+  return crypto.subtle.importKey(
+    'raw',
+    new TextEncoder().encode(value),
+    { name: 'HMAC', hash: 'SHA-256' },
+    false,
+    ['verify']
+  );
+}
+
+async function sourceEvents(request: Request, env: CollectorEnv): Promise<Response> {
+  // Server-to-server bridges authenticate the exact body with an independent key;
+  // a browser Origin header is neither required nor trusted on this route.
+  if (!exactHost(request, env)) return jsonError('not_allowed', 403, request, env);
+  const source = request.headers.get('x-tracking-source') as SourceSystem | null;
+  if (!source || !SOURCE_SYSTEMS.has(source)) return jsonError('invalid_source', 401, request, env);
+  const timestamp = request.headers.get('x-tracking-timestamp') ?? '';
+  const nonce = request.headers.get('x-tracking-nonce') ?? '';
+  const signature = request.headers.get('x-tracking-signature') ?? '';
+  const numericTimestamp = Number(timestamp);
+  if (
+    !/^\d{10}$/.test(timestamp) ||
+    !/^[-A-Za-z0-9_]{8,128}$/.test(nonce) ||
+    !/^[a-f0-9]{64}$/i.test(signature) ||
+    Math.abs(Date.now() / 1000 - numericTimestamp) > 300
+  )
+    return jsonError('invalid_signature', 401, request, env);
+  const bodyText = await request.text();
+  if (new TextEncoder().encode(bodyText).byteLength > EVENT_MAX_BYTES)
+    return jsonError('body_too_large', 413, request, env);
+  const key = await importHmacKey(sourceKey(env, source));
+  if (!key) return jsonError('source_not_configured', 503, request, env);
+  const valid = await crypto.subtle.verify(
+    'HMAC',
+    key,
+    Uint8Array.from(signature.match(/.{2}/g)!.map((pair) => parseInt(pair, 16))),
+    new TextEncoder().encode(`${timestamp}.${nonce}.${bodyText}`)
+  );
+  if (!valid) return jsonError('invalid_signature', 401, request, env);
+  const nonceResult = await env.TRACKING_DB.prepare(
+    `INSERT INTO tracking_nonces (nonce, source_system, expires_at, created_at) VALUES (?, ?, ?, ?) ON CONFLICT(source_system, nonce) DO NOTHING`
+  )
+    .bind(nonce, source, new Date(Date.now() + 300_000).toISOString(), new Date().toISOString())
+    .run();
+  if ((nonceResult.meta?.changes ?? 0) !== 1)
+    return jsonError('replayed_request', 409, request, env);
+  const body = JSON.parse(bodyText) as unknown;
+  if (!safeJson(body)) return jsonError('body_limits_exceeded', 400, request, env);
+  const event = validateCanonicalEvent(body);
+  if (
+    !AUTHORITATIVE_EVENTS.has(event.event_name) ||
+    event.source !== 'server' ||
+    event.source_system !== source
+  )
+    return jsonError('invalid_authoritative_event', 403, request, env);
+  if (
+    event.tenant_id !== textEnv(env, 'TRACKING_TENANT_ID', 'default') ||
+    event.site_id !== textEnv(env, 'TRACKING_SITE_ID', 'default')
+  ) {
+    await recordScopeAudit(
+      env,
+      source,
+      event.event_id,
+      'ignored_not_owner',
+      'event_scope_mismatch'
+    );
+    return jsonError('event_scope_mismatch', 403, request, env);
+  }
+  const state = await loadPrivacyState(request, env, event.visitor.visitor_id);
+  const result = await persistCanonicalEvent(env, event, state);
+  return jsonResponse(
+    { accepted: true, event_key: result.eventKey, suppressed: result.suppressed },
+    202,
+    cors(request, env)
+  );
+}
+
+async function privacyMutation(request: Request, env: CollectorEnv): Promise<Response> {
+  const origin = allowedOrigins(env)[0];
+  if (!origin || !sameOriginNoCors(request, origin, allowedHost(env, request)))
+    return jsonError('not_allowed', 403, request, env);
+  const nonce = request.headers.get('x-csrf-nonce');
+  if (!nonce || !/^[A-Za-z0-9_-]{43}$/.test(nonce))
+    return jsonError('csrf_required', 403, request, env);
+  const body = privacyBody(await readBody(request));
+  if (
+    request.headers.get('sec-gpc') === '1' &&
+    body.allowed &&
+    ['advertising', 'identity_enrichment', 'sale_share'].includes(body.purpose)
+  )
+    return jsonError('gpc_blocks_grant', 409, request, env);
+  const visitor = await visitorId(request, env);
+  if (!visitor && body.visitor_id) return jsonError('verification_required', 403, request, env);
+  const choiceId = await recordPrivacyChoice(env, {
+    visitorId: visitor ?? body.visitor_id,
+    purpose: body.purpose,
+    allowed: body.allowed,
+    source: 'ui',
+    region: textEnv(env, 'TRACKING_REGION', 'US'),
+    policyVersion: textEnv(env, 'TRACKING_POLICY_VERSION', '1'),
+    supersedesChoiceKey: body.choice_id,
+  });
+  return jsonResponse({ accepted: true, choice_id: choiceId }, 202, cors(request, env));
+}
+
+async function privacyRequest(request: Request, env: CollectorEnv): Promise<Response> {
+  if (!exactHost(request, env) || !exactOrigin(request, env))
+    return jsonError('not_allowed', 403, request, env);
+  const body = await readBody(request);
+  if (!body || typeof body !== 'object' || Array.isArray(body))
+    return jsonError('invalid_request', 400, request, env);
+  const input = body as Record<string, unknown>;
+  const requestType = input.request_type;
+  const subject = input.subject_key;
+  if (
+    !['access', 'correction', 'deletion'].includes(String(requestType)) ||
+    typeof subject !== 'string' ||
+    !/^[A-Za-z0-9:_-]{1,128}$/.test(subject)
+  )
+    return jsonError('invalid_request', 400, request, env);
+  const verifiedVisitor = await visitorId(request, env);
+  if (!verifiedVisitor || verifiedVisitor !== subject)
+    return jsonError('verification_required', 403, request, env);
+  const requestId = crypto.randomUUID();
+  await env.TRACKING_DB.prepare(
+    `INSERT INTO tracking_deletion_requests (request_id, tenant_id, subject_key, request_type, state, verification_state, created_at, audit_json) VALUES (?, ?, ?, ?, 'received', 'pending', ?, ?)`
+  )
+    .bind(
+      requestId,
+      textEnv(env, 'TRACKING_TENANT_ID', 'default'),
+      subject,
+      requestType,
+      new Date().toISOString(),
+      JSON.stringify({ source: 'worker', purpose: 'privacy_request' })
+    )
+    .run();
+  return jsonResponse({ request_id: requestId, state: 'received' }, 202, cors(request, env));
+}
+
+async function verifyInternalBody(
+  request: Request,
+  env: CollectorEnv,
+  bodyText: string,
+  keyValue: unknown,
+  sourceSystem: string
+): Promise<boolean> {
+  const timestamp = request.headers.get('x-tracking-context-timestamp') ?? '';
+  const nonce = request.headers.get('x-tracking-context-nonce') ?? '';
+  const signature = request.headers.get('x-tracking-context-signature') ?? '';
+  if (
+    !/^\d{10}$/.test(timestamp) ||
+    !/^[-A-Za-z0-9_]{8,128}$/.test(nonce) ||
+    !/^[a-f0-9]{64}$/i.test(signature) ||
+    Math.abs(Date.now() / 1000 - Number(timestamp)) > 300
+  )
+    return false;
+  const key = await importHmacKey(keyValue);
+  if (!key) return false;
+  const valid = await crypto.subtle.verify(
+    'HMAC',
+    key,
+    Uint8Array.from(signature.match(/.{2}/g)!.map((pair) => parseInt(pair, 16))),
+    new TextEncoder().encode(`${timestamp}.${nonce}.${bodyText}`)
+  );
+  if (!valid) return false;
+  const result = await env.TRACKING_DB.prepare(
+    `INSERT INTO tracking_nonces (nonce, source_system, expires_at, created_at)
+       VALUES (?, ?, ?, ?) ON CONFLICT(source_system, nonce) DO NOTHING`
+  )
+    .bind(
+      nonce,
+      sourceSystem,
+      new Date(Date.now() + 300_000).toISOString(),
+      new Date().toISOString()
+    )
+    .run();
+  return (result.meta?.changes ?? 0) === 1;
+}
+
+async function browserClaims(request: Request, env: CollectorEnv): Promise<Response> {
+  if (request.method !== 'POST') return jsonError('method_not_allowed', 405, request, env);
+  const bodyText = await request.text();
+  if (new TextEncoder().encode(bodyText).byteLength > EVENT_MAX_BYTES)
+    return jsonError('body_too_large', 413, request, env);
+  if (
+    !(await verifyInternalBody(
+      request,
+      env,
+      bodyText,
+      env.TRACKING_CONTEXT_SIGNING_KEY_CURRENT ?? env.TRACKING_PAGES_BRIDGE_KEY_CURRENT,
+      'pages_context'
+    ))
+  )
+    return jsonError('not_authorized', 401, request, env);
+  const body = JSON.parse(bodyText) as Record<string, unknown>;
+  const paymentIds = Array.isArray(body.payment_ids)
+    ? body.payment_ids
+        .filter(
+          (value): value is string =>
+            typeof value === 'string' && /^[A-Za-z0-9:_-]{1,128}$/.test(value)
+        )
+        .slice(0, 50)
+    : [];
+  if (!paymentIds.length) return jsonResponse({ claims: [] }, 200);
+  const placeholders = paymentIds.map(() => '?').join(', ');
+  const rows = await env.TRACKING_DB.prepare(
+    `SELECT payment_id FROM tracking_purchase_browser_claims
+       WHERE tenant_id = ? AND site_id = ? AND payment_id IN (${placeholders})`
+  )
+    .bind(
+      textEnv(env, 'TRACKING_TENANT_ID', 'default'),
+      textEnv(env, 'TRACKING_SITE_ID', 'default'),
+      ...paymentIds
+    )
+    .all<{ payment_id: string }>();
+  // Only safe commerce identifiers cross the Worker boundary. Buyer context is never returned.
+  return jsonResponse(
+    { claims: (rows.results ?? []).map((row) => ({ payment_id: row.payment_id })) },
+    200
+  );
+}
+
+async function operatorRoute(request: Request, env: CollectorEnv): Promise<Response> {
+  const configured = textEnv(env, 'TRACKING_OPERATOR_TOKEN');
+  if (!configured || request.headers.get('authorization') !== `Bearer ${configured}`)
+    return jsonError('not_authorized', 401, request, env);
+  const body = await readBody(request);
+  if (!body || typeof body !== 'object' || Array.isArray(body))
+    return jsonError('invalid_request', 400, request, env);
+  const input = body as Record<string, unknown>;
+  const path = new URL(request.url).pathname;
+  if (path === '/internal/operator/kill-switch') {
+    if (typeof input.enabled !== 'boolean') return jsonError('invalid_request', 400, request, env);
+    env.TRACKING_KILL_SWITCH = input.enabled ? 'true' : 'false';
+    await env.TRACKING_DB.prepare(
+      `INSERT INTO tracking_scope_audits
+         (audit_id, tenant_id, site_id, source_system, result, reason, created_at)
+         VALUES (?, ?, ?, 'operator', 'accepted', ?, ?)`
+    )
+      .bind(
+        crypto.randomUUID(),
+        textEnv(env, 'TRACKING_TENANT_ID', 'default'),
+        textEnv(env, 'TRACKING_SITE_ID', 'default'),
+        input.enabled ? 'kill_switch_enabled' : 'kill_switch_disabled',
+        new Date().toISOString()
+      )
+      .run();
+    return jsonResponse({ accepted: true, enabled: input.enabled });
+  }
+  if (path === '/internal/operator/replay') {
+    const eventKey =
+      typeof input.event_key === 'string' && /^[a-f0-9]{64}$/.test(input.event_key)
+        ? input.event_key
+        : '';
+    const destination =
+      input.destination === 'meta' || input.destination === 'tinybird' ? input.destination : '';
+    if (!eventKey || !destination) return jsonError('invalid_request', 400, request, env);
+    if (!env.EVENTS_QUEUE) return jsonError('tracking_unavailable', 503, request, env);
+    await env.EVENTS_QUEUE.send({ event_key: eventKey, destination, schema_version: '1' });
+    return jsonResponse({ accepted: true, event_key: eventKey, destination });
+  }
+  return jsonError('not_found', 404, request, env);
+}
+
+export async function handleCollectorFetch(
+  request: Request,
+  env: CollectorEnv,
+  ctx: ExecutionContextLike
+): Promise<Response> {
+  if (!budget(env, request)) return jsonError('rate_limited', 429, request, env);
+  const path = new URL(request.url).pathname;
+  if (path === '/healthz' && request.method === 'GET')
+    return exactHost(request, env) ? healthResponse() : jsonError('not_allowed', 403, request, env);
+  if (!exactHost(request, env)) return jsonError('not_allowed', 403, request, env);
+  if (request.method === 'OPTIONS') {
+    return exactOrigin(request, env)
+      ? new Response(null, { status: 204, headers: cors(request, env) })
+      : jsonError('not_allowed', 403, request, env);
+  }
+  try {
+    if (path === '/v1/bootstrap' && request.method === 'GET') return await bootstrap(request, env);
+    if (path === '/v1/events' && request.method === 'POST')
+      return await browserEvents(request, env, ctx);
+    if (path === '/v1/privacy' && request.method === 'POST')
+      return await privacyMutation(request, env);
+    if (path === '/v1/privacy/requests' && request.method === 'POST')
+      return await privacyRequest(request, env);
+    if (path === '/v1/source-events' && request.method === 'POST')
+      return await sourceEvents(request, env);
+    if (path === '/internal/browser-claims' && request.method === 'POST')
+      return await browserClaims(request, env);
+    if (path.startsWith('/internal/operator/') && request.method === 'POST')
+      return await operatorRoute(request, env);
+    if (path.startsWith('/internal/')) return jsonError('not_found', 404, request, env);
+    return jsonError('not_found', 404, request, env);
+  } catch (error) {
+    console.warn(redactError(error));
+    const invalid = error instanceof TypeError || error instanceof SyntaxError;
+    const code = invalid ? 'invalid_request' : 'tracking_unavailable';
+    return jsonError(code, invalid ? 400 : 503, request, env);
+  }
+}
+
+export function resetCollectorBudgets(): void {
+  counters.clear();
+  destinationSpend.clear();
+}

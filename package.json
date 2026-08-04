@@ -41,6 +41,8 @@
     "test:quality": "node --import tsx --test tests/quality/*.test.mts",
     "test:blueprint": "node --import tsx --test tests/blueprint/*.test.mts",
     "test:functions": "node --import tsx --test tests/functions/*.test.mts",
+    "test:events": "node --import tsx --test workers/events/tests/collector.test.mts workers/events/tests/queue.test.mts workers/events/tests/observability.test.mts",
+    "check:events": "wrangler deploy --config workers/events/wrangler.jsonc --dry-run",
     "mcp:build": "npm --prefix packages/mcp run build",
     "mcp:test": "npm --prefix packages/mcp test",
     "mcp:start": "npm --prefix packages/mcp start"
