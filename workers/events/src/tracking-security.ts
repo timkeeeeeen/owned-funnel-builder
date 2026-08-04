@@ -7,10 +7,15 @@ export type WorkerTrackingSecurityBindings = {
   TRACKING_IDENTITY_HMAC_KEY_ID: string;
 };
 
-/** Pages receives verification material only; tracking D1 remains Worker-only. */
-export const PAGES_TRACKING_SECURITY_BINDINGS = {
-  TRACKING_COOKIE_VERIFY_KEYS: 'verify-only',
-} as const;
+/** Pages receives imported verification keys only; tracking D1 remains Worker-only. */
+export type PagesTrackingSecurityBindings = {
+  readonly TRACKING_COOKIE_VERIFY_KEYS: Readonly<Record<string, CryptoKey>>;
+  readonly TRACKING_DB?: never;
+};
+
+export const PAGES_TRACKING_SECURITY_BINDINGS: PagesTrackingSecurityBindings = {
+  TRACKING_COOKIE_VERIFY_KEYS: {},
+};
 
 /** Task 6 mounts public Worker routes; this Task 3 module only supplies their D1 adapter. */
 export const TASK_6_ROUTE_INTEGRATION_BOUNDARY = 'Task 6 owns public route wiring';

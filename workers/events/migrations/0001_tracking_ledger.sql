@@ -65,7 +65,7 @@ CREATE TABLE IF NOT EXISTS tracking_aliases (
   created_at TEXT NOT NULL,
   updated_at TEXT NOT NULL,
   PRIMARY KEY (tenant_id, alias_key),
-  UNIQUE (tenant_id, identifier_type, issuer_namespace, normalization_version, keyed_digest)
+  UNIQUE (tenant_id, identifier_type, issuer_namespace, normalization_version, keyed_digest, hmac_key_id)
 );
 
 CREATE TABLE IF NOT EXISTS tracking_events (

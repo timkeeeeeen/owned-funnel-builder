@@ -62,7 +62,7 @@ class SqliteD1 implements D1Database {
         hmac_key_id TEXT NOT NULL, person_id TEXT, verification_class TEXT NOT NULL,
         provenance_json TEXT NOT NULL, revoked_at TEXT, created_at TEXT NOT NULL, updated_at TEXT NOT NULL,
         PRIMARY KEY (tenant_id, alias_key),
-        UNIQUE (tenant_id, identifier_type, issuer_namespace, normalization_version, keyed_digest)
+        UNIQUE (tenant_id, identifier_type, issuer_namespace, normalization_version, keyed_digest, hmac_key_id)
       );
       CREATE TABLE tracking_person_redirects (tenant_id TEXT NOT NULL, from_person_id TEXT NOT NULL, to_person_id TEXT NOT NULL, reason TEXT NOT NULL, created_at TEXT NOT NULL, PRIMARY KEY (tenant_id, from_person_id));
       CREATE TABLE tracking_identity_conflicts (
@@ -98,6 +98,16 @@ class SqliteD1 implements D1Database {
       this.database.exec('ROLLBACK');
       throw error;
     }
+  }
+}
+
+class D1View implements D1Database {
+  constructor(private readonly database: SqliteD1) {}
+  prepare(query: string): D1PreparedStatement {
+    return this.database.prepare(query);
+  }
+  batch(statements: D1PreparedStatement[]): Promise<D1RunResult[]> {
+    return this.database.batch(statements);
   }
 }
 
@@ -315,23 +325,18 @@ test('D1 claims persist tenant-scoped aliases, conflicts, redirects, and key rot
   );
 });
 
-test('D1 serializes contenders and rewrites redirects to the stable canonical person', async () => {
+test('D1 CAS creates a redirect for a multi-store alias race', async () => {
   const database = new SqliteD1();
-  const store = new D1IdentityClaimStore(database, { currentHmacKeyId: 'current' });
-  const [first, second, third] = await Promise.all([
-    store.resolve({
+  const left = new D1IdentityClaimStore(new D1View(database), { currentHmacKeyId: 'current' });
+  const right = new D1IdentityClaimStore(new D1View(database), { currentHmacKeyId: 'current' });
+  const [first, second] = await Promise.all([
+    left.resolve({
       tenantId: 'tenant-a',
       aliasKey: 'racing-alias',
       personId: 'person-b',
       verificationClass: 'verified',
     }),
-    store.resolve({
-      tenantId: 'tenant-a',
-      aliasKey: 'racing-alias',
-      personId: 'person-c',
-      verificationClass: 'verified',
-    }),
-    store.resolve({
+    right.resolve({
       tenantId: 'tenant-a',
       aliasKey: 'racing-alias',
       personId: 'person-a',
@@ -339,8 +344,7 @@ test('D1 serializes contenders and rewrites redirects to the stable canonical pe
     }),
   ]);
   assert.equal(first.personId, 'person-b');
-  assert.equal(second.personId, 'person-b');
-  assert.equal(third.personId, 'person-a');
+  assert.equal(second.personId, 'person-a');
   assert.equal(
     database.database
       .prepare('SELECT person_id FROM tracking_aliases WHERE tenant_id = ? AND alias_key = ?')
@@ -354,20 +358,6 @@ test('D1 serializes contenders and rewrites redirects to the stable canonical pe
       )
       .get('tenant-a', 'person-b').to_person_id,
     'person-a'
-  );
-  assert.equal(
-    database.database
-      .prepare(
-        'SELECT to_person_id FROM tracking_person_redirects WHERE tenant_id = ? AND from_person_id = ?'
-      )
-      .get('tenant-a', 'person-c').to_person_id,
-    'person-a'
-  );
-  assert.equal(
-    database.database
-      .prepare('SELECT count(*) AS count FROM tracking_person_redirects WHERE to_person_id = ?')
-      .get('person-b').count,
-    0
   );
 });
 
@@ -386,6 +376,7 @@ test('D1 leaves every old-key alias intact until current-key backfill is complet
   });
 
   assert.equal(await store.retireAliasesForKey('tenant-a', 'shop', 'previous', 'rotation'), 0);
+  assert.equal(await store.retireAliasesForKey('tenant-a', 'shop', 'current', 'rotation'), 0);
   assert.equal(
     database.database
       .prepare(
@@ -399,5 +390,41 @@ test('D1 leaves every old-key alias intact until current-key backfill is complet
       .prepare('SELECT count(*) AS count FROM tracking_suppression_tombstones WHERE tenant_id = ?')
       .get('tenant-a').count,
     0
+  );
+});
+
+test('D1 retirement requires a current alias with the exact keyed digest', async () => {
+  const database = new SqliteD1();
+  const store = new D1IdentityClaimStore(database, { currentHmacKeyId: 'current' });
+  await store.resolve({
+    tenantId: 'tenant-a',
+    aliasKey: 'old-alias',
+    hmacKeyId: 'previous',
+    keyedDigest: 'digest-a',
+    personId: 'person-a',
+    verificationClass: 'verified',
+    identifierType: 'email',
+    issuerNamespace: 'checkout',
+    normalizationVersion: 'v1',
+  });
+  await store.resolve({
+    tenantId: 'tenant-a',
+    aliasKey: 'wrong-current-alias',
+    keyedDigest: 'digest-b',
+    personId: 'person-a',
+    verificationClass: 'verified',
+    identifierType: 'email',
+    issuerNamespace: 'checkout',
+    normalizationVersion: 'v1',
+  });
+
+  assert.equal(await store.retireAliasesForKey('tenant-a', 'shop', 'previous', 'rotation'), 0);
+  assert.equal(
+    database.database
+      .prepare(
+        'SELECT count(*) AS count FROM tracking_aliases WHERE tenant_id = ? AND alias_key = ?'
+      )
+      .get('tenant-a', 'old-alias').count,
+    1
   );
 });

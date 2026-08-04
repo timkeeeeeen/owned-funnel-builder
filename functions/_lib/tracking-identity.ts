@@ -9,6 +9,7 @@ export type IdentityClaim = {
   issuerNamespace?: string;
   normalizationVersion?: string;
   hmacKeyId?: string;
+  keyedDigest?: string;
   provenance?: Record<string, string>;
 };
 
@@ -150,6 +151,7 @@ type AliasRow = {
   identifier_type: string;
   issuer_namespace: string;
   normalization_version: string;
+  keyed_digest: string;
 };
 
 type D1IdentityOptions = {
@@ -260,9 +262,20 @@ export class D1IdentityClaimStore implements IdentityClaimStore {
             alias.verification_class,
           ]
         ),
+        this.statement(
+          `INSERT INTO tracking_person_redirects (tenant_id, from_person_id, to_person_id, reason, created_at)
+           SELECT ?, ?, ?, ?, CURRENT_TIMESTAMP WHERE changes() > 0
+           ON CONFLICT(tenant_id, from_person_id) DO UPDATE SET to_person_id = excluded.to_person_id`,
+          [input.tenantId, loser, winner, 'identity_alias_stable_winner']
+        ),
+        this.statement(
+          `UPDATE tracking_person_redirects SET to_person_id = ?
+           WHERE tenant_id = ? AND to_person_id = ?
+             AND EXISTS (SELECT 1 FROM tracking_aliases WHERE tenant_id = ? AND alias_key = ? AND person_id = ?)`,
+          [winner, input.tenantId, loser, input.tenantId, input.aliasKey, winner]
+        ),
       ]);
       if (changed(updated)) {
-        await this.redirect(input.tenantId, input.aliasKey, loser, winner);
         const current = await this.alias(input.tenantId, input.aliasKey);
         if (current?.person_id) return { personId: current.person_id, state: 'linked' };
       }
@@ -300,6 +313,7 @@ export class D1IdentityClaimStore implements IdentityClaimStore {
           identifierType: candidateRow.identifier_type,
           issuerNamespace: candidateRow.issuer_namespace,
           normalizationVersion: candidateRow.normalization_version,
+          keyedDigest: candidateRow.keyed_digest,
         });
         return currentResult.state === 'conflict' ? currentResult : result;
       }
@@ -311,7 +325,7 @@ export class D1IdentityClaimStore implements IdentityClaimStore {
     return this.database
       .prepare(
         `SELECT alias_key, tenant_id, hmac_key_id, person_id, verification_class, revoked_at,
-                identifier_type, issuer_namespace, normalization_version
+                identifier_type, issuer_namespace, normalization_version, keyed_digest
          FROM tracking_aliases WHERE tenant_id = ? AND alias_key = ? LIMIT 1`
       )
       .bind(tenantId, aliasKey)
@@ -344,7 +358,7 @@ export class D1IdentityClaimStore implements IdentityClaimStore {
           input.identifierType ?? 'unknown',
           input.issuerNamespace ?? 'unknown',
           input.normalizationVersion ?? 'v1',
-          input.aliasKey,
+          input.keyedDigest ?? input.aliasKey,
           input.hmacKeyId ?? this.currentHmacKeyId,
           personId,
           input.verificationClass,
@@ -372,29 +386,6 @@ export class D1IdentityClaimStore implements IdentityClaimStore {
       )
       .bind(tenantId, aliasKey)
       .first());
-  }
-
-  private async redirect(
-    tenantId: string,
-    aliasKey: string,
-    loser: string,
-    winner: string
-  ): Promise<void> {
-    await this.database.batch([
-      this.statement(
-        `UPDATE tracking_person_redirects SET to_person_id = ?
-         WHERE tenant_id = ? AND to_person_id = ?
-           AND EXISTS (SELECT 1 FROM tracking_aliases WHERE tenant_id = ? AND alias_key = ? AND person_id = ?)`,
-        [winner, tenantId, loser, tenantId, aliasKey, winner]
-      ),
-      this.statement(
-        `INSERT INTO tracking_person_redirects (tenant_id, from_person_id, to_person_id, reason, created_at)
-         SELECT ?, ?, ?, ?, CURRENT_TIMESTAMP
-         WHERE EXISTS (SELECT 1 FROM tracking_aliases WHERE tenant_id = ? AND alias_key = ? AND person_id = ?)
-         ON CONFLICT(tenant_id, from_person_id) DO UPDATE SET to_person_id = excluded.to_person_id`,
-        [tenantId, loser, winner, 'identity_alias_stable_winner', tenantId, aliasKey, winner]
-      ),
-    ]);
   }
 
   private async quarantine(
@@ -431,9 +422,10 @@ export class D1IdentityClaimStore implements IdentityClaimStore {
     hmacKeyId: string,
     reason: string
   ): Promise<number> {
+    if (hmacKeyId === this.currentHmacKeyId) return 0;
     const aliases = await this.database
       .prepare(
-        `SELECT alias_key, person_id, identifier_type, issuer_namespace, normalization_version
+        `SELECT alias_key, person_id, identifier_type, issuer_namespace, normalization_version, keyed_digest
          FROM tracking_aliases WHERE tenant_id = ? AND hmac_key_id = ?`
       )
       .bind(tenantId, hmacKeyId)
@@ -445,16 +437,62 @@ export class D1IdentityClaimStore implements IdentityClaimStore {
     }
     const now = this.now();
     const results = await this.database.batch(
-      rows.flatMap(({ alias_key }) => [
+      rows.flatMap((row) => [
         this.statement(
           `INSERT INTO tracking_suppression_tombstones
             (suppression_key, tenant_id, site_id, alias_key, hmac_key_id, reason, created_at)
-           VALUES (?, ?, ?, ?, ?, ?, ?)`,
-          [identityConflictId(), tenantId, siteId, alias_key, hmacKeyId, reason, now]
+           SELECT ?, ?, ?, ?, ?, ?, ?
+           WHERE EXISTS (
+             SELECT 1 FROM tracking_aliases old
+             WHERE old.tenant_id = ? AND old.alias_key = ? AND old.hmac_key_id = ?
+               AND EXISTS (
+                 SELECT 1 FROM tracking_aliases current
+                 WHERE current.tenant_id = ? AND current.hmac_key_id = ? AND current.person_id = ?
+                   AND current.identifier_type = ? AND current.issuer_namespace = ?
+                   AND current.normalization_version = ? AND current.keyed_digest = ?
+               )
+           )`,
+          [
+            identityConflictId(),
+            tenantId,
+            siteId,
+            row.alias_key,
+            hmacKeyId,
+            reason,
+            now,
+            tenantId,
+            row.alias_key,
+            hmacKeyId,
+            tenantId,
+            this.currentHmacKeyId,
+            row.person_id,
+            row.identifier_type,
+            row.issuer_namespace,
+            row.normalization_version,
+            row.keyed_digest,
+          ]
         ),
         this.statement(
-          'DELETE FROM tracking_aliases WHERE tenant_id = ? AND alias_key = ? AND hmac_key_id = ?',
-          [tenantId, alias_key, hmacKeyId]
+          `DELETE FROM tracking_aliases
+           WHERE tenant_id = ? AND alias_key = ? AND hmac_key_id = ?
+             AND EXISTS (
+               SELECT 1 FROM tracking_aliases current
+               WHERE current.tenant_id = ? AND current.hmac_key_id = ? AND current.person_id = ?
+                 AND current.identifier_type = ? AND current.issuer_namespace = ?
+                 AND current.normalization_version = ? AND current.keyed_digest = ?
+             )`,
+          [
+            tenantId,
+            row.alias_key,
+            hmacKeyId,
+            tenantId,
+            this.currentHmacKeyId,
+            row.person_id,
+            row.identifier_type,
+            row.issuer_namespace,
+            row.normalization_version,
+            row.keyed_digest,
+          ]
         ),
       ])
     );
@@ -466,7 +504,7 @@ export class D1IdentityClaimStore implements IdentityClaimStore {
       .prepare(
         `SELECT alias_key FROM tracking_aliases
          WHERE tenant_id = ? AND hmac_key_id = ? AND person_id = ?
-           AND identifier_type = ? AND issuer_namespace = ? AND normalization_version = ?
+           AND identifier_type = ? AND issuer_namespace = ? AND normalization_version = ? AND keyed_digest = ?
          LIMIT 1`
       )
       .bind(
@@ -475,7 +513,8 @@ export class D1IdentityClaimStore implements IdentityClaimStore {
         old.person_id,
         old.identifier_type,
         old.issuer_namespace,
-        old.normalization_version
+        old.normalization_version,
+        old.keyed_digest
       )
       .first());
   }
