@@ -229,25 +229,22 @@ async function markPaymentSucceeded(
     .prepare('SELECT token_hash FROM funnel_runs WHERE id = ?')
     .bind(funnelId)
     .first<{ token_hash: string }>();
+  const contextHash = cleanString(flow?.token_hash, 64);
+  if (!/^[a-f0-9]{64}$/i.test(contextHash)) throw new Error('Payment context is unavailable.');
   const currency = cleanString(data.currency, 3).toUpperCase();
   const purchaseSourceEventId = `purchase:${paymentId}`;
   const purchasePayload = {
     schema_version: '1',
-    event_id: purchaseSourceEventId,
+    source_system: 'pages',
+    source_event_id: purchaseSourceEventId,
     event_name: 'Purchase',
     occurred_at: now,
-    identity: {
-      lead_id: leadId,
-      funnel_id: funnelId,
-      payment_id: paymentId,
-      flow_token_hash: cleanString(flow?.token_hash, 128),
-    },
-    commerce: {
-      payment_id: paymentId,
-      value: minorUnitsToMajor(data.total_amount as number, currency),
-      currency,
-      contents,
-    },
+    context_hash: contextHash,
+    context_expires_at: new Date(Date.now() + 10 * 60_000).toISOString(),
+    funnel_slug: metadata.offer_slug || funnelId,
+    product_id: metadata.product_key,
+    payment_id: paymentId,
+    privacy_snapshot: { schema_version: '1', server_subject_ref: `privacy_${leadId}`, subject_ref_version: 'v1', snapshot_issued_at: now, snapshot_expires_at: new Date(Date.now() + 10 * 60_000).toISOString(), snapshot_key_id: 'pages-current', snapshot_signature: 'webhook-context-signature', purposes: { necessary: 'granted', analytics: 'unknown', advertising: 'unknown', identity_enrichment: 'unknown', sale_share: 'unknown' }, policy_version: '2026-08-02', choice_id: 'checkout', decision_source: 'policy', notice_locale: 'en-US', region: 'unknown', region_source: 'unknown', gpc: false, observed_at: now },
   };
   const purchaseEvent = {
     tenantId,
