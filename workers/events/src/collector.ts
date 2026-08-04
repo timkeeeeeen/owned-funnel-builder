@@ -309,7 +309,7 @@ async function verifyEventContext(
     event.privacy.policy_version !== policyVersion
   )
     return null;
-  if (!externallyVerified && /^[a-f0-9]{64}$/i.test(contextHash)) {
+  if (!externallyVerified && event.event_name === 'Purchase' && /^[a-f0-9]{64}$/i.test(contextHash)) {
     const consumed = await env.TRACKING_DB.prepare(
       `UPDATE tracking_context_exchanges
        SET consumed_at = ?, consumed_event_id = ?, consumed_flow_binding = flow_binding
