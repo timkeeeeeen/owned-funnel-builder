@@ -126,6 +126,28 @@ required plan changes, not optional polish:
 - launch gates, migrations, observability, browser coverage, and source SHAs
   are machine-checkable before campaign enablement.
 
+## Spec Evaluation Amendments (2026-08-04)
+
+The companion evaluation at
+`docs/superpowers/reviews/2026-08-04-first-party-event-pipeline-spec-evaluation.md`
+is now the blocking review for this plan. Before Task 2 traffic or provider
+work, the implementation must add and consume the machine-readable privacy and
+field-policy artifacts, preserve a signed event-time privacy snapshot, inject
+visitor/session identity server-side, and make bootstrap/consent ordering an
+explicit control-plane exception. The browser must bind bootstrap context and
+CSRF to subsequent events; beacon delivery must have a credentialed fallback.
+
+The Worker must re-check privacy/tombstones immediately before every send,
+persist and compare destination payload hashes, fence leases, classify sender
+outcomes, keep `outcome_unknown` terminal until audited replay, and use a
+durable kill switch that pauses rather than deletes pending rows. Add focused
+tests for each invariant before claiming Task 6 or Task 7 complete.
+
+The delivery sequence is staged: one Pages funnel proves the complete path,
+the other Pages funnels receive independent gates, and App-Idea/Blueprint stay
+shadow-only until their exact deployed source contracts and SHAs are pinned.
+No campaign or provider mutation is implied by a passing software gate.
+
 ## Delivery Order And Dependencies
 
 | Order | Deliverable | Depends on |
@@ -136,8 +158,9 @@ required plan changes, not optional polish:
 | 4 | Pages checkout/webhook/outbox integration | Tasks 2–3 |
 | 5 | Browser Pixel/collector integration | Tasks 3–4 |
 | 6 | Standalone Worker, Queue/DLQ, privacy, and cleanup | Tasks 2–5 |
-| 7 | Direct Meta CAPI and Tinybird projection | Tasks 2–6 |
-| 8 | App-Idea and Blueprint source outboxes/bridges | Tasks 1, 3, and 7 |
+| 7a | App-Idea/Blueprint context exchange and source-protocol prerequisite | Tasks 1, 3, and 6 |
+| 7b | Direct Meta CAPI and Tinybird projection | Tasks 2–6 and 7a |
+| 8 | App-Idea and Blueprint source outboxes/bridges | Tasks 1, 3, 6, and 7a |
 | 9 | Deployment manifests, ownership reconciliation, and CI gates | Tasks 2–8 |
 | 10 | Preview, fixture, and live $1 validation evidence | Tasks 1–9 |
 | 11 | Copy/campaign readiness and per-funnel activation | Task 10 |
@@ -145,6 +168,18 @@ required plan changes, not optional polish:
 The three Pages funnels can become independently launch-ready while a missing
 App-Idea or Blueprint source contract is resolved, but the five-funnel program
 is not complete until all five gates are green.
+
+### Execution correction (2026-08-04)
+
+The original 7→8 dependency was circular: destination delivery needs a
+Worker-resolved context hash, while the source bridge is the component that
+creates and verifies that context. Execute the context-exchange prerequisite
+before destination senders. It owns the one-time Worker context exchange,
+`context_hash` storage/lookup, signed privacy-snapshot preservation, removal of
+raw buyer context from Pages outboxes, and the canonical source-browser claim
+contract. Keep App-Idea and Blueprint shadow-only until Task 1 supplies exact
+source ownership, deployed contract, product, and SHA evidence. No later task
+may invent missing provider/runtime values.
 
 ---
 
@@ -879,7 +914,7 @@ creating a payment, fulfillment, or Purchase.
 - [ ] **Step 2: Run focused tests and confirm current sequential behavior fails**
 
 ```bash
-rtk host-test-slot --class focused node --import tsx --test tests/functions/payment.test.mts tests/functions/browser-events.test.mts
+rtk host-test-slot --class focused node --import tsx --test tests/functions/payment.test.mts tests/functions/browser-events.test.mts tests/functions/source-outbox.test.mts
 ```
 
 Expected: the current checkout/webhook code has no batch/outbox and no
@@ -896,17 +931,16 @@ event.
 If provider creation fails after Lead commit, return a named Lead payload so the
 browser can emit it once; never guess an InitiateCheckout.
 
-- [ ] **Step 4: Persist the bounded buyer context**
+- [ ] **Step 4: Persist the bounded buyer context behind a Worker context hash**
 
-Include only validated latest `fbp`/`fbc`, signed external ID, browser request
-IP/UA, sanitized verified source URL, attribution, capture time, approved
-identity HMACs, and destination-scoped Meta hashes in the bounded source row.
-Pages invokes the pinned `meta_identity` transform version before sending the
-bounded bridge envelope; the Worker validates that version and never hashes an
-already-hashed value, then persists the bounded context in tracking D1. The
-Worker never reads raw checkout PII. Dodo webhook request headers and Cloudflare
-geo are never buyer context. Set an expiry at seven days from event occurrence
-and scrub source payloads after bridge acceptance when no retry is pending.
+The browser/proxy exchange writes only the reviewed, purpose-permitted buyer
+context side record in tracking D1 and returns a Worker-minted one-time
+`context_hash`. The Pages source outbox carries that hash, expiry, provider
+identifiers, and signed privacy-snapshot reference—not raw `fbp`/`fbc`, IP/UA,
+attribution, external IDs, or Meta hashes. The Worker resolves the side record
+by the tenant/site/funnel/flow-bound hash, applies the field-policy matrix, and
+redacts it within seven days of the server-stamped anchor. Dodo webhook request
+headers and Cloudflare geo are never buyer context.
 
 - [ ] **Step 5: Implement one verified Purchase and one browser claim**
 
@@ -938,8 +972,90 @@ claimed payment. `Referrer-Policy: strict-origin` is set on every flow page.
 rtk host-test-slot --class focused node --import tsx --test tests/functions/payment.test.mts tests/functions/browser-events.test.mts
 rtk pnpm check:functions
 rtk git diff --check
-rtk git add functions/api/checkout.ts functions/api/webhooks/dodo.ts functions/api/funnel/status.ts functions/api/funnel/browser-events.ts functions/_lib/funnel.ts migrations/0011_source_tracking_outbox_retention.sql tests/functions/payment.test.mts tests/functions/browser-events.test.mts tests/functions/source-outbox.test.mts
+rtk git add functions/api/checkout.ts functions/api/webhooks/dodo.ts functions/api/funnel/status.ts functions/api/funnel/browser-events.ts functions/api/internal/source-outbox-recovery.ts functions/_lib/funnel.ts functions/_lib/source-outbox.ts migrations/0011_source_tracking_outbox_retention.sql tests/functions/payment.test.mts tests/functions/browser-events.test.mts tests/functions/source-outbox.test.mts
 rtk git commit -m "feat: make Pages conversion events transactional"
+```
+
+## Task 4.5: Add Machine-Readable Privacy, Field, Host, Source, And Rollout Artifacts
+
+**Files:**
+
+- Create: `config/privacy-policy.json`
+- Create: `config/tracking-field-policy.json`
+- Create: `config/trusted-hosts.json`
+- Create: `config/source-runtime-manifest.json`
+- Create: `config/rollout-state.json`
+- Create: `docs/launch/provider-capability-readback.md`
+- Create: `functions/_lib/tracking-policy.ts`
+- Create: `tests/quality/first-party-control-artifacts.test.mts`
+
+**Interfaces:**
+
+```ts
+type TrackingFieldRule = {
+  field: string;
+  purposes: PrivacyPurpose[];
+  sources: SourceSystem[];
+  destinations: DestinationName[];
+  ttl_seconds: number;
+  redaction: 'omit' | 'hmac' | 'bucket';
+  provenance: 'browser' | 'source' | 'server';
+};
+function validateTrackingArtifacts(input: unknown): void;
+function projectPermittedFields(
+  event: CanonicalEvent,
+  decisions: PrivacyDecision[],
+  policy: TrackingFieldRule[]
+): CanonicalEvent;
+```
+
+The five machine-readable policy/host/source/rollout artifacts are launch
+inputs, not documentation placeholders. Task 9 adds the machine-readable
+provider capability JSON; its Markdown readback is supporting evidence.
+Missing artifacts, unknown fields, stale policy versions,
+untrusted hosts, or unpinned source runtimes fail closed. The rollout artifact
+enforces one selected Pages pilot before the other Pages funnels can advance;
+App-Idea and Blueprint remain `shadow` until their exact source SHA, signed
+context verifier, outbox/reconciliation owner, and Dodo ownership readback are
+present. Browser/source visitor, session, person, and external IDs are never
+accepted as identity authority; a Worker-minted context hash is the only lookup
+binding to the signed subject/snapshot/tenant/site/funnel/flow.
+
+The browser-claim protocol is fixed across tasks: Task 6 registers one signed
+`POST /internal/browser-claims` endpoint; Pages forwards only a
+nonce/expiry/funnel-bound Pages signature; Task 8 supplies source outbox
+receipts and the exact Pages route/test. No public-session token or raw browser
+identity is accepted by the Worker, and no second claim endpoint may be added.
+Task 5 may use a mocked `outbox_committed` receipt only; the authoritative
+acceptance/replay test belongs to Task 8. Task 6's `/v1/source-events` and
+privacy-request behavior are disabled stubs until their owning Task 8/7
+contracts are present, so each task remains independently testable.
+
+- [ ] **Step 1: Write failing artifact and field-redaction tests**
+
+Assert every Task 4.5 artifact has a version, owner, policy version, and
+machine-readable schema. Task 9 must additionally assert the provider
+capability JSON is the only provider gate and the Markdown readback references
+its checksum. Assert
+`fbclid`, `_fbp`, `_fbc`, IP, and UA are omitted
+before canonical persistence when advertising is denied, and that only the
+declared HMAC/bucket projection may survive an analytics-only path. Assert an
+unlisted source field, cross-funnel context hash, deleted subject, or stale
+policy snapshot is rejected.
+
+- [ ] **Step 2: Add the minimal validators and checked-in artifacts**
+
+Keep the artifacts deployment data; do not add a CMS or generic policy engine.
+The shared validator is imported by browser/source bridge and Worker code so
+both paths apply the same field matrix and redaction deadline.
+
+- [ ] **Step 3: Run the focused artifact gate and commit**
+
+```bash
+rtk host-test-slot --class focused node --import tsx --test tests/quality/first-party-control-artifacts.test.mts
+rtk git diff --check
+rtk git add config/privacy-policy.json config/tracking-field-policy.json config/trusted-hosts.json config/source-runtime-manifest.json config/rollout-state.json docs/launch/provider-capability-readback.md functions/_lib/tracking-policy.ts tests/quality/first-party-control-artifacts.test.mts
+rtk git commit -m "feat: add first-party tracking control artifacts"
 ```
 
 ## Task 5: Integrate Browser Pixel, Attribution, And Collector Events
@@ -952,6 +1068,14 @@ rtk git commit -m "feat: make Pages conversion events transactional"
 - Modify: `src/components/offers/OfferCheckoutDialog.astro`
 - Modify: `src/components/blueprint/BlueprintFunnelRuntime.astro`
 - Modify: `src/scripts/blueprint-funnel-client.ts`
+- Modify: `src/pages/checkout/complete.astro`
+- Create: `workers/events/migrations/0003_csrf_nonce_bindings.sql`
+- Modify (Task 5 owns the consent/bootstrap protocol slice; Task 6 owns
+  delivery/queue extensions): `workers/events/src/collector.ts`
+- Modify (consent-state lookup contract): `workers/events/src/privacy.ts`
+- Modify: `workers/events/wrangler.jsonc` (non-secret context key IDs only)
+- Modify: `workers/events/tests/collector.test.mts`
+- Modify: `tests/functions/tracking-privacy.test.mts`
 - Create or verify owner: `src/components/ConsentBanner.astro`
 - Create: `functions/api/blueprint/checkout-start.ts`
 - Create: `functions/api/blueprint/checkout-status.ts`
@@ -978,8 +1102,12 @@ type BrowserTracker = {
 };
 ```
 
-Task 5 owns the browser-facing consent UI, Pixel/collector wiring, and the
-contract shells for the Blueprint proxy routes. Task 8 owns source-runtime
+Task 5 owns the browser-facing consent UI, the consent/bootstrap/context-token
+protocol slice in the shared collector (including its server-authoritative
+privacy mutation, nonce migration, signer/verifier contract, and focused
+tests), Pixel wiring, and the contract shells for the Blueprint proxy routes.
+Task 6 owns queue/delivery/cleanup behavior and may extend the same Worker
+files only after consuming this protocol contract. Task 8 owns source-runtime
 outbox production and the authoritative bridge behavior behind those shells;
 it may not introduce a second browser tracker or proxy contract.
 
@@ -1000,11 +1128,16 @@ completion-page Purchase makes no collector request, and Admaxxer does not
 forward Meta events. In prior-consent regions, assert an accessible,
 non-preselected banner with `Accept all`, `Reject all`, and `Customize`, equal
 reject/accept affordances, keyboard focus order, reopen/withdrawal, stale-policy
-reset, and no tracking request while unresolved. Assert GPC wins over stored
-opt-in and that Pixel/bootstrap cannot race ahead of the privacy gate.
-Assert `/v1/bootstrap` is the first collector call after an allowed choice, that
-it issues signed visitor/session context only when permitted, and that the
-returned context binds the subsequent PageView. Assert every
+reset, and no tracking request while unresolved except one narrowly scoped
+control-plane bootstrap. That bootstrap may return only the policy/notice
+version, unresolved state, signed `ma_privacy` cookie, and one-time CSRF nonce;
+it must not create visitor/session identity, external IDs, attribution, event,
+Queue, Pixel, Tinybird, or destination state. Assert GPC wins over stored
+opt-in and that Pixel/tracking bootstrap cannot race ahead of the privacy gate.
+After Accept/Reject/Customize consumes the nonce atomically, a second
+bootstrap may issue only the identity/context permitted by the resulting
+purpose state, and the returned signed snapshot/context binds the subsequent
+PageView. Assert every
 Accept/Reject/Customize/Withdraw action POSTs a versioned choice to the Worker
 privacy ledger; localStorage is only a UI cache, never the server-side consent
 authority.
@@ -1016,12 +1149,17 @@ necessary checkout and must honor GPC.
 
 - [ ] **Step 2: Replace the legacy Pixel boundary with one shared tracker**
 
-The new component calls the consent-gated `/v1/bootstrap` before loading the
-configured Pixel and exposes one
-`eventID`-keyed PageView call. Only `collectPageView` sends the same event ID to
-`https://events.shop.maestrogtm.com/v1/events` with `credentials: 'include'`.
-Navigation PageViews use beacon-compatible collection. It never sends Tinybird
-or credentials from the browser.
+The new component calls the permitted two-phase `/v1/bootstrap` before loading
+the configured Pixel and exposes one `eventID`-keyed PageView call. The browser
+binds the Worker-signed privacy snapshot/context and never treats visitor,
+session, person, or external IDs supplied by the page as authoritative. Only
+`collectPageView` sends the same event ID to
+`https://events.shop.maestrogtm.com/v1/events` with the required CSRF nonce and
+`credentials: 'include'`. Navigation PageViews use credentialed
+`fetch(..., { keepalive: true, credentials: 'include' })`; retain
+`sendBeacon` only if a real fixture proves cookie, Origin, content-type, and
+one-time-token semantics. It never sends Tinybird or credentials from the
+browser.
 
 - [ ] **Step 3: Emit named Lead and InitiateCheckout payloads**
 
@@ -1062,11 +1200,12 @@ events to `/v1/events`.
 ```bash
 rtk host-test-slot --class focused pnpm test:blueprint
 rtk host-test-slot --class focused node --import tsx --test tests/tracking/browser-contract.test.mts
+rtk host-test-slot --class focused node --import tsx --test tests/functions/browser-events.test.mts
 rtk host-test-slot --class focused node --import tsx --test tests/functions/blueprint-proxy.test.mts
 rtk host-test-slot --class focused pnpm exec playwright test tests/tracking/preview-browser.spec.mts # only when the harness exists
 rtk pnpm check:functions
 rtk git diff --check
-rtk git add src/components/FirstPartyTracking.astro src/components/ConsentBanner.astro src/layouts/OfferLayout.astro src/components/offers/OfferAnalytics.astro src/components/offers/OfferCheckoutDialog.astro src/components/blueprint/BlueprintFunnelRuntime.astro src/scripts/blueprint-funnel-client.ts functions/api/checkout.ts functions/api/blueprint/_proxy.ts functions/api/blueprint/checkout-start.ts functions/api/blueprint/checkout-status.ts tests/blueprint/contract.test.mts tests/tracking/browser-contract.test.mts tests/functions/blueprint-proxy.test.mts
+rtk git add src/components/FirstPartyTracking.astro src/components/ConsentBanner.astro src/layouts/OfferLayout.astro src/components/offers/OfferAnalytics.astro src/components/offers/OfferCheckoutDialog.astro src/components/blueprint/BlueprintFunnelRuntime.astro src/scripts/blueprint-funnel-client.ts src/pages/checkout/complete.astro functions/api/checkout.ts functions/api/blueprint/_proxy.ts functions/api/blueprint/checkout-start.ts functions/api/blueprint/checkout-status.ts workers/events/migrations/0003_csrf_nonce_bindings.sql tests/blueprint/contract.test.mts tests/tracking/browser-contract.test.mts tests/functions/browser-events.test.mts tests/functions/blueprint-proxy.test.mts
 # Add tests/tracking/preview-browser.spec.mts only when the harness exists.
 rtk git commit -m "feat: wire first-party browser event parity"
 ```
@@ -1083,9 +1222,11 @@ rtk git commit -m "feat: wire first-party browser event parity"
 - Create: `workers/events/src/privacy.ts`
 - Create: `workers/events/src/cleanup.ts`
 - Create: `workers/events/src/observability.ts`
+- Create: `workers/events/migrations/0004_delivery_safety.sql`
 - Create: `workers/events/tests/collector.test.mts`
 - Create: `workers/events/tests/queue.test.mts`
 - Create: `workers/events/tests/observability.test.mts`
+- Modify: `tests/functions/migrations.test.mts`
 - Create: `docs/launch/first-party-event-pipeline-runbook.md`
 - Modify: `package.json`
 
@@ -1123,8 +1264,9 @@ Routes:
   claim request and returns newly claimed non-PII browser payloads; it is not
   exposed as a public route and cannot create canonical events.
 
-The browser-claims route remains disabled or shadow-only until Task 7 supplies
-the canonical Purchase mapping and safe `{event_name,event_id,custom_data}`
+The browser-claims route remains disabled or shadow-only until Task 8 supplies
+the committed-source-event contract, exact Pages proxy route, and
+acceptance/replay tests for the safe `{event_name,event_id,custom_data}` claim
 payload. A payment ID alone is never enough for the browser to synthesize a
 Purchase; the browser may only emit a server-issued claim.
 - Private operator `POST /internal/operator/replay` and kill-switch operations:
@@ -1159,6 +1301,14 @@ max-retry-to-DLQ persistence, privacy tombstone replay suppression, unknown sche
 source-token forgery, verified privacy-request lookup, bounded abuse budgets, and alert payloads that contain
 counts/IDs but no secrets or raw PII. Assert the health response is probe-safe.
 
+The migration fixture must also cover the delivery-safety contract: canonical
+and destination payload hashes are persisted before a provider call; a
+same-key/different-hash body is quarantined; a lease returns an owner and
+monotonically changing fencing token; stale completion is a no-op; and
+`outcome_unknown` is terminal until an audited replay. Privacy withdrawal,
+deletion, cleanup, kill-switch pause/resume, and a reclaimed lease racing an
+in-flight sender each have a focused regression test.
+
 - [ ] **Step 2: Implement fetch/queue/scheduled handlers**
 
 Queue messages contain event keys and bounded pseudonymous context only. The
@@ -1167,6 +1317,14 @@ records `outcome_unknown` after ambiguous provider calls, and preserves the
 same event/destination key on retries. The scheduled handler scans pending
 outbox rows, reclaims expired leases, runs retention cleanup, and writes DLQ
 failures to D1 before acknowledgement.
+
+`0004_delivery_safety.sql` adds non-null destination payload hash and transform
+metadata plus canonical payload hash, lease owner, fencing token, and lease
+deadline. Every terminal/retry update matches the delivery key, sending state,
+lease owner, and fencing token; zero rows updated means the worker is stale.
+The consumer re-resolves current purpose/GPC/tombstone/retention state and the
+durable kill switch immediately before each sender. A kill switch pauses rows;
+it never deletes them. `outcome_unknown` is never automatically retried.
 
 The fetch, queue, and scheduled handlers fail closed until the complete
 lexically sorted migration set, including `0002_tracking_scope_hardening.sql`,
@@ -1211,7 +1369,7 @@ cookie-signing, identity-HMAC, and source-bridge keys are Worker secrets.
 - [ ] **Step 4: Pass Worker focused tests and commit**
 
 ```bash
-rtk host-test-slot --class focused node --import tsx --test workers/events/tests/collector.test.mts workers/events/tests/queue.test.mts workers/events/tests/observability.test.mts
+rtk host-test-slot --class focused node --import tsx --test workers/events/tests/collector.test.mts workers/events/tests/queue.test.mts workers/events/tests/observability.test.mts tests/functions/migrations.test.mts
 rtk pnpm exec wrangler deploy --config workers/events/wrangler.jsonc --dry-run
 rtk git diff --check
 rtk git add workers/events package.json
@@ -1229,10 +1387,16 @@ this task.
 - Create: `workers/events/src/meta.ts`
 - Create: `workers/events/src/tinybird.ts`
 - Create: `workers/events/src/privacy-requests.ts`
+- Create: `workers/events/migrations/0007_privacy_destinations.sql`
 - Create: `workers/events/tests/destinations.test.mts`
 - Create: `workers/events/tests/privacy-requests.test.mts`
+- Modify: `workers/events/src/safety.ts`
+- Modify: `tests/functions/migrations.test.mts`
+- Create: `tests/quality/tinybird-schema-contract.test.mts`
 - Create: `tinybird/datasources/first_party_events.datasource`
 - Create: `tinybird/pipes/first_party_events_dedup.pipe`
+- Create: `tinybird/datasources/privacy_tombstones.datasource`
+- Create: `tinybird/pipes/privacy_tombstone_filter.pipe`
 - Modify: `workers/events/src/queue.ts`
 - Modify: `workers/events/src/cleanup.ts`
 
@@ -1296,9 +1460,10 @@ version/readback before live sends.
 - [ ] **Step 4: Implement retention and deletion**
 
 Implement a verified access/correction/deletion/opt-out request state machine
-for visitor ID, person ID, or normalized deterministic identifier. It writes a
-non-identifying suppression tombstone, purges queued/retrying/DLQ tracking rows,
-deletes or tombstones the named Tinybird projection according to its supported
+for visitor ID, person ID, or normalized deterministic identifier. It commits a
+non-identifying suppression tombstone before any purge attempt. Queue/DLQ
+messages are not selectively purged; consumers suppress matching rows after a
+tombstone re-check and allow them to expire. It deletes or tombstones the named Tinybird projection according to its supported
 TTL/delete mechanism, and sends a bounded source-runtime deletion request.
 Verification is by the current signed visitor cookie, an authenticated source
 account, or a source-runtime email/phone OTP; possession of an identifier alone
@@ -1312,9 +1477,17 @@ complete. Audit rows contain request IDs/status only. Previously accepted Meta d
 not claimed retractable; record the provider limitation and downstream request
 procedure. Tests prove replay cannot resurrect a deleted identity/event.
 
-Scheduled cleanup deletes raw retry context, Meta hashes, IP/UA, unresolved
-delivery context, and existing raw webhook payloads no later than seven days
-from event occurrence; diagnostics expire at ninety days, analytics at
+Tombstones are committed before any purge attempt and survive at least the
+maximum Queue/DLQ, replay, backup/restore, provider-replica, and key-rotation
+horizon. Queue/DLQ messages are not selectively purged; consumers re-check
+tombstones before every send, suppress matching messages, and let them expire
+under configured retention. A tracking-D1 restore keeps sender traffic
+disabled until post-snapshot tombstones are replayed from the restore-safe
+journal and a watermark readback is green. Scheduled cleanup deletes raw retry
+context, Meta hashes, IP/UA, unresolved delivery context, and existing raw
+webhook payloads no later than seven days from a server-stamped retention
+anchor (Worker receipt for browser events; verified provider/source time for
+authoritative events); diagnostics expire at ninety days, analytics at
 twenty-five months, and aliases at their configured policy deadline. Privacy
 tombstones override retention and prevent replay resurrection. Fan out a signed
 per-source deletion request and keep the request pending until every source
@@ -1323,24 +1496,46 @@ person-redirect deletion are explicit test cases.
 Because canonical envelopes are stored as JSON, cleanup must rewrite/redact
 their expiring sensitive fields (or move those fields to an expiring side
 table) and test that no IP/UA/Meta hash remains after the deadline. Every
-Tinybird row carries the versioned privacy subject key used by all pipes and
-deletion filters.
+Every Tinybird row carries the versioned privacy subject key used by all pipes
+and deletion filters. Add version-controlled Tinybird tombstone datasource and
+pipe files; every query/export anti-joins the current subject tombstone set.
+If physical deletion or restore-safe tombstone filtering cannot be proven, the
+subject key cannot be retained in Tinybird.
 
 - [ ] **Step 5: Pass destination fixtures and commit**
 
 ```bash
 rtk host-test-slot --class focused node --import tsx --test workers/events/tests/destinations.test.mts workers/events/tests/privacy-requests.test.mts
+rtk host-test-slot --class focused node --import tsx --test tests/quality/tinybird-schema-contract.test.mts
 rtk git diff --check
-rtk git add workers/events/src/meta.ts workers/events/src/tinybird.ts tinybird/datasources/first_party_events.datasource tinybird/pipes/first_party_events_dedup.pipe workers/events/tests/destinations.test.mts workers/events/tests/privacy-requests.test.mts workers/events/src/queue.ts workers/events/src/cleanup.ts workers/events/src/privacy-requests.ts
+rtk git add workers/events/src/meta.ts workers/events/src/tinybird.ts tinybird/datasources/first_party_events.datasource tinybird/pipes/first_party_events_dedup.pipe tinybird/datasources/privacy_tombstones.datasource tinybird/pipes/privacy_tombstone_filter.pipe workers/events/tests/destinations.test.mts workers/events/tests/privacy-requests.test.mts tests/quality/tinybird-schema-contract.test.mts workers/events/src/queue.ts workers/events/src/cleanup.ts workers/events/src/privacy-requests.ts
 rtk git commit -m "feat: deliver Meta and Tinybird events"
 ```
+
+## Remote-Mutation Authority (applies to Tasks 7–11)
+
+This plan is procedural documentation and does not itself authorize any
+external mutation. Preview provisioning, DNS/custom-domain changes, deployment,
+migration application, Meta/Tinybird configuration or Test Events, temporary
+live Dodo product creation, live charges, refunds/revocations/deactivation,
+campaign creation, and campaign enablement each require a fresh recorded owner
+approval naming the environment, exact reviewed SHA/artifact, exact targets,
+maximum charge or ad spend, execution window, operator, and rollback owner.
+Approval for one mutation class never authorizes another. Every script defaults
+to read-only or `--dry-run`; mutation requires a protected
+`--execute --approval-id <id>` path that fails closed on a missing, stale,
+wrong-environment, or target-mismatched approval. CI never receives live
+credentials.
 
 ## Task 8: Wire App-Idea And Blueprint Source Outboxes
 
 **Files in the tracking repository:**
 
-- Create: `workers/events/src/source-bridge.ts`
-- Create: `tests/tracking/source-bridge.test.mts`
+- Modify: `workers/events/src/index.ts`
+- Modify: `workers/events/src/collector.ts` (delegation only; one source/claim
+  authority, no duplicate route)
+- Create or modify: `workers/events/src/source-bridge.ts`
+- Create: `workers/events/tests/source-bridge.test.mts`
 - Create: `functions/api/tracking/source-browser-events.ts`
 - Create: `tests/functions/source-browser-events.test.mts`
 - Modify: `docs/launch/first-party-event-pipeline-evidence.md`
@@ -1366,6 +1561,17 @@ If a candidate path is absent, do not create a parallel fake authority. Task 1
 must replace it with the observed owning repository/path or keep that funnel
 `unverified` and activation-blocked.
 
+Task 8 begins with the context-exchange prerequisite before source outbox work:
+the Worker mints and resolves one-time `context_hash` records, preserves the
+signed privacy snapshot, and rejects raw `buyer_context` in source envelopes.
+The Pages checkout/outbox path is converted to carry only the opaque hash,
+expiry, provider IDs, and policy-approved bounded fields. The bridge protocol
+uses one canonical signed request/body-hash contract and one browser-claim
+endpoint; legacy header/token variants are rejected rather than supported in
+parallel. Browser claims return only `{ event_name, event_id, custom_data }`
+after a committed source outbox receipt. Unknown source repositories, products,
+SHAs, or Dodo owners remain shadow-only.
+
 **Interfaces:**
 
 ```ts
@@ -1383,16 +1589,14 @@ type SourceEventEnvelope = {
   lead_id?: string;
   checkout_session_id?: string;
   payment_id?: string;
-  attribution?: {
-    utm_source?: string; utm_medium?: string; utm_campaign?: string;
-    utm_content?: string; utm_term?: string; fbclid?: string; fbp?: string; fbc?: string;
-  };
-  meta_identity?: {
-    em?: string[]; ph?: string[]; fn?: string[]; ln?: string[];
-    ct?: string[]; st?: string[]; zp?: string[]; country?: string[];
-  };
-  meta_identity_version?: 'meta-v1';
   privacy_snapshot: {
+    schema_version: '1';
+    server_subject_ref: string;
+    subject_ref_version: string;
+    snapshot_issued_at: string;
+    snapshot_expires_at: string;
+    snapshot_key_id: string;
+    snapshot_signature: string;
     purposes: Record<'necessary' | 'analytics' | 'advertising' | 'identity_enrichment' | 'sale_share', 'granted' | 'denied' | 'unknown'>;
     policy_version: string;
     choice_id: string;
@@ -1403,19 +1607,15 @@ type SourceEventEnvelope = {
     gpc: boolean;
     observed_at: string;
   };
-  buyer_context?: {
-    fbp?: string; fbc?: string; external_id?: string;
-    browser_ip?: string; browser_user_agent?: string;
-    event_source_url?: string; captured_at?: string;
-  };
 };
 
 The short-lived `tracking_context_token` exists only at the browser/proxy
 boundary. It is exchanged for the one-time opaque `context_hash` before a source
 outbox write; bearer tokens, signed request bytes, and raw buyer-context fields
 are never persisted in source D1, Convex outboxes, Queue/DLQ messages, or
-access logs. Source producers strip destination fields when the event-time
-purpose is denied or unknown.
+access logs. Source producers and the Worker apply the shared field-policy
+matrix before the context exchange; denied or unknown fields are omitted before
+any canonical or destination row exists.
 POST /v1/source-events
 X-Maestro-Issuer: pages
 X-Maestro-Key-Id: pages-current
@@ -1424,26 +1624,34 @@ X-Maestro-Nonce: 32-byte-base64url
 X-Maestro-Signature: base64url(HMAC-SHA256(key, `v1\\n${timestamp}\\n${nonce}\\n${sha256(body)}\\n${body}`))
 ```
 
-`meta_identity` is destination-scoped, already normalized and SHA-256 hashed
-by the source authority, and retained only for the seven-day retry window. It
-is never copied to a generic queue, Tinybird, browser response, or log. The
-Worker accepts only these named keys and rejects arbitrary identity or
-attribution fields. `buyer_context` is bounded and authenticated, is persisted
-only in tracking D1 for seven days, and is used to build Purchase CAPI from the
-original buyer context—not Dodo request headers. It is never sent to Queue,
-Tinybird, logs, or browser responses.
+The source envelope carries only the one-time
+`context_hash`, expiry, provider identifiers, and signed privacy-snapshot
+reference. The Worker resolves bounded buyer context from tracking D1 using a
+tenant/site/funnel/flow-bound context hash; source outboxes, Queue/DLQ
+messages, logs, and browser responses never carry raw buyer context. A missing,
+expired, cross-funnel, or tombstoned context omits identity enrichment and
+alerts rather than reconstructing data from Dodo webhook headers.
 
 `tracking_context_token` is request-only: operation-specific tokens are used
 for one-shot checkout start versus short-lived status polling, with explicit
 nonce consume/lease semantics and audience checks. It is never a persisted
 source-envelope field. `POST /api/tracking/source-browser-events` is
-same-origin/no-CORS. The Pages
-proxy validates the source runtime's bound public-session token and calls a
-signed Worker-only claim operation; the Worker resolves only that funnel's
+same-origin/no-CORS. The Pages proxy validates the source runtime's server-side
+session/flow state (no public-session token is accepted or forwarded) and
+forwards only a Pages-signed, nonce/expiry/
+funnel-bound claim to the single signed Worker-only claim operation; the Worker
+resolves only that funnel's
 verified canonical events in tracking D1, atomically claims each Purchase once,
 and returns non-PII `{event_name,event_id,custom_data}` payloads. The endpoint
 rejects cross-origin/preflight requests and cannot create an event without a
 committed source outbox row. Pages has no tracking-D1 binding.
+
+Before any source outbox write, the source runtime calls one Worker-only signed
+context-exchange operation. The Worker verifies issuer, audience, nonce, expiry,
+flow binding, and current privacy state, consumes or leases the
+`tracking_context_token`, creates the Worker-minted `context_hash` bound to the
+signed subject/privacy snapshot/tenant/site/funnel/flow, and returns only that
+opaque hash. Source runtimes never derive or mint `context_hash` values.
 
 The Blueprint proxy remains disabled until Task 8 supplies the exact
 `BLUEPRINT_CONTEXT_TOKEN_VERIFY` binding and short-lived token issuer contract:
@@ -1463,7 +1671,6 @@ verified source payment lacks one D1 canonical Purchase mapping.
 
 - [ ] **Step 2: Implement Worker-side bridge verification**
 
-Verify issuer, audience, timestamp skew, nonce uniqueness, HMAC key version,
 Verify issuer, audience, fixed ±5 minute timestamp skew, ten-minute nonce
 uniqueness, and a source/runtime-specific HMAC key and audience. A valid Pages
 signature must fail for Blueprint or App-Idea, and revoking one source key must
@@ -1477,18 +1684,21 @@ headers from access logs.
 
  - [ ] **Step 3: Implement Blueprint source outbox in its owning runtime**
 
-Deploy the Worker bridge receiver first. Each source runtime then deploys a
-backward-compatible producer. In shadow mode the old browser path may perform
+Implement the Worker receiver and source-runtime producer behind fixtures only;
+do not deploy either runtime in this task. The protected Task 10 preview job
+may deploy the exact reviewed SHA set only after Task 9 CI/readback gates and a
+fresh deployment approval. In shadow mode the old browser path may perform
 commerce, but its tracking side effect is a no-op/metric-only; only the signed
-source outbox emits tracking. After the proxy and browser flag are green and
-duplicate-rate evidence is zero, reject direct browser calls. Record the
-compatible source/runtime SHA set in the evidence file.
+source outbox emits tracking. Record the compatible source/runtime SHA set in
+the evidence file.
 
 At the mutation that durably stores the verified Dodo checkout-session ID,
 write the source `InitiateCheckout` row. At the verified payment mutation,
-write the source `Purchase` row with the original buyer context. Drain
+write the source `Purchase` row with the one-time `context_hash` and signed
+privacy-snapshot reference. The Worker resolves bounded buyer context from
+tracking D1; source outboxes never carry raw buyer context. Drain
 source rows server-to-server with the same source event ID. Reject direct
-browser checkout-start/status calls without the signed assertion. Deploy an
+browser checkout-start/status calls without the signed assertion. Implement an
 explicit source-runtime dispatcher/cron/action with lease, retry,
 acknowledgement, and payment-reconciliation ownership; a bridge outage must
 eventually resolve or alert within the Purchase SLO.
@@ -1513,9 +1723,11 @@ acceptance, and before source acknowledgement.
 - [ ] **Step 6: Add source browser claims and proxy contracts**
 
 Implement `POST /api/tracking/source-browser-events` as a same-origin/no-CORS
-Pages proxy to a signed Worker-only claim operation. The Worker accepts a bound
-public-session token, selects only the funnel's committed source events,
-atomically claims each Purchase once in the tracking D1, and returns
+Pages proxy to the one signed `POST /internal/browser-claims` operation fixed in
+Task 4.5. Pages verifies the public flow/session and forwards only a
+nonce/expiry/funnel-bound Pages signature. The Worker selects only the funnel's
+committed source events, atomically claims each Purchase once in the tracking
+D1, and returns
 `{ event_name, event_id, custom_data }` with no PII.
 The Blueprint checkout-start/status proxies return Lead and InitiateCheckout
 payloads only after the corresponding source outbox commit. Test replay,
@@ -1536,7 +1748,18 @@ For each source repository, run its existing focused contract, commerce,
 Convex typecheck, secret-boundary, and migration gates through its prescribed
 remote/semaphore wrapper. Commit source changes separately, record exact SHAs
 in the evidence file, and do not merge a tracking branch that points at an
-unverified source SHA.
+unverified source SHA. In the tracking repository, run the Worker/Pages bridge
+fixtures, `rtk git diff --check`, stage the exact changed files, and commit the
+bridge receiver/proxy/evidence separately. The source-runtime manifest must
+contain the exact commands and paths before this step begins; “existing gates”
+without a recorded command is a failure.
+
+```bash
+rtk host-test-slot --class focused node --import tsx --test workers/events/tests/source-bridge.test.mts tests/functions/source-browser-events.test.mts
+rtk git diff --check
+rtk git add workers/events/src/source-bridge.ts functions/api/tracking/source-browser-events.ts functions/api/funnel/browser-events.ts tests/blueprint/contract.test.mts tests/functions/source-browser-events.test.mts workers/events/tests/source-bridge.test.mts docs/launch/first-party-event-pipeline-evidence.md
+rtk git commit -m "feat: add signed source bridge claims"
+```
 
 ## Task 9: Add Deployment Manifests, Ownership Checks, And CI Gates
 
@@ -1546,10 +1769,14 @@ unverified source SHA.
 - Create: `tests/quality/dodo-funnel-ownership.test.mts`
 - Create: `tests/quality/tracking-d1-binding.test.mts`
 - Create: `config/cloudflare-event-abuse-limits.json`
-- Modify (created and owned by Task 1): `config/source-runtime-manifest.json`
-- Modify (created and owned by Task 1): `config/trusted-hosts.json`
-- Modify (created and owned by Task 1): `config/privacy-policy.json`
-- Modify (created and owned by Task 1): `config/tracking-field-policy.json`
+- Modify (created and owned by Task 4.5): `config/source-runtime-manifest.json`
+- Modify (created and owned by Task 4.5): `config/trusted-hosts.json`
+- Modify (created and owned by Task 4.5): `config/privacy-policy.json`
+- Modify (created and owned by Task 4.5): `config/tracking-field-policy.json`
+- Modify (created and owned by Task 4.5): `config/rollout-state.json`
+- Modify: `config/provider-capabilities.json` (Task 4.5 creates the schema; Task 9 records verified readbacks)
+- Modify (created and owned by Task 4.5): `docs/launch/provider-capability-readback.md`
+- Create: `tests/quality/provider-capability-readback.test.mts`
 - Modify: `wrangler.jsonc`
 - Modify (runtime skeleton owned by Task 6): `workers/events/wrangler.jsonc`
 - Modify: `scripts/publish-cloudflare.mjs`
@@ -1559,16 +1786,26 @@ unverified source SHA.
 - Create: `config/source-runtime-gates.json`
 - Create: `config/observability-probe.json`
 - Create: `tests/quality/environment-resource-isolation.test.mts`
+- Create: `tests/quality/deployment-scripts.test.mts`
 - Create only if Task 1 confirms no external repository-local pipeline:
   `.woodpecker.yml`
 - Modify: `package.json`
 - Modify: `docs/launch/first-party-event-pipeline-evidence.md`
 
-Task 9 consumes the control artifacts; it does not recreate them. Changes are
-limited to deployment readbacks, environment bindings, and gate metadata. The
+Task 9 consumes the control artifacts; it does not recreate them. It owns the
+machine-readable provider capability artifact because its values come from
+environment/provider readbacks; the Markdown file remains human evidence.
+Changes are limited to deployment readbacks, environment bindings, and gate metadata. The
 Worker config has one owner: Task 6 defines the handler/binding shape, while
 Task 9 adds environment-specific resources and fail-closed checks without
 changing runtime behavior.
+
+Every publish/migration/provision script is read-only by default and requires
+`--execute --approval-id` for mutation. In particular, ordinary invocation
+must not alter Pages, D1, Dodo webhooks, Meta, Tinybird, DNS, or secrets.
+Provider IDs, source SHAs, and `ci_authority` values remain unverified until a
+read-only authority readback proves them; no `.woodpecker.yml` is created while
+CI ownership is unknown.
 
 **Interfaces:**
 
@@ -1684,7 +1921,17 @@ steps:
     image: node:22-bookworm
     commands:
       - npm ci
-      - node scripts/provision-preview-events.mjs --environment preview
+      - node scripts/provision-preview-events.mjs --environment preview --sha "$REVIEWED_SHA" --approval-id "$APPROVAL_ID" --execute
+    when:
+      event: [manual]
+      branch: [main]
+  preview_deploy:
+    image: node:22-bookworm
+    commands:
+      - npm ci
+      - node scripts/apply-tracking-migrations.mjs --environment preview --sha "$REVIEWED_SHA" --approval-id "$APPROVAL_ID" --execute
+      - node scripts/publish-cloudflare.mjs --environment preview --sha "$REVIEWED_SHA" --approval-id "$APPROVAL_ID" --execute --senders-off
+      - node scripts/publish-events-worker.mjs --environment preview --sha "$REVIEWED_SHA" --approval-id "$APPROVAL_ID" --execute --senders-off
     when:
       event: [manual]
       branch: [main]
@@ -1694,10 +1941,13 @@ The required status is the repository's existing Woodpecker verification
 status. The preview job is manual and launch-gated; it is not part of the PR
 status. If the authority is configured outside this repository, Task 1 records
 the exact external config owner and this file is not duplicated; the same
-commands and status contract remain mandatory. The gate never receives live
+commands and status contract remain mandatory. The PR gate never receives live
 provider secrets and never deploys. Manual provisioning additionally requires
 a protected environment approver and an exact reviewed SHA input; arbitrary
-manual runs and live resource IDs are rejected.
+manual runs and live resource IDs are rejected. `preview_deploy` is a separate
+protected mutation job: it requires an approval ID, exact SHA/artifact digest,
+preview target match, migration lock, and senders-off readback; it cannot run
+against live resources.
 
 The gate uses the pinned lockfile, an explicit runtime timeout, offline
 fixtures, and a no-network/provider-mutation guard. Required source-runtime
@@ -1713,19 +1963,24 @@ repo and external pipeline definitions are active.
 - [ ] **Step 5: Pass quality and configuration gates and commit**
 
 ```bash
-rtk host-test-slot --class focused node --import tsx --test tests/quality/dodo-funnel-ownership.test.mts tests/quality/tracking-d1-binding.test.mts
+rtk host-test-slot --class focused node --import tsx --test tests/quality/dodo-funnel-ownership.test.mts tests/quality/tracking-d1-binding.test.mts tests/quality/environment-resource-isolation.test.mts tests/quality/deployment-scripts.test.mts tests/quality/provider-capability-readback.test.mts
 rtk pnpm validate:config
 rtk pnpm check:functions
 rtk pnpm exec wrangler deploy --config workers/events/wrangler.jsonc --dry-run
 rtk git diff --check
-rtk git add config/dodo-funnel-ownership.json config/cloudflare-event-abuse-limits.json config/source-runtime-gates.json config/observability-probe.json tests/quality/dodo-funnel-ownership.test.mts tests/quality/tracking-d1-binding.test.mts tests/quality/environment-resource-isolation.test.mts wrangler.jsonc workers/events/wrangler.jsonc scripts/publish-cloudflare.mjs scripts/publish-events-worker.mjs scripts/provision-preview-events.mjs scripts/apply-tracking-migrations.mjs package.json .woodpecker.yml docs/launch/first-party-event-pipeline-evidence.md
+rtk git add config/dodo-funnel-ownership.json config/cloudflare-event-abuse-limits.json config/source-runtime-gates.json config/observability-probe.json config/provider-capabilities.json config/privacy-policy.json config/tracking-field-policy.json config/trusted-hosts.json config/source-runtime-manifest.json config/rollout-state.json tests/quality/dodo-funnel-ownership.test.mts tests/quality/tracking-d1-binding.test.mts tests/quality/environment-resource-isolation.test.mts tests/quality/deployment-scripts.test.mts tests/quality/provider-capability-readback.test.mts docs/launch/provider-capability-readback.md wrangler.jsonc workers/events/wrangler.jsonc scripts/publish-cloudflare.mjs scripts/publish-events-worker.mjs scripts/provision-preview-events.mjs scripts/apply-tracking-migrations.mjs package.json docs/launch/first-party-event-pipeline-evidence.md
+# Add `.woodpecker.yml` only when Task 1 records repository-local CI authority.
 rtk git commit -m "ci: add first-party deployment contracts"
 ```
 
 The production migration runbook is a separate approval gate after this commit:
-record a D1 backup/Time Travel marker, apply the complete business migration
-set (`0006_*`, both `0007_*`, then `0010_*` and later additive files) and the
-complete tracking-D1 set (`0001_*`, `0002_*`, and later files) in lexical order,
+record a D1 backup/Time Travel marker, discover and apply every business
+`migrations/*.sql` file in lexical filename order (including duplicate numeric
+prefixes such as both `0007_*` files and current `0012_*` recovery files) and
+complete tracking-D1 set by discovering every `workers/events/migrations/*.sql`
+file in lexical filename order (including `0001_*`, `0002_*`,
+`0003_csrf_nonce_bindings.sql`, `0004_delivery_safety.sql`, and any later
+files),
 then read back migration filenames/checksums, table counts, uniqueness/FK
 constraints, and applied head tied to the exact reviewed SHA. A failed or
 ambiguous migration disables traffic and leaves the additive schema intact;
@@ -1736,6 +1991,8 @@ the Worker/Pages deploy cannot proceed on a partial or evidence-only claim.
 **Files:**
 
 - Modify: `docs/launch/first-party-event-pipeline-evidence.md`
+- Create: `config/five-funnel-canary-matrix.json`
+- Modify (created and owned by Task 4.5): `config/rollout-state.json`
 - Create: `tests/tracking/live-validation-checklist.test.mts`
 
 **Interfaces:** Produces redacted, exact-SHA evidence for preview isolation,
@@ -1744,10 +2001,17 @@ reconciliation, and one live $1 canary per paid stage. It consumes operator
 approval and owner-entered card data only during the explicitly scheduled live
 step.
 
-It consumes `config/source-runtime-gates.json`, which names each source repo,
+It consumes `config/source-runtime-gates.json` and
+`config/five-funnel-canary-matrix.json`, which name each source repo,
 exact commit, required Woodpecker status, focused contract/migration commands,
 and clean-base evidence. Missing or unverified App-Idea/Blueprint rows fail
 their funnel gate.
+
+Task 10 is the only task that records `shadow → test_purchase →
+live_purchase_validated → campaign_ready` and recovery transitions in
+`config/rollout-state.json`. Each transition is one reviewed commit with
+exact-SHA evidence; the validator rejects skipped, non-monotonic, or
+evidence-free transitions.
 
 - [ ] **Step 1: Run repository gates on the exact committed SHA**
 
@@ -1776,14 +2040,13 @@ readback must prove no live secret appears in config or logs. Prove bootstrap,
 PageView, Lead,
 InitiateCheckout, source bridges, Dodo signature fixtures, Queue retries,
 privacy suppression, tombstones, cleanup, and no-secret/raw-PII leakage.
-Run the real preview Playwright suite for navigation/beacon delivery, consent
-and cookie/CORS behavior, Pixel/CAPI event IDs, completion claims, reload, and
-replay. If the repository has no Playwright harness and host fixture at this
-point, do not claim this evidence: run the committed browser contract tests,
-record the missing harness as an explicit launch gap, and add the preview suite
-only once the harness exists. Read back DNS/TLS/sibling ownership, external
-probe success, alert routing, and cleanup watermark before parent-domain cookies
-are enabled.
+Run the preview Playwright suite for navigation/beacon delivery, consent and
+cookie/CORS behavior, Pixel/CAPI event IDs, completion claims, reload, and
+replay. Browser-fixture evidence is an unconditional prerequisite for
+`campaign_ready`; a missing harness or missing run is a failed gate, not a
+launch gap that can be waived. Read back DNS/TLS/sibling ownership, external
+probe success, alert routing, and cleanup watermark before parent-domain
+cookies are enabled.
 
 - [ ] **Step 3: Capture Meta/Tinybird validation evidence**
 
@@ -1795,24 +2058,28 @@ only, not normalization or deduplication.
 
 Record source-outbox age, source-to-tracking lag, payment-to-canonical lag,
 Queue age, destination latency, duplicate rate, and field-presence thresholds
-for each funnel. No “green” value may be entered without a metric, window,
-exact SHA, and owner signoff.
+for each funnel. Record privacy-policy version, field-policy version, signed
+snapshot verification, and tombstone watermark for every tested event. No
+“green” value may be entered without a metric, window, exact SHA, and owner
+signoff.
 
 - [ ] **Step 4: Run the approved live $1 canary matrix**
 
-Canary each distinct payment implementation—Pages base/bump, Pages one-click
-upsell, Blueprint Convex checkout, and App-Idea checkout—using temporary
-non-public live `$1` products. Use no-charge catalog checks for sibling SKUs
-with the same implementation. Record redacted product ID suffix, exact
-price/currency, owner runtime, manifest row, webhook, and refund owner. The
-owner enters the live card in hosted Dodo checkout only after approving the
-amount and test identity. Verify saved-card/one-click transition, payment
-webhook, one Purchase, fulfillment, browser claim, Pixel/CAPI parity, Tinybird
-row, tracking-D1 ledger, privacy state, and source reconciliation. Refund and
-revoke immediately, then deactivate the canary product. Advance each funnel
-independently through `shadow → test_purchase → live_purchase →
-campaign_enabled`, with explicit `failed`, `paused`, and `rolled_back` recovery
-states. No row may jump to `campaign_enabled`; every transition records actor,
+Maintain a machine-readable matrix mapping every production funnel and paid
+stage to its executable checkout/webhook/fulfillment/browser-claim
+implementation. Run one approved live `$1` canary for each distinct
+implementation and every distinct one-click/saved-card transition. Sibling
+products may reuse transport proof only when their exact product/amount/currency/
+owner/webhook mapping receives a separate read-only configuration readback.
+Record approval ID, validation session, exact SHAs, redacted product/payment/
+webhook/request IDs, canonical/delivery IDs, timestamps, Pixel/CAPI pairing,
+Tinybird canary row, refund, entitlement revocation, product deactivation, and
+cleanup readback. The owner enters the live card in hosted Dodo checkout only
+after approving the amount and test identity. Advance each funnel only through
+`shadow → test_purchase → live_purchase_validated → campaign_ready`, with
+explicit `failed`, `paused`, and `rolled_back` recovery states. Task 10 never
+writes `campaign_enabled`; Task 11 owns that transition after a separate
+enablement approval. Every transition records actor,
 timestamp, exact source SHA, host/product/webhook IDs, validation session,
 reviewer/owner signoff, and fresh evidence links. Canary rows carry
 `validation_session_id`/`is_canary` and are excluded from Meta optimization and
@@ -1820,18 +2087,20 @@ production KPI queries. Refund, revoke, and deactivate are idempotent and
 crash-recoverable; an orphaned temporary SKU or mapping blocks activation and
 pages its owner. An unresolved funnel does not block an otherwise green funnel.
 
-- [ ] **Step 5: Add no-charge real-product checks**
+- [ ] **Step 5: Add provider catalog/configuration readbacks**
 
-For each production funnel, open the real live checkout and verify product,
-amount, currency, return path, and support/refund copy without submitting
-payment. Mark the check `intentionally_uncharged`.
+For each production funnel, prefer provider catalog/configuration readback for
+product, amount, currency, return path, and support/refund copy. Opening a live
+checkout is not presumed read-only: if it creates a session, cookie, event, or
+provider record, it requires the same explicit approval and `is_canary=true`
+cleanup procedure, and is excluded from optimization and production KPIs.
 
 - [ ] **Step 6: Commit redacted validation evidence**
 
 ```bash
 rtk host-test-slot --class focused node --import tsx --test tests/tracking/live-validation-checklist.test.mts
 rtk git diff --check
-rtk git add docs/launch/first-party-event-pipeline-evidence.md tests/tracking/live-validation-checklist.test.mts
+rtk git add docs/launch/first-party-event-pipeline-evidence.md config/five-funnel-canary-matrix.json tests/tracking/live-validation-checklist.test.mts
 rtk git commit -m "docs: record first-party pipeline validation"
 ```
 
@@ -1842,6 +2111,8 @@ rtk git commit -m "docs: record first-party pipeline validation"
 - Create or update: `docs/launch/five-funnel-copy-deck.md`
 - Create: `docs/launch/meta-campaign-ledger.md` (paused campaign sub-ledger;
   link every row to canonical `docs/launch/five-funnel-launch-ledger.md`)
+- Modify: `docs/launch/five-funnel-launch-ledger.md`
+- Modify: `config/five-funnel-canary-matrix.json`
 - Modify: `src/content/offers/*.json`,
   `src/content/funnels/*.json`, and source-runtime copy files only after
   owner approval
@@ -1849,12 +2120,15 @@ rtk git commit -m "docs: record first-party pipeline validation"
 
 **Interfaces:** Produces one approved copy/source map and one paused-campaign
 ledger. It consumes Task 10 evidence and the existing
-`docs/superpowers/plans/2026-08-02-meta-campaign-activation.md); it does not
+`docs/superpowers/plans/2026-08-02-meta-campaign-activation.md`; it does not
 invent a sixth funnel or activate an unverified route.
 
 The existing five-funnel launch ledger remains the single activation authority;
 this file cannot introduce a competing state machine or green a row without
 the canonical ledger's exact-SHA, canary, privacy, and rollback evidence.
+Only Task 11 atomically records `campaign_enabled` in the canonical launch
+ledger after the fresh enablement approval. `meta-campaign-ledger.md` is
+evidence-only and cannot change rollout state.
 
 - [ ] **Step 1: Assert the five launch rows**
 
@@ -1875,31 +2149,57 @@ green for that funnel.
 
 Run the existing content/catalog generators and contract tests. Do not add
 claims, guarantees, proof, or price changes outside the approved copy deck.
+Commit source-runtime copy changes in their owning repositories separately and
+record each exact source SHA in the canary/rollout artifact; do not fold those
+changes into the tracking-repository commit.
 
-- [ ] **Step 3: Create campaigns paused**
+- [ ] **Step 3: Create campaigns paused with a separate approval**
 
-Use the approved Meta Ads authority and exact destination/UTM ledger. Every
-campaign remains `PAUSED` until its funnel row has green software, privacy,
-delivery, live-canary, refund/revocation, and owner-evidence gates. Record
-redacted campaign/ad IDs and state; never commit access tokens.
+With a campaign-creation approval, create campaigns in `PAUSED` state and read
+back campaign/ad-set/ad state, destination, UTM, audience, geography,
+schedule, attribution setting, daily/lifetime budget, and spend cap. Campaign
+creation does not authorize enablement. Record redacted IDs and state; never
+commit access tokens.
 
-- [ ] **Step 4: Activate and monitor one funnel at a time**
+- [ ] **Step 4: Enable and monitor one funnel at a time with a fresh approval**
 
-Pause campaign traffic before a funnel rollback. Check collection, Lead,
-InitiateCheckout, Purchase, CAPI/Tinybird delivery, duplicate rate, and
-payment/revenue reconciliation at 15, 30, 60 minutes, 4 hours, and 24 hours.
-The global Meta kill switch is reserved for cross-funnel incidents.
+Immediately before enablement, atomically revalidate exact SHAs, CI,
+migrations, current privacy/DSAR and provider-capability status, sender
+ownership, legacy-sender disablement, queue/latency/duplicate/field-presence
+windows, canary cleanup, rollback owner, and a fresh campaign-enable approval
+naming the spend cap. Start one funnel at a bounded validation budget with
+automatic pause thresholds. Pause campaign traffic before a funnel rollback.
+Check collection, Lead, InitiateCheckout, Purchase, CAPI/Tinybird delivery,
+duplicate rate, and payment/revenue reconciliation at 15, 30, 60 minutes, 4
+hours, and 24 hours. The global Meta kill switch is reserved for cross-funnel
+incidents.
 
 - [ ] **Step 5: Commit copy and campaign evidence**
 
 ```bash
 rtk host-test-slot --class focused node --import tsx --test tests/quality/five-funnel-launch-contract.test.mts
 rtk git diff --check
-rtk git add docs/launch/five-funnel-copy-deck.md docs/launch/meta-campaign-ledger.md src/content/offers src/content/funnels tests/quality/five-funnel-launch-contract.test.mts
+rtk git add docs/launch/five-funnel-copy-deck.md docs/launch/meta-campaign-ledger.md docs/launch/five-funnel-launch-ledger.md config/five-funnel-canary-matrix.json src/content/offers src/content/funnels tests/quality/five-funnel-launch-contract.test.mts
 rtk git commit -m "docs: record five-funnel campaign readiness"
 ```
 
 ## Self-Review And Review Gates
+
+### Plan review ledger (2026-08-04)
+
+- Round 1 architecture/privacy/operations review: found missing control-artifact
+  ownership, circular bootstrap consent, unfenced delivery, accidental remote
+  mutation authority, DSAR/Queue overclaims, and competing rollout owners.
+- Round 2 consistency/testability review: found stale migration numbering,
+  omitted Task 4 commit files, an ambiguous browser-claim endpoint, missing
+  context-token exchange, missing preview-deploy job, and missing machine
+  readable canary/provider artifacts.
+- Disposition: Task 4.5 owns the control artifacts; Task 5 uses the explicit
+  two-phase bootstrap; Task 6 owns delivery-safety migration/fixtures; Task 8
+  owns external source producers but not deployment; Task 9 owns protected
+  readbacks; Task 10 owns `campaign_ready`; Task 11 alone owns
+  `campaign_enabled`. No Critical or Important finding remains unresolved in
+  the written plan; implementation reviews must still prove each invariant.
 
 The 2026-08-04 review is closed only when the implementation demonstrates:
 

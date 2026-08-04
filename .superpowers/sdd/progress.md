@@ -9,8 +9,9 @@ Plan: `docs/superpowers/plans/2026-08-03-first-party-event-pipeline.md`
 - [x] Task 2 — canonical event contract and D1 schemas (`88d4ca1`; focused Node gate deferred because host load stayed above `10.00`)
 - [x] Task 3 — identity, cookies, privacy, GPC, and CORS (`f6b2c47..5462dc4`; review approved, focused gate 17/17)
 - [x] Task 4 — Pages checkout context, source outbox, and browser claims (`850ee93..36eb2c5`; prior independent review rejected four issues, all remediated; focused gate 52/52, functions check and format clean)
-- [ ] Task 5 — browser Pixel/collector integration
-- [ ] Task 6 — Worker collector, queues, privacy routes, and cleanup
+- [x] Task 4.5 — machine-readable privacy/field/host/source/rollout control artifacts (`0af587a..c16986c`; reviews remediated; artifact gate 6/6, collector 16/16, tracking contract 8/8)
+- [x] Task 5 — browser Pixel/collector integration (`6fd28f7..faa5cee`; review clean, conditional on Task 6 secret provisioning; focused collector 20/20, browser 4/4, privacy 6/6, Blueprint 14/14, proxy 3/3, browser-events 3/3)
+- [x] Task 6 — Worker collector, queues, privacy routes, and cleanup (`453f7f2..a90622e`; review clean; final focused aggregate 54/54, Wrangler dry-run clean)
 - [ ] Task 7 — Meta CAPI, Tinybird, and deletion workflow
 - [ ] Task 8 — App-Idea/Blueprint source bridges
 - [ ] Task 9 — deployment manifests and Woodpecker gates
@@ -30,3 +31,26 @@ browser payloads were exposed before persistence. Remediation moved mapping
 commit into the business batch, checked both InitiateCheckout batches, added
 authenticated source-outbox recovery, and delayed the Lead payload. Canonical
 payload hashing, fenced provider claims, and recovery-route tests were added.
+
+Task 4.5: complete (commits 0af587a..c16986c). Independent review found and
+remediated fail-open field projection, raw redaction, source-runtime readiness,
+context-hash authority, provider/rollout gates, browser/source buyer-context
+transport, and policy-version drift. Final review approved the implementation.
+Focused evidence: artifact controls 6/6, collector 16/16, tracking contract
+8/8, and clean diff checks. The production context verifier remains
+intentionally fail-closed until Task 6 supplies its binding.
+
+Task 5: complete (commits 6fd28f7..faa5cee). Review remediation fixed atomic
+consent mutation and unique action IDs, server-authoritative effective
+purposes, PageView replay/deduplication ordering, nonce policy/context binding,
+production context signing and verification, and tamper/stale/expired/deleted
+context rejection. The reviewer approved the implementation; the real
+`TRACKING_CONTEXT_SIGNING_KEY_CURRENT` secret remains a Task 6 deployment
+prerequisite and is intentionally not committed.
+
+Task 6: complete (commits 453f7f2..a90622e). Independent review remediation
+added migration/release gates, audited replay recovery, transformed-payload
+hashing, policy/GPC/tombstone rechecks, durable budgets and WAF capability
+readback, per-funnel controls, bounded cleanup metrics, and peak-load cleanup
+capacity. Final review approved the implementation. Final focused aggregate:
+54/54; Wrangler dry-run, formatting, and diff checks passed.

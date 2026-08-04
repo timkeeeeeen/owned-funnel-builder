@@ -10,6 +10,17 @@ but the canonical contract and destination projection are not yet safe to
 implement as written. The plan is approved only after the blocking contract
 changes below are made and their focused tests pass.
 
+## Evaluation status (2026-08-04)
+
+The follow-up worktree is currently at `166a94d` with uncommitted changes.
+Earlier notes that describe Task 5/6 or the contract blockers as remediated are
+historical checkpoints, not current approval. The companion evaluation
+`docs/superpowers/reviews/2026-08-04-first-party-event-pipeline-spec-evaluation.md`
+adds field-purpose redaction, signed privacy snapshots, server-bound identity,
+single-use consent nonces, queue privacy re-checks, payload-hash quarantine,
+lease fencing, normalized sender outcomes, and durable kill-switch requirements.
+Those items remain open until focused evidence exists on a new committed SHA.
+
 ## Findings
 
 | Priority | Finding | Required change |

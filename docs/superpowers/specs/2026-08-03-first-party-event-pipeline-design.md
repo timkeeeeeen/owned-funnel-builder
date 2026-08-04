@@ -1,8 +1,8 @@
 # First-Party Event Pipeline and Identity Graph Design
 
 Date: 2026-08-03  
-Status: architecture approved; specialist-reviewed, owner-reviewed, and
-implementation-plan reviewed
+Status: architecture approved; implementation blocked pending the 2026-08-04
+spec evaluation and contract remediation
 
 ## Purpose
 
@@ -34,6 +34,83 @@ authorization, one browser-claim path, stable external IDs, and measurable
 per-funnel launch gates are now explicit contract requirements. These clarify
 the design; they do not add a generic CDP, probabilistic identity, or second
 commercial ledger.
+
+## Spec evaluation addendum (2026-08-04)
+
+The architecture is retained, but implementation and launch are blocked until
+the following contract gaps are closed. This addendum is authoritative when it
+conflicts with an older example elsewhere in this document or the plan.
+
+### Blocking contract changes
+
+1. **Privacy is field-level, not destination-level.** Add and load
+   `config/privacy-policy.json` and `config/tracking-field-policy.json` before
+   enabling traffic. Each field must declare purpose, consent state, source,
+   provenance, retention, redaction point, deletion path, and destination
+   mapping. `fbclid`, `_fbp`, `_fbc`, IP, and user agent are short-lived
+   operational context; when advertising consent is absent they are removed
+   before canonical persistence and Tinybird projection. Long-lived analytics
+   rows may contain only the approved keyed/bucketed projection. “All possible
+   data” means all fields in this reviewed allowlist, never arbitrary DOM,
+   keystrokes, or vendor enrichment.
+
+2. **The privacy snapshot is an auditable input.** Every browser and source
+   envelope carries a signed snapshot containing policy version, purpose
+   decisions, choice identifier/source, region, GPC state, observed timestamp,
+   and subject binding. The Worker preserves that snapshot with the event and
+   re-evaluates current consent and deletion tombstones immediately before each
+   destination attempt. A source bridge may not reconstruct privacy from
+   absent browser cookies.
+
+3. **Identity is server-bound.** Bootstrap may issue only the privacy-choice
+   cookie while consent is unresolved. After an allowed purpose, the Worker
+   injects the signed visitor/session identity into the canonical event and
+   returns only opaque external IDs. Browser-provided visitor IDs are hints and
+   never the authority. Deletion uses the server-bound subject scope.
+
+   The unresolved-state exception is a narrowly scoped control-plane bootstrap:
+   it may mint a signed privacy-choice cookie and one-time CSRF nonce, but it
+   must not create a visitor/session ID, Pixel call, event row, Queue message,
+   attribution record, or destination job. Tests must distinguish this request
+   from tracking collection; otherwise bootstrap is deferred until the user
+   chooses a banner action.
+
+4. **Consent version and replay semantics are explicit.** The banner consumes
+   the server-returned policy version; stale local state is reset and cannot
+   enable Pixel delivery. Every cookie-authenticated privacy mutation consumes
+   one bootstrap-bound nonce exactly once, including withdrawal and deletion;
+   partial purpose writes are atomic and retryable.
+
+5. **Delivery state is safe under races.** Queue consumers must re-check
+   purpose/tombstone state before every send, persist canonical/destination
+   payload hashes, quarantine same-key hash conflicts, fence leases with an
+   owner token, and treat `outcome_unknown` as terminal until an audited
+   replay. Kill-switch state is durable and pauses sends without deleting
+   pending outbox rows.
+
+6. **Source/browser compatibility is proven, not assumed.** `/v1/bootstrap`
+   → consent → PageView ordering, returned context binding, credentialed
+   collector fallback, reduced source-envelope conversion, and exact
+   App-Idea/Blueprint token issuer/verifier contracts require executable
+   fixtures. Blueprint remains shadow-only until its issuer, verifier, nonce,
+   expiry, audience, and flow binding are pinned in the source manifest.
+
+### Staged release decision
+
+The five funnels remain the business goal, but they are not one indivisible
+implementation gate:
+
+1. Prove one Pages funnel end-to-end through preview and a live `$1` canary.
+2. Roll the same contract to the other two Pages funnels with independent
+   gates.
+3. Admit App-Idea and Blueprint only after their deployed source contracts,
+   outbox drains, and ownership manifests are exact-SHA verified.
+4. Create campaigns paused, then activate one funnel at a time from its own
+   evidence row. A missing Convex contract blocks only that funnel, never a
+   green Pages funnel.
+
+No provider, DNS, deployment, payment, Meta, Tinybird, or ad mutation is
+authorized by this addendum; those remain post-review validation actions.
 
 ## First-release boundary
 
@@ -295,7 +372,8 @@ prose or an operator assertion is insufficient:
 | `config/privacy-policy.json` | Per-region/state purpose decisions, unknown-region behavior, GPC/opt-out precedence, sensitive-data/minor handling, legal owner/version approval, and Meta LDU/data-processing options | Blocks the affected funnel's campaign gate |
 | `config/tracking-field-policy.json` | Source, purpose, consent, destination, exact TTL, deletion path, and trust provenance for every field (including `fbclid`, `fbp`, `fbc`, IP, and UA) | Blocks collection or destination mapping for an unlisted field |
 | `config/source-runtime-manifest.json` | Source repository, exact SHA, bridge contract version, environment, and required CI status | Blocks deployment when a producer is missing, unreachable, or incompatible |
-| `docs/launch/provider-capability-readback.md` | Tinybird/Meta deletion capability, token scopes, log retention, DPA/subprocessor review, and per-destination deletion SLA | Blocks jurisdictions whose deletion contract is unsupported |
+| `config/provider-capabilities.json` | Machine-readable Tinybird/Meta deletion capability, token scopes, log retention, DPA/subprocessor review, and per-destination deletion SLA | Blocks jurisdictions whose deletion contract is unsupported |
+| `docs/launch/provider-capability-readback.md` | Human-readable evidence for the exact provider readback, approval ID, and evidence timestamp | Must match the machine-readable artifact; never acts as the gate by itself |
 
 The host probe runs continuously after launch. HSTS, CSP, and a strict
 `event_source_url` path allowlist are part of the trusted-host contract.
@@ -308,9 +386,13 @@ non-preselected consent banner before creating tracking state. It must offer
 `Accept all`, `Reject all`, and `Customize` actions, describe purposes and
 destinations in plain language, provide a durable way to reopen preferences,
 and make the reject path no harder to use than the accept path. No tracking
-request may be queued while the banner is unresolved. A recorded choice is
-versioned and purpose-specific; changing the policy version or receiving GPC
-re-evaluates the gates without treating an old opt-in as current consent.
+request may be queued while the banner is unresolved. The only permitted
+exception is the narrowly scoped control-plane bootstrap defined in the spec
+evaluation addendum: it may issue a privacy-choice cookie and one-time CSRF
+nonce, but it cannot create tracking identity, attribution, event, Queue, Pixel,
+or destination state. A recorded choice is versioned and purpose-specific;
+changing the policy version or receiving GPC re-evaluates the gates without
+treating an old opt-in as current consent.
 
 Browser tests cover banner loading, keyboard/focus access, each action,
 custom-purpose toggles, reopen/withdrawal, stale-policy reset, and GPC. The
@@ -514,19 +596,20 @@ campaign, referrer, title, and attribution values are rejected when they match
 email/phone/credential patterns, exceed bounds, or contain an unapproved
 query/path. Rejection diagnostics are generic and never echo the input.
 
-At checkout, the server persists a bounded buyer-context snapshot against the
-lead/funnel: validated latest `fbp` and `fbc`, destination-safe external ID,
-originating browser IP and user agent, sanitized verified-domain source URL,
-attribution, capture time, and approved identity hashes. Purchase joins this
-snapshot through authoritative lead/funnel metadata. The Dodo webhook's IP,
-user agent, URL, and Cloudflare geo describe Dodo, not the buyer, and are
-forbidden in Meta `user_data`.
+At checkout, the Worker mints a short-lived, signed context reference bound to
+the server subject, privacy snapshot, tenant, site, funnel, flow, candidate
+event ID, nonce, and expiry. The source mutation/outbox may carry only that
+`context_hash`, expiry, provider IDs, and the bounded event data explicitly
+allowed by the field policy. Raw `fbp`, `fbc`, external IDs, IP, user agent,
+URLs, attribution, or identity hashes never cross the source bridge or enter a
+source outbox. The Worker resolves the reference from its own tracking ledger
+after signature and freshness checks; the Dodo webhook's IP, user agent, URL,
+and Cloudflare geo describe Dodo, not the buyer, and remain forbidden in Meta
+`user_data`.
 
 The source mutation and its source-outbox row are the only atomic boundary.
-Buyer context needed for a later Purchase is carried in that bounded,
-expiry-bearing source row (or a source-owned context table referenced by it),
-then copied into tracking D1 only after bridge acceptance. There is no claimed
-cross-database transaction between business D1/Convex and tracking D1.
+There is no claimed cross-database transaction between business D1/Convex and
+tracking D1.
 
 ## Attribution
 
@@ -610,13 +693,14 @@ encoding.
   separately named Lead and InitiateCheckout browser payloads with only event
   IDs and normalized non-PII custom data.
 - App-Idea and Blueprint use the same-origin/no-CORS
-  `POST /api/tracking/source-browser-events` claim route. It accepts a
-  source-runtime-bound public-session token; the Pages route proxies a signed
-  Worker-only claim operation. The Worker resolves only committed source
-  outbox events in the tracking D1, atomically claims each Purchase once, and
-  returns `{event_name,event_id,custom_data}` without PII. Pages has no tracking
-  D1 binding, and the route cannot create an event when the source outbox
-  transaction did not commit.
+  `POST /api/tracking/source-browser-events` claim route. It accepts only a
+  nonce/expiry/funnel-bound Pages signature and a Worker-minted context hash;
+  it never accepts a public-session token or raw browser identity. The Pages
+  route proxies a signed Worker-only claim operation. The Worker resolves only
+  committed source outbox events in tracking D1, atomically claims each
+  Purchase once, and returns `{event_name,event_id,custom_data}` without PII.
+  Pages has no tracking D1 binding, and the route cannot create an event when
+  the source outbox transaction did not commit.
 - CAPI includes authoritative cart, products, quantities, value, currency,
   checkout session, offer, and attribution.
 
@@ -774,10 +858,17 @@ does not forward any event to Meta; otherwise it is disabled completely.
 - resolves regional and stored privacy state before loading destinations or
   setting tracking cookies;
 - sets or refreshes only the cookies allowed for that privacy state;
-- returns destination-safe visitor/session context and public destination
+- when consent is unresolved, returns only the policy/notice version, unresolved
+  state, signed `ma_privacy` cookie, and one-time CSRF nonce; it returns no
+  visitor, session, external ID, attribution, event, Pixel, or destination
+  state;
+- after a permitted purpose is recorded, returns only the opaque,
+  destination-safe context allowed by that purpose plus public destination
   configuration;
 - never returns raw visitor IDs or secrets; and
-- returns privacy state for browser destination gating.
+- returns privacy state for browser destination gating. The response schema is
+  phase-dependent, and the browser must reject an identity-bearing response
+  while consent is unresolved.
 
 ### `POST /v1/events`
 
