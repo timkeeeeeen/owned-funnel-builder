@@ -226,11 +226,11 @@ async function markPaymentSucceeded(
     .filter(Boolean)
     .map((id) => ({ id, quantity: 1 }));
   const flow = await database
-    .prepare('SELECT token_hash FROM funnel_runs WHERE id = ?')
+    .prepare('SELECT context_hash, context_expires_at, flow_binding, privacy_snapshot_json FROM funnel_runs WHERE id = ?')
     .bind(funnelId)
-    .first<{ token_hash: string }>();
-  const contextHash = cleanString(flow?.token_hash, 64);
-  if (!/^[a-f0-9]{64}$/i.test(contextHash)) throw new Error('Payment context is unavailable.');
+    .first<{ context_hash: string; context_expires_at: string; flow_binding: string; privacy_snapshot_json: string }>();
+  const contextHash = cleanString(flow?.context_hash, 64);
+  if (!/^[a-f0-9]{64}$/i.test(contextHash) || !flow?.context_expires_at || Date.parse(flow.context_expires_at) <= Date.now()) throw new Error('Payment context is unavailable.');
   const currency = cleanString(data.currency, 3).toUpperCase();
   const purchaseSourceEventId = `purchase:${paymentId}`;
   const purchasePayload = {
@@ -244,7 +244,7 @@ async function markPaymentSucceeded(
     funnel_slug: metadata.offer_slug || funnelId,
     product_id: metadata.product_key,
     payment_id: paymentId,
-    privacy_snapshot: { schema_version: '1', server_subject_ref: `privacy_${leadId}`, subject_ref_version: 'v1', snapshot_issued_at: now, snapshot_expires_at: new Date(Date.now() + 10 * 60_000).toISOString(), snapshot_key_id: 'pages-current', snapshot_signature: 'webhook-context-signature', purposes: { necessary: 'granted', analytics: 'unknown', advertising: 'unknown', identity_enrichment: 'unknown', sale_share: 'unknown' }, policy_version: '2026-08-02', choice_id: 'checkout', decision_source: 'policy', notice_locale: 'en-US', region: 'unknown', region_source: 'unknown', gpc: false, observed_at: now },
+    privacy_snapshot: JSON.parse(flow.privacy_snapshot_json || '{}'),
   };
   const purchaseEvent = {
     tenantId,

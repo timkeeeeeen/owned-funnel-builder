@@ -393,8 +393,8 @@ export async function onRequestPost(context: PagesContext): Promise<Response> {
       `INSERT INTO checkout_leads (
         id, email, offer_slug, placement, marketing_consent, consent_version,
         attribution_json, referrer, country, status, bump_selected, admaxxer_visitor_id,
-        payment_provider, created_at, updated_at
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'captured', ?, ?, ?, ?, ?)`
+        payment_provider, context_hash, context_expires_at, flow_binding, privacy_snapshot_json, created_at, updated_at
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'captured', ?, ?, ?, ?, ?, ?, ?, ?, ?)`
     ).bind(
       leadId,
       email,
@@ -408,6 +408,10 @@ export async function onRequestPost(context: PagesContext): Promise<Response> {
       bumpAccepted ? 1 : 0,
       admaxxerVisitorId || null,
       paymentProvider,
+      contextHash,
+      effectiveContextExpiresAt,
+      flowTokenHash,
+      JSON.stringify(privacySnapshot),
       now,
       now
     );
@@ -447,9 +451,9 @@ export async function onRequestPost(context: PagesContext): Promise<Response> {
     businessStatements.push(
       env.LEADS.prepare(
         `INSERT INTO funnel_runs (
-        id, lead_id, offer_slug, token_hash, payment_provider, created_at, updated_at
-      ) VALUES (?, ?, ?, ?, ?, ?, ?)`
-      ).bind(funnelId, leadId, offerSlug, flowTokenHash, paymentProvider, now, now)
+        id, lead_id, offer_slug, token_hash, payment_provider, context_hash, context_expires_at, flow_binding, privacy_snapshot_json, created_at, updated_at
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+      ).bind(funnelId, leadId, offerSlug, flowTokenHash, paymentProvider, contextHash, effectiveContextExpiresAt, flowTokenHash, JSON.stringify(privacySnapshot), now, now)
     );
 
     for (const step of definition.upsells) {
