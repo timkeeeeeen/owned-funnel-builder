@@ -1,6 +1,6 @@
 # Five-Funnel Launch Ledger
 
-Revision: 2026-08-02-r1  
+Revision: 2026-08-03-r2
 Rule: blank evidence is **unverified**, never green. `intentionally uncharged`
 is permitted only for a final real-price Purchase after live configuration and
 the separate $1 canary are proven.
@@ -29,17 +29,18 @@ stage proof; never use the real-price catalog for this test.
 - Standard local function suite is green (`42/42`) and its Functions build passes.
 - App Idea targeted commerce tests are green: create-root integration `8/8`, release adapter/manifest/template `36/36`, and agent-pack create `7/7`; reviewed-release ownership hashes were refreshed on `ca11b2427`, and Woodpecker re-verification is required before merge.
 - Blueprint remote focused suite and typecheck are green; lint fixes are on `865f25917d`, and Woodpecker re-verification is required before merge.
-- Production remains on the older Pages deployment; no launch branch has been promoted.
+- Standard production is live from `b314acf`; App Idea and Blueprint remain
+  blocked by their guarded runtime/deployment gates.
 
 ## Funnel rows
 
 | Funnel / objective | Deployment + copy | Dodo / canary | Events + entitlement | Destination / rollback | Row |
 | --- | --- | --- | --- | --- | --- |
-| Owned Funnel Builder / Sales → Purchase | Code `cdedd04`; URL/deploy unverified; deck r1 pending | $49/$19/upsells readback unverified; 4-stage live $1 canary unverified; real-price checkout intentionally uncharged | PageView, checkout Lead, visitor metadata, Purchase, fulfillment: unverified | URL/UTMs/`fbclid` and mobile/accessibility: unverified; rollback owner: standard release owner | unverified |
-| Talking-Head Ad Machine / Sales → Purchase | Code `cdedd04`; URL/deploy unverified; deck r1 pending; publish/checkout flag readback required | $27/$9/$37 readback unverified; 3-stage live $1 canary unverified; real-price checkout intentionally uncharged | Same event chain + supported-platform delivery: unverified | Exact slug and paused campaign destination: unverified; rollback owner: standard release owner | unverified |
-| Vibe Code Anything / Sales → Purchase | Code `cdedd04`; URL/deploy unverified; deck r1 pending | $29/$19/$39/$79 readback unverified; 4-stage live $1 canary unverified; real-price checkout intentionally uncharged | Same event chain + exact template entitlement: unverified | Exact slug and paused campaign destination: unverified; rollback owner: standard release owner | unverified |
-| Authority Snapshot → $5 Game Plan / Leads → Lead | Maestro code `865f25917d`; runtime URL/deploy unverified; Blueprint copy/proof approval pending | Free lead + $5 product readback unverified; one live $1 paid-stage canary unverified; real-price checkout intentionally uncharged | PageView; durable Snapshot Lead; visitor handoff; $5 Purchase/plan artifact: unverified | Four variants, consent, and recovery: unverified; rollback owner: Blueprint release owner | unverified |
-| App Idea Evaluator → $29 Build Pack / Leads → Lead | App Idea code `ca11b2427`; URL/deploy unverified; canonical copy approval pending | Free report + $29 product readback unverified; one live $1 paid-stage canary unverified; real-price checkout intentionally uncharged | PageView; durable report Lead; visitor handoff; Purchase, entitlement, credit, resume: unverified | Low-fit suppression and exact destination: unverified; rollback owner: App Idea release owner | unverified |
+| Owned Funnel Builder / Sales → Purchase | Code `b314acf`; Pages deployment `04d99875-9bcc-4998-950d-9e0294303594`; URL HTTP 200; copy freeze still needs owner approval | $49/$19/$39/$79 mapping read back previously; 4-stage live $1 canary unverified; real-price checkout intentionally uncharged | PageView/Lead/Purchase/fulfillment: live trace unverified | Canonical/OG `shop.maestrogtm.com` verified; UTMs/`fbclid`, mobile/accessibility, rollback trace remain unverified | partial |
+| Talking-Head Ad Machine / Sales → Purchase | Code `b314acf`; same Pages deployment; URL HTTP 200; checkout enabled; copy freeze still needs owner approval | $27/$9/$37 mapping read back previously; 3-stage live $1 canary unverified; real-price checkout intentionally uncharged | PageView/Lead/Purchase/fulfillment: live trace unverified | Canonical/OG `shop.maestrogtm.com` verified; UTMs/`fbclid`, mobile/accessibility, rollback trace remain unverified | partial |
+| Vibe Code Anything / Sales → Purchase | Code `b314acf`; same Pages deployment; URL HTTP 200; copy freeze still needs owner approval | $29/$19/$39/$79 mapping read back previously; 4-stage live $1 canary unverified; real-price checkout intentionally uncharged | PageView/Lead/Purchase/fulfillment: live trace unverified | Canonical/OG `shop.maestrogtm.com` verified; UTMs/`fbclid`, mobile/accessibility, rollback trace remain unverified | partial |
+| Authority Snapshot → $5 Game Plan / Leads → Lead | Blueprint runtime remains fail-closed (`data-enabled="false"`); production page is not launch-ready | Free lead + $5 product readback unverified; one live $1 paid-stage canary unverified; real-price checkout intentionally uncharged | PageView; durable Snapshot Lead; visitor handoff; $5 Purchase/plan artifact: unverified | Four variants, consent, recovery, and rollback: unverified | blocked |
+| App Idea Evaluator → $29 Build Pack / Leads → Lead | Main `7fbbf5cff3783e9544366bf9eab61e2a8daefa60`; guarded Woodpecker staging pipeline `#118` refused by durable promotion authority; production Pages serves stale generic shell | Free report + $29 product readback unverified; one live $1 paid-stage canary unverified; real-price checkout intentionally uncharged | PageView; durable report Lead; visitor handoff; Purchase, entitlement, credit, resume: unverified | Production promotion and rollback remain unverified; do not raw-deploy around authority | blocked |
 
 ## Closure and approvals
 

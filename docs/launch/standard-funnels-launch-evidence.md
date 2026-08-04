@@ -1,11 +1,12 @@
 # Standard Funnels Launch Evidence
 
-Status: implementation-ready; provider and production gates remain open
+Status: standard pages live; provider canaries and paid-traffic gates remain open
 
 ## Reviewed source
 
-- Branch: `codex/owned-funnel-launch`
-- Code candidate: `559f636` (webhook hardening is included in the reviewed branch)
+- Branch: `main`
+- Production code: `b314acf` (`launch talking head funnel`; canonical/OG URLs use
+  `shop.maestrogtm.com`)
 - Offers: Owned Funnel Builder, Talking-Head Ad Machine, Vibe Code Anything
 - Dodo production catalog: 11 real paid stages; temporary live canary catalog:
   11 separate `$1 USD` products, not yet created
@@ -24,7 +25,7 @@ Status: implementation-ready; provider and production gates remain open
 | Dodo `$1` canary sequence | unverified | Test mode cannot validate one-click upsells; requires one temporary live `$1` product and owner-entered live card for each of the 11 paid stages, with immediate refund/revocation |
 | Admaxxer live website/CAPI | unverified | Production secret name exists; local BWS lacks `ADMAXXER_API_KEY`, and live API/CAPI event readback is still required |
 | Production D1 migration | passed | Cloudflare remote receipt applied `0006_stripe_provider.sql` and `0007_webhook_retry_and_revocations.sql`; schema and product mapping readback passed |
-| Production deployment | unverified | Requires approved release credentials |
+| Production deployment | passed | Cloudflare Pages deployment `04d99875-9bcc-4998-950d-9e0294303594` from `b314acf`; all three canonical routes returned HTTP 200 on 2026-08-03 |
 
 ## Read-only Cloudflare baseline
 
@@ -34,16 +35,15 @@ Status: implementation-ready; provider and production gates remain open
   remote readback reports no migrations remaining.
 - Time Travel recovery bookmark:
   `00000031-00000000-000050bb-d66926ee30685fcaf0f1dfdb1179dd8e`
-- Current Pages production readback includes older `main` deployments (latest
-  observed source `25bbc4a`); the launch branches have not been promoted.
+- Current Pages production deployment is `04d99875-9bcc-4998-950d-9e0294303594`
+  from source `b314acf`; the three standard routes are live at
+  `https://shop.maestrogtm.com/{owned-funnel-builder,talking-head-ad-machine,vibe-code-anything}/`.
 - Preview readback includes historical Blueprint candidates, not the final
   accepted Blueprint SHA. A fresh Woodpecker preview is required before
   promotion.
 - Cloudflare confirms the custom domain `shop.maestrogtm.com` is attached to
-  the project, but the current live HTML still emits the Pages-host canonical
-  URL. Set production `PUBLIC_SITE_URL=https://shop.maestrogtm.com` in the
-  authorized deployment environment and verify canonical/OG URLs after
-  promotion; do not hard-code this environment value in source.
+  the project, and fresh no-cache HTML readback confirms all three live pages
+  emit `shop.maestrogtm.com` canonical and OG URLs.
 - Production Pages secret names include Dodo, Admaxxer, D1, return-URL,
   webhook, public website, and support bindings. Secret values were not read or
   printed; presence by name is not mode, value, or end-to-end tracking proof.
@@ -53,6 +53,18 @@ Status: implementation-ready; provider and production gates remain open
 - Webhook status baseline: `processed=9`, `failed=2`; the two historical failed
   rows remain immutable evidence and require explicit retry/recovery review
   after the new migration and deployment.
+
+### Live route and tracking readback (2026-08-03)
+
+- `owned-funnel-builder`, `talking-head-ad-machine`, and `vibe-code-anything`
+  each returned HTTP 200 and contained the managed checkout trigger.
+- `/api/admaxxer-config` returned `enabled: true` for website
+  `admx_OHYmH6sbXbCbSf42sWVh659w` on `shop.maestrogtm.com`.
+- An unsigned `POST` to `/api/webhooks/dodo` is rejected; no browser Purchase
+  event is emitted by the landing pages.
+- These checks prove route availability and boundary behavior only; they do not
+  replace a live Dodo payment, fulfillment, Admaxxer Purchase, or Meta CAPI
+  canary.
 
 ### Production mapping readback (IDs redacted to suffix)
 

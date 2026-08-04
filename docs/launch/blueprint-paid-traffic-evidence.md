@@ -1,13 +1,13 @@
 # Blueprint Paid-Traffic Evidence
 
-Status: implementation-ready; staging, provider, and production gates remain
-open.
+Status: implementation-ready in source; runtime and provider gates remain open.
 
 ## Reviewed source
 
 - Owned acquisition/runtime branch: `codex/owned-funnel-launch`
 - Maestro Blueprint branch: `codex/blueprint-funnel-launch`
-- Maestro implementation commit: `8741af7a23`
+- Maestro implementation commit: `865f25917d` (latest reviewed Blueprint
+  branch; Woodpecker re-verification still required)
 - Public family: Authority Snapshot for agency owners, consultants, coaches,
   and solo experts → `$5 USD` CMO Game Plan.
 - Optional `$99/month` Blueprint Activation remains disabled and out of scope.
@@ -20,11 +20,11 @@ open.
 | Admaxxer Purchase adapter and retry behavior | passed | focused Blueprint adapter/webhook tests |
 | Verified Dodo webhook route and business idempotency | passed | 38 focused tests on `8741af7a23` |
 | Maestro Convex typecheck | reported passed | remote worker verification; rerun on the exact accepted SHA before promotion |
-| Staging runtime, Convex deployment, and workflow-output smoke | unverified | requires isolated staging bindings |
+| Staging runtime, Convex deployment, and workflow-output smoke | blocked | deployed runtime is fail-closed until `PUBLIC_BLUEPRINT_FUNNEL_ENABLED`, Maestro Convex/app URLs, and Turnstile site key are bound |
 | Live `$5` Dodo product and webhook readback | unverified | requires Dodo access and account approval |
 | Temporary live `$1` Game Plan canary | unverified | requires owner approval and card entry |
 | Admaxxer website/CAPI and Meta event trace | unverified | requires Admaxxer key and owner CAPI connection |
-| Production promotion and rollback | unverified | requires Woodpecker staging acceptance |
+| Production promotion and rollback | blocked | requires the guarded staging acceptance and exact accepted SHA |
 
 ## Required live canary evidence
 

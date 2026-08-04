@@ -1,8 +1,9 @@
 # Meta Campaign Build Evidence
 
-Revision: 2026-08-02-r1  
+Revision: 2026-08-03-r2
 Status: not built — owner must provide Meta account, identity, dataset/CAPI,
-geography, audiences, budgets, and activation window.
+geography, audiences, budgets, and activation window. Standard destinations are
+live; Blueprint and App Idea destinations are not launch-ready.
 
 All campaign, ad-set, and ad objects are created **paused**. This file records
 redacted IDs only; never paste tokens, card data, or raw event payloads.
