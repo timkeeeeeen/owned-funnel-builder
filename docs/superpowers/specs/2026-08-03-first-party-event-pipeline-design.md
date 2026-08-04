@@ -1,7 +1,7 @@
 # First-Party Event Pipeline and Identity Graph Design
 
 Date: 2026-08-03  
-Status: architecture approved; written specification pending owner review
+Status: architecture approved; specialist-reviewed specification pending owner review
 
 ## Purpose
 
@@ -25,15 +25,36 @@ It does not attempt to reproduce a complete customer data platform, fifty
 destination integrations, probabilistic browser fingerprinting, or a SaaS
 control plane in the first release.
 
+## First-release boundary
+
+Ship one Maestro-owned deployment for all five funnels:
+
+- the existing Cloudflare Pages project for storefront pages, checkout,
+  payment webhooks, and authoritative business-state writes;
+- one standalone Cloudflare Worker for the first-party collector, Queue
+  consumer, scheduled outbox dispatcher, retention cleanup, Meta CAPI, and
+  Tinybird delivery;
+- one D1 database shared by those two runtimes, one main Queue plus dead-letter
+  queue, one Tinybird datasource, and one Meta dataset/pixel; and
+- isolated preview and production resources. Preview never sends ordinary live
+  Meta events.
+
+The first release implements direct Meta and Tinybird senders behind one small
+delivery-result type. It does not build a generic destination framework,
+shared multi-tenant runtime, encrypted credential store, automated hostname
+provisioner, CRM sync, or identity-resolution provider integration. Those
+boundaries are revisited only when a second tenant or concrete destination
+requires them.
+
 ## Goals
 
 - Collect events through `events.shop.maestrogtm.com` under Maestro's domain.
 - Maintain one consistent visitor identity across sessions for as long as the
   browser retains the server-issued first-party cookie.
-- Merge anonymous history into a durable person when deterministic identifiers
-  become available.
-- Deliver matching browser Pixel and server CAPI events with deterministic
-  deduplication.
+- Merge anonymous history into a durable person only when an approved verified
+  claim permits it.
+- Deliver matching browser Pixel and server CAPI events with stable Meta
+  deduplication inputs and controlled browser emission.
 - Include every permitted, available Meta matching and event-context field.
 - Preserve first-touch and latest-touch attribution.
 - Make event receipt, transformation, delivery, retry, and failure inspectable.
@@ -58,34 +79,50 @@ fan-out plane, D1 as the compact operational identity and delivery authority,
 and Tinybird as the append-only analytics projection.
 
 ```text
-shop.maestrogtm.com
-  browser SDK + native destination pixels
-          |
+shop.maestrogtm.com (existing Pages project)
+  storefront + browser SDK + native Meta Pixel
+  checkout + Dodo webhooks
+          | authoritative D1 batch: business state + event_outbox
+          | optional Queue producer after commit
           v
-events.shop.maestrogtm.com
+shared D1 authority <-------- scheduled outbox scan
+          ^                              |
+          |                              v
+events.shop.maestrogtm.com (standalone event Worker)
   bootstrap + event collector + privacy choices
+  Queue consumer + scheduled dispatcher + cleanup
           |
           v
-Cloudflare Queue -----> dead-letter queue
+Cloudflare Queue ----------------> dead-letter queue
           |
           v
-normalization + identity + destination transforms
-     |                 |                  |
-     v                 v                  v
- D1 authority      Tinybird          Meta CAPI
- identity,         analytics         and future
- idempotency,      projection        destinations
- deliveries
+identity + canonical claims + delivery leases
+          |                         |
+          v                         v
+     Meta CAPI                  Tinybird
 ```
 
 The browser never receives a Tinybird token, Meta access token, or other
 destination credential. It communicates only with the first-party collector.
 
+Cloudflare Pages Functions can produce Queue messages but cannot consume them.
+The standalone Worker owns the main Queue and DLQ consumers. The Worker may
+expose `fetch`, `queue`, and `scheduled` handlers in the same deployment. The
+exact custom domain is manually attached in Maestro's Cloudflare zone for the
+first release.
+
+Authoritative Lead, InitiateCheckout, and Purchase events use a transactional
+outbox. The business-state mutation and `event_outbox` row are submitted in one
+D1 `batch()` transaction. After commit, the Pages Function attempts an
+immediate Queue send. A scheduled Worker scan leases and republishes pending
+outbox rows, so a Queue outage or request crash cannot separate a successful
+business mutation from its conversion record.
+
 ## Why Tinybird is not the delivery authority
 
 Tinybird is well suited to high-volume append-only ingestion, low-latency
 funnel queries, attribution analysis, and dashboards. It is not the source of
-truth for transactional delivery claims or strict uniqueness.
+truth for transactional delivery claims or physical row uniqueness.
 
 D1 owns:
 
@@ -96,33 +133,40 @@ D1 owns:
 - authoritative joins to leads, checkout sessions, and payments.
 
 Tinybird receives normalized, privacy-reviewed projections for analytics. A
-Tinybird outage cannot block checkout or cause Meta duplicates; its failed
-delivery is retried independently.
+Tinybird outage cannot block checkout or Meta. Because a crash after Tinybird
+acceptance can cause the same row to be appended again, every row carries a
+canonical event key and analytics queries use a deduplicated projection.
 
-## Tenant model
+## Tenant and environment model
 
-The first deployment is Maestro-only, but the data contract is tenant-aware.
-Every event, identity, and delivery key includes:
+The initial deployment is Maestro-only. Productization initially means a
+deployment per customer: separate Worker, D1, Queues, secrets, and preferably a
+separate Tinybird workspace or datasource in that customer's infrastructure.
+The schema still carries `tenant_id` and `site_id` so event contracts remain
+portable, but no shared tenant router or control plane is built now.
 
-- `tenant_id`;
-- `site_id`; and
-- `schema_version`.
+Keys are explicit:
 
-Tenant configuration supplies:
+- visitor: `(tenant_id, site_id, visitor_id)`;
+- person identifier: `(tenant_id, identifier_type, issuer_namespace,
+  normalization_version, keyed_digest)` when cross-site identity is intended;
+- event: `(tenant_id, site_id, event_name, event_id)`; and
+- delivery: event key plus destination.
 
-- allowed origins and first-party collector hostnames;
-- cookie name, scope, and retention policy;
-- privacy behavior by region;
-- destination enablement and transformation options;
-- public destination identifiers such as Meta dataset/pixel ID; and
-- encrypted server-side destination credentials.
+Schema, transform, and provider API versions are delivery metadata, not parts
+of identity. The server derives tenant and site from an exact validated Host
+and Origin pair and ignores browser-supplied tenant or site IDs.
 
-No core collector, identity, or delivery code may contain a Maestro hostname,
-dataset ID, offer slug, product ID, or provider credential. Maestro values live
-in the initial tenant configuration.
+Deployment configuration supplies allowed origins, hostnames, cookie policy,
+regional privacy policy, public Meta dataset/pixel ID, and sender enablement.
+Meta, Tinybird, cookie-signing, and identity-HMAC credentials use Cloudflare
+Worker secrets, with current and previous keys where rotation requires them.
+Credentials are not stored as encrypted blobs in D1 for a single tenant.
 
-The initial implementation may use one deployed tenant configuration. It must
-not build the future tenant-management UI or automated customer provisioning.
+No core collector, identity, or delivery code contains a Maestro hostname,
+dataset ID, offer slug, product ID, or credential. Preview and production use
+separate D1 databases, Queues/DLQs, Tinybird datasources/tokens, cookie names or
+scopes, and Meta delivery configuration.
 
 ## First-party identity model
 
@@ -130,10 +174,10 @@ not build the future tenant-management UI or automated customer provisioning.
 
 1. `visitor_id` is an opaque, server-issued identifier for one browser.
 2. `session_id` groups activity into a rolling visit.
-3. `person_id` is a durable server-side identity created or resolved when a
-   deterministic identifier becomes available.
+3. `person_id` is a durable server-side identity created only when an approved
+   identity claim exists.
 
-Deterministic identifiers include normalized hashes or provider IDs for:
+Potential deterministic claims include:
 
 - email;
 - phone;
@@ -142,13 +186,35 @@ Deterministic identifiers include normalized hashes or provider IDs for:
 - CRM contact; and
 - a tenant-approved offline customer identifier.
 
-The graph maps multiple visitor IDs and identifiers to one person. A visitor
-merge must be supported by a deterministic identifier; IP address, user agent,
-screen size, and browser characteristics are never sufficient to merge people.
+Each claim records its source, issuer namespace, verification class,
+normalization version, first/last seen time, provenance, and revocation state.
+A value typed into a form or returned by a future resolver is an assertion, not
+proof of identity. Only policy-approved verified or authoritative claims may
+automatically join two existing people. A verified payment-provider customer,
+authenticated account, or completed first-party verification may upgrade an
+asserted claim.
+
+Internal alias keys use tenant-scoped, domain-separated HMAC-SHA-256 rather
+than Meta's unsalted SHA-256. Hashing is pseudonymization, not anonymization.
+Meta-required hashes are created separately inside the scoped Meta transform
+and retained only for its retry window.
+
+The initial implementation is one transactional alias/redirect/conflict path,
+not a generic graph engine. When an incoming claim bridges two existing people,
+the D1 primary either chooses a canonical winner by a stable rule and records
+an auditable redirect, or quarantines the conflict. It never silently merges a
+shared, mistyped, recycled, reassigned, or revoked identifier. Merge history is
+idempotent and supports correction or unmerge.
+
+IP address, user agent, screen size, geolocation, click IDs, and browser
+characteristics are never sufficient to create or merge people.
 
 ### Cookie contract
 
-The collector issues these cookies for `shop.maestrogtm.com`:
+The collector at `events.shop.maestrogtm.com` issues these cookies with the
+explicit parent scope `Domain=shop.maestrogtm.com` so the existing Pages
+checkout backend can read the same signed identity without trusting a
+browser-supplied external ID:
 
 - `ma_vid`: signed opaque visitor ID, `HttpOnly`, `Secure`, `SameSite=Lax`,
   `Path=/`, rolling maximum practical lifetime;
@@ -156,36 +222,50 @@ The collector issues these cookies for `shop.maestrogtm.com`:
   rolling thirty-minute inactivity window; and
 - `ma_privacy`: signed privacy-choice state with the same security attributes.
 
+The parent-domain choice makes every hostname below `shop.maestrogtm.com` part
+of the cookie trust boundary. Launch therefore requires an inventory showing
+that no untrusted or takeover-prone sibling hostname exists. Cookie values
+include a format version and signing-key ID. Current and previous keys are
+accepted during rotation; invalid or ambiguous duplicate cookie names are
+rejected safely rather than selecting an attacker-controlled value.
+
 The visitor cookie uses a rolling `Max-Age` of 34,560,000 seconds (400 days).
 Although a server can write a much later calendar expiry, modern browsers may
-cap effective cookie lifetime. The collector refreshes the allowed lifetime on
-valid first-party activity. The person graph, not a claimed thirty-year browser
-cookie, provides durable continuity after identification.
+cap or purge it earlier. The collector refreshes the allowed lifetime on valid,
+purpose-permitted first-party activity. The person graph, not a claimed
+thirty-year browser cookie, provides durable continuity after identification.
+
+Before required tracking consent exists, the collector may set only the
+purpose-limited `ma_privacy` choice cookie. It does not set `ma_vid` or `ma_sid`
+in a prior-consent region until the relevant category is granted. Cookie
+deletion uses the exact original Domain, Path, and security attributes.
 
 The raw visitor ID is never exposed to browser JavaScript. `GET /v1/bootstrap`
 sets the cookies and returns a non-secret, destination-safe external ID derived
-from the visitor ID for native browser destinations.
+from the visitor ID for native browser destinations. Browser-provided copies of
+that value are correlation inputs only; the server's signed cookie is identity
+authority.
 
 ### Cookie deletion and returning visitors
 
-Cookie deletion creates a new visitor ID. The system does not resurrect the old
-ID through fingerprinting. If the visitor later supplies a known email, phone,
-account, payment, or CRM identifier, the new visitor aliases to the existing
-person and the known history becomes connected again.
+Cookie clearing creates a new browser identity. The system neither detects the
+clearing event nor reconstructs the prior visitor through fingerprinting. A
+later verified identifier may link the new visitor to a retained person record,
+unless the prior record was deleted, expired, revoked, or conflicts with
+another claim.
 
 ### Anonymous CRM behavior
 
-The identity store creates an anonymous visitor profile on the first valid
-event. A future CRM adapter may sync that visitor immediately when the target
-CRM supports anonymous or custom objects. It must not create fabricated email
-contacts. When identity enrichment or a direct submission supplies a verified
-identifier, the adapter upserts the corresponding real contact and records the
-visitor-to-contact alias.
+The identity store creates an anonymous visitor record on the first
+purpose-permitted event. The first release does not sync anonymous visitors to
+a CRM and never fabricates email contacts.
 
-RB2B-, Vector-, or similar page-viewer resolution is a future enrichment
-adapter. Resolver output must record provider, timestamp, source event,
-confidence, and the exact identifier used for a deterministic merge. It is not
-part of the first implementation.
+RB2B, Vector, and similar page-viewer resolution remain future work. Their
+output is a provider-scoped assertion with method, source, region,
+consent/legal-basis state, confidence, and expiry. It cannot create or merge a
+canonical person or real CRM contact without corroboration by a verified
+first-party identifier. Provider opt-out, deletion, and retention hooks are
+prerequisites for activation.
 
 ## Event envelope
 
@@ -208,29 +288,45 @@ Every canonical event uses a versioned envelope:
   "geo": {},
   "identity": {},
   "commerce": {},
-  "privacy": {},
-  "properties": {}
+  "privacy": {}
 }
 ```
 
-Common context includes every available, permitted field:
+Each of the four event types has an explicit ingestion schema and explicit
+Meta and Tinybird projections. There is no open-ended `properties` bag. A field
+is collected only when its source, purpose, privacy category, retention, and
+destination allowlist are defined.
+
+The allowlisted context can include:
 
 - event ID, browser time, server receipt time, source, and schema version;
 - visitor, session, person, lead, funnel, checkout, order, and payment IDs;
-- landing URL, current URL, path, page title/type, referrer, referring domain;
+- sanitized landing URL, current URL, path, page title/type, referrer, and
+  referring domain;
 - first-touch and latest-touch `utm_source`, `utm_medium`, `utm_campaign`,
   `utm_content`, and `utm_term`;
 - `fbclid`, `_fbp`, `_fbc`, `gclid`, `ttclid`, and `msclkid`;
-- language, timezone, screen dimensions, viewport dimensions, user agent;
+- purpose-permitted language, timezone, screen dimensions, viewport dimensions,
+  and user agent;
 - request IP and Cloudflare country, region, city, postal code, and timezone
-  when supplied by the platform and permitted for the destination;
+  when supplied by the platform and allowlisted for that event and purpose;
 - offer, placement, product, content, quantity, value, and currency context;
 - privacy notice version, opt-out state, GPC signal, and regional policy; and
 - bot assessment and collector validation result.
 
-Destination transforms receive the canonical envelope and emit only fields
-accepted by that destination. Secrets, raw credentials, and unrelated internal
-fields cannot enter a destination payload.
+URL fragments are always removed. Query parameters are removed except for an
+explicit campaign/click-ID allowlist, and values are length-limited. IP-derived
+geo is analytics context only; it is not repackaged as customer-supplied Meta
+city, state, postal code, or country. Secrets, raw credentials, forbidden PII,
+and unrelated internal fields cannot enter the queue or a destination payload.
+
+At checkout, the server persists a bounded buyer-context snapshot against the
+lead/funnel: validated latest `fbp` and `fbc`, destination-safe external ID,
+originating browser IP and user agent, sanitized verified-domain source URL,
+attribution, capture time, and approved identity hashes. Purchase joins this
+snapshot through authoritative lead/funnel metadata. The Dodo webhook's IP,
+user agent, URL, and Cloudflare geo describe Dodo, not the buyer, and are
+forbidden in Meta `user_data`.
 
 ## Attribution
 
@@ -239,15 +335,37 @@ The collector records both:
 - immutable first-touch attribution for the visitor; and
 - replaceable latest-touch attribution for the current session.
 
-An incoming click identifier or UTM set starts a new attributable session. The
-original `fbclid` and its derived `_fbc` are preserved with receipt time. The
-system also reads Meta's `_fbp` and `_fbc` cookies when present. A custom
-visitor external ID complements `_fbp`, `_fbc`, and `fbclid`; it does not
-replace them.
+An incoming click identifier or UTM set starts a new attributable session.
+First- and latest-touch click IDs remain separate. Because Queue processing is
+unordered, first/latest selection compares validated event time and then a
+stable event-ID tie-breaker; it never relies on arrival order.
+
+For Meta `user_data`, the transform uses the freshest valid browser `_fbp` and
+`_fbc`. When a URL contains a newer `fbclid`, the collector derives `fbc` as
+`fb.1.<first-observed-milliseconds>.<fbclid>` and replaces stale click context.
+It never sends raw `fbclid` as `fbc`. `fbp`, `fbc`, IP address, and user agent
+are sent in their accepted form and are never hashed. A custom external ID
+complements these values; it does not replace them.
 
 Attribution values have strict length and character limits. They are treated as
 untrusted input and never interpolated into HTML, SQL, logs, or URLs without
 encoding.
+
+## Event-time rules
+
+- The server records both `occurred_at` and immutable `received_at`.
+- A PageView browser time more than five minutes in the future is replaced with
+  receipt time and flagged; the untrusted original survives only in short-lived
+  diagnostics.
+- Lead time is the successful D1 persistence time, InitiateCheckout time is the
+  provider-session creation time, and Purchase time is the verified provider
+  payment occurrence time when present or the first verified webhook receipt
+  otherwise. Retries never replace those times with retry time.
+- Meta `event_time` is integer Unix seconds. Events older than Meta's seven-day
+  acceptance window expire instead of retrying indefinitely.
+- Browser/server pairs are normally emitted in the same request flow and must
+  complete within Meta's 48-hour deduplication window; the operational target is
+  five minutes.
 
 ## Event semantics and deduplication
 
@@ -258,22 +376,32 @@ encoding.
 - Native Meta Pixel and the collector receive the identical event ID.
 - Server CAPI enriches the event with cookie identity, IP, user agent, geo, and
   attribution.
+- Pixel bootstrap initializes only the configured pixel. It emits no implicit
+  or unkeyed PageView. The sole PageView call targets that pixel with the
+  canonical `eventID`; a second unkeyed PageView is a test failure.
 
 ### Lead
 
 - Trigger: a lead passes validation and is persisted.
 - Browser supplies a random candidate event ID with the lead request.
-- The server validates and persists it before accepting the lead.
-- Browser Pixel uses the same ID after the valid submission path.
+- The server validates it and writes the lead plus Lead outbox row in one D1
+  batch before accepting the lead.
+- The checkout API returns a named, non-PII Lead browser payload. If lead
+  persistence succeeds but provider checkout creation fails, the error response
+  still identifies that the lead was accepted so the browser may emit the
+  matching Lead once.
 - Server CAPI uses authoritative email, lead, offer, placement, and identity
   data rather than trusting browser-supplied PII.
 
 ### InitiateCheckout
 
 - Trigger: Dodo successfully creates a checkout session.
-- Event ID derives from the provider checkout-session identity plus event type.
-- The checkout response returns the destination-safe event ID for browser
-  Pixel delivery.
+- A stored random event UUID is mapped by the unique source key
+  `(tenant, provider, checkout_session_id, InitiateCheckout)`; retries read the
+  existing UUID rather than minting another.
+- The D1 session update and InitiateCheckout outbox row are one batch. The
+  checkout response returns separately named Lead and InitiateCheckout browser
+  payloads with only event IDs and normalized non-PII custom data.
 - CAPI includes authoritative cart, products, quantities, value, currency,
   checkout session, offer, and attribution.
 
@@ -281,28 +409,66 @@ encoding.
 
 - Trigger: a Dodo `payment.succeeded` webhook passes signature, catalog, cart,
   amount, currency, and revocation checks.
-- Event ID derives from Dodo payment ID plus event type.
-- CAPI delivery occurs only after the verified payment is durably recorded.
-- Browser Pixel emits Purchase only after a secure funnel-status response
-  confirms the same payment and exposes the destination-safe event ID.
-- Base, bump, and upsell payments remain separate purchases when Dodo issues
-  separate payment IDs.
+- A stored random event UUID is mapped by the unique source key
+  `(tenant, dodo, payment_id, Purchase)`.
+- The verified payment state and Purchase outbox row commit in one D1 batch
+  before CAPI or any other tracking side effect.
+- Exactly one Purchase is emitted per Dodo payment ID. Base plus bump items in
+  one Dodo payment are aggregated in that Purchase's `contents`; an upsell is a
+  separate Purchase only when Dodo assigns a separate payment ID.
+- Dodo minor units are converted with the repository's existing
+  currency-aware conversion. `value` equals the verified payment total and the
+  content quantities; currency is uppercase ISO 4217.
+- A dedicated authorized `POST /api/funnel/browser-events` endpoint atomically
+  creates a single browser delivery claim before returning `purchases[]`, one
+  safe payload per newly verified payment. Authorization uses the existing
+  high-entropy flow token, exact same-origin request, and a server-side record
+  binding that token to the funnel; it returns claims only for that funnel and
+  no raw PII. Every flow page uses `Referrer-Policy: strict-origin`, and flow
+  tokens never enter analytics, logs, referrers, or destination payloads. The
+  existing GET status endpoint remains read-only. Reloads return no
+  already-claimed Purchase. Client-side persisted guards are defense in depth,
+  not the correctness boundary.
+- If the one browser claim is issued but the Pixel call fails, CAPI remains the
+  reliable conversion record; the server does not issue repeated browser
+  Purchases and risk overcounting.
 
-### Uniqueness
+### Idempotency and delivery guarantees
 
 D1 enforces:
 
-- unique canonical event: `(tenant_id, event_name, event_id)`;
+- unique canonical event: `(tenant_id, site_id, event_name, event_id)`;
 - unique destination delivery:
-  `(tenant_id, event_name, event_id, destination)`; and
-- one current person alias for each deterministic identifier within a tenant.
+  `(tenant_id, site_id, event_name, event_id, destination)`;
+- unique provider source mapping:
+  `(tenant_id, provider, provider_object_id, event_name)`; and
+- one active person alias per tenant-scoped claim key, subject to the conflict
+  rules above.
 
-Queue delivery is at least once. Duplicate queue messages find the existing
-claim and cannot create a second Meta event or analytics row.
+Cloudflare Queue delivery is at least once and unordered. The consumer creates
+canonical and destination rows idempotently, then uses a compare-and-set lease
+state machine: `pending -> sending -> delivered | retryable | permanent |
+outcome_unknown`. It skips destinations already marked delivered.
+
+No component claims exactly-once delivery across a remote call. A worker can
+crash after Meta or Tinybird accepts a request but before D1 records success.
+An ambiguous retry preserves the original event name, event ID, event time, and
+destination key. Meta is expected to deduplicate matching Pixel/CAPI events
+when event name, event ID, pixel/dataset, and the 48-hour window match; this is
+not a guarantee for two browser events. Tinybird raw ingestion may contain a
+duplicate row, so its query projection deduplicates by canonical event key.
+
+Replay is an audited operator action that reopens one failed delivery, retains
+the same event ID, and refuses events blocked by a privacy tombstone or expired
+Meta window. It never mints a replacement advertising conversion.
 
 ## Meta Pixel and CAPI transform
 
-The Meta destination owns both browser and server mappings.
+The Meta sender owns both browser and server mappings. All four events use the
+same configured pixel/dataset and `action_source: "website"`. The
+`event_source_url` is the sanitized, verified Maestro page where the action
+occurred, never the collector, Dodo, or webhook URL. Originating browser IP and
+user agent come from the captured browser request.
 
 The server payload includes all available supported fields, including:
 
@@ -311,26 +477,50 @@ The server payload includes all available supported fields, including:
 - normalized SHA-256 email, phone, first name, last name, city, state, postal
   code, country, and other supported customer fields when actually supplied;
 - destination-safe external visitor and person identifiers;
-- `_fbp`, `_fbc`, client IP address, and client user agent;
-- value, currency, order/payment ID, content IDs, content type, contents,
-  quantity, and item count where applicable; and
-- Meta test-event code only while a tenant is in validation mode.
+- `fbp`, `fbc`, `client_ip_address`, and `client_user_agent`;
+- value, currency, order/payment ID, `content_ids`, `content_type`, `contents`,
+  quantity, and `num_items` where applicable; and
+- Meta test-event code only on an explicitly authorized validation event or
+  session.
 
-Normalization and hashing happen in one shared server transform. Browser code
-does not implement a second hashing standard. The Meta Graph API version is
-pinned in tenant configuration and upgraded deliberately.
+Each customer field follows Meta's published field-specific normalization,
+then is UTF-8 SHA-256 hashed exactly once. Empty, inferred, malformed, or
+placeholder values are omitted. The current Dodo placeholder name `Customer`
+must never become `fn` or `ln`; internal lead UUIDs remain internal and must not
+populate Meta's Lead Ads `lead_id`. `fbp`, `fbc`, client IP, and client user
+agent are not hashed. Phone requires an explicit country-aware E.164 input; the
+system does not guess a country code.
 
-Admaxxer may remain enabled as a comparison analytics destination. Its Meta
-forwarding must be disabled unless it demonstrably uses the exact same Meta
-event names and event IDs. The initial cutover assumes our Meta destination is
-the only server-side sender.
+One shared server module owns normalization and exact-output fixtures. Native
+Pixel receives the corresponding browser inputs through Meta's supported
+mechanism; it does not implement an independent normalization algorithm. The
+Meta Graph API version and transform version are pinned and upgraded
+deliberately.
+
+The destination-safe external ID returned by bootstrap is stable for that
+visitor and has an explicit browser/server parity fixture: Pixel receives the
+expected browser input and CAPI receives the one-pass Meta hash of the same
+canonical value. Person external ID is added only after a policy-approved
+identity claim and follows the same parity rule.
+
+`test_event_code` is never enabled for an entire tenant or ordinary production
+traffic. Test Events is an inspection path, not a sandbox; validation uses only
+explicit operator-owned actions and removes the code immediately afterward.
+
+Before our sender is enabled, captured configuration evidence must show that
+Admaxxer's Meta forwarding and every legacy Pixel/CAPI sender are disabled. The
+first release does not implement an Admaxxer compatibility adapter. Existing
+Admaxxer analytics may remain temporarily only if inspection proves that it
+does not forward any event to Meta; otherwise it is disabled completely.
 
 ## Collection endpoints
 
 ### `GET /v1/bootstrap`
 
-- validates the allowed origin;
-- sets or refreshes first-party cookies;
+- validates the exact Host and allowlisted Origin pair;
+- resolves regional and stored privacy state before loading destinations or
+  setting tracking cookies;
+- sets or refreshes only the cookies allowed for that privacy state;
 - returns destination-safe visitor/session context and public destination
   configuration;
 - never returns raw visitor IDs or secrets; and
@@ -338,53 +528,109 @@ the only server-side sender.
 
 ### `POST /v1/events`
 
-- accepts only versioned, allowlisted browser event names;
+- accepts only versioned, allowlisted browser events such as PageView;
 - limits body size, nesting, string lengths, and item counts;
 - validates origin and credentialed CORS behavior;
 - adds server time, cookie identity, IP, user agent, geo, and bot assessment;
-- applies privacy policy before creating destination jobs;
+- applies privacy policy before identifiers are created, events are persisted,
+  or destination jobs are created;
 - durably enqueues the accepted canonical event; and
 - returns an event receipt without waiting for destinations.
 
-Authoritative server events from checkout and Dodo webhooks use an internal
-function or authenticated server endpoint and do not round-trip through an
-untrusted browser payload.
+`POST /v1/events` rejects attempts to create authoritative Lead,
+InitiateCheckout, or Purchase events. Those events arise only from the existing
+Pages checkout/webhook path and its transactional outbox.
+
+### `POST /v1/privacy`
+
+- works before a visitor ID or account exists;
+- uses exact-origin credentialed CORS and CSRF protection;
+- records versioned purpose choices, notice/policy version, region source,
+  timestamp, and current GPC state;
+- returns the new effective privacy state and destination gates; and
+- on withdrawal, prevents new jobs and marks undelivered prohibited jobs
+  suppressed.
+
+Cross-origin browser calls use `credentials: include`. CORS echoes only an
+exact allowlisted origin, sets `Access-Control-Allow-Credentials: true` and
+`Vary: Origin`, allows only minimal methods/headers, and rejects `null`, suffix
+matches, wrong Host/Origin pairs, unapproved ports, and unapproved schemes.
 
 ## Bot and abuse protection
 
-The collector runs behind Cloudflare's WAF and rate limiting. It applies:
+The collector runs behind Cloudflare's WAF and rate limiting. Origin and CORS
+protect browsers but do not authenticate arbitrary HTTP clients. The collector
+therefore also applies:
 
 - strict allowed-origin checks;
 - schema and size validation;
 - signed cookie validation;
-- request-rate and event-rate limits;
+- per-IP, signed-cookie, event-name, tenant, and global request/cost budgets;
 - Cloudflare bot score or equivalent signals when available;
-- obvious automation and malformed-client classification; and
-- tenant-specific event allowlists.
+- obvious automation and malformed-client classification;
+- tenant-specific event allowlists;
+- no-deploy switches for collector intake, Meta delivery, and replay.
 
 Bot-classified activity remains observable in Tinybird with a bot flag when
 allowed by retention policy, but is not forwarded to advertising destinations
 by default.
 
+When a managed bot score is unavailable, schema limits, signed-cookie state,
+rate budgets, honeypots on authoritative forms, and anomaly thresholds remain
+active. Bot output is a risk classification, not guaranteed detection. Abuse
+tests must show that public collector traffic cannot forge authoritative
+events or create unbounded D1, Queue, Tinybird, or Meta cost.
+
 ## Privacy behavior
 
-For US visitors, first-party collection and configured advertising delivery
-begin immediately unless the visitor has opted out or sends Global Privacy
-Control. The site provides an accurate privacy notice and a working privacy
-choice, not a choice that is ignored.
+Privacy is evaluated by purpose in both browser and server before identifiers
+are created, events are persisted, native destinations are loaded, or jobs are
+delivered. Initial purpose categories are necessary operations, analytics,
+advertising, and identity enrichment.
 
-For visitors in regions requiring prior advertising consent, advertising
-destinations remain disabled until the required choice exists. Operational
-checkout, fraud, security, and fulfillment records remain separate from
-advertising consent.
+For US visitors, configured analytics and advertising begin immediately unless
+the visitor has opted out or sends Global Privacy Control, consistent with the
+approved launch behavior. `Sec-GPC: 1` is evaluated on every applicable
+request; current GPC or any stored opt-out wins over stale opt-in. GPC
+suppresses advertising, sale/share-classified processing, future resolver
+enrichment, and similarly classified CRM sync.
 
-The pipeline must support:
+For a region requiring prior consent, only the privacy-preference cookie and
+purpose-limited checkout/security processing are allowed before affirmative,
+versioned consent. `ma_vid`, tracking `ma_sid`, Tinybird analytics, native
+pixels, CRM sync, and identity enrichment remain disabled until their required
+category is granted. Failed or unknown region resolution uses the initial
+deployment's fail-closed prior-consent policy.
 
-- suppression before destination delivery;
-- deletion or anonymization by deterministic identifier;
-- an audit record of privacy-choice changes;
-- tenant-specific retention rules; and
-- destination-specific deletion workflows when those adapters are added.
+Operational checkout, fraud, security, accounting, fulfillment, refunds, and
+support records remain separate from advertising consent. A server-originated
+Purchase evaluates the most restrictive of its captured event-time state and
+the latest stored choice before an advertising projection is created or
+delivered. The Pages checkout path uses the same policy module as the event
+Worker, and a current `Sec-GPC: 1` on checkout overrides a stored opt-in. The
+design does not claim one US default covers every state, sensitive-data use, or
+minor.
+
+The first release provides a documented operator workflow, not a self-service
+privacy portal, for verified access, correction, deletion, and opt-out requests.
+Requests can be located by visitor ID, person ID, or normalized deterministic
+identifier. The runbook defines request verification, response SLA, export
+schema, legal exceptions, and backup/Time Travel expiry. Deletion removes or
+anonymizes tracking records in D1 and Tinybird, cancels pending deliveries, and
+creates a non-identifying keyed suppression tombstone so Queue/DLQ replay or a
+later alias cannot recreate the data. Restored data stays quarantined until all
+post-snapshot tombstones are reapplied from the current privacy-request record.
+
+Queue payloads contain only event keys and bounded pseudonymous context, never
+raw email or phone. Messages that cannot be selectively removed are suppressed
+by the tombstone and expire under the Queue retention policy. Previously
+accepted destination data is deleted only where that provider exposes a
+supported mechanism; the operator record states plainly when accepted Meta
+data cannot be retracted and documents the downstream request procedure.
+
+Privacy audit records retain request ID, effective choice, policy versions,
+status, and timestamps—not deleted PII. Legally required transaction records
+may be retained separately but cannot recreate a deleted tracking identity.
 
 Raw card data, passwords, credentials, keystrokes, sensitive health or precise
 location form fields, and arbitrary DOM text are forbidden regardless of
@@ -394,30 +640,44 @@ consent state.
 
 D1 contains compact tables for:
 
-- tenants/sites used by the deployed configuration;
 - visitors and rolling sessions;
-- people and hashed deterministic identifiers;
-- visitor-to-person aliases;
+- people, tenant-keyed identifier claims, aliases, redirects, and conflicts;
+- authoritative event outbox rows and dispatch leases;
 - canonical event claims;
-- per-destination delivery claims, attempts, responses, and errors; and
-- privacy choices and deletion audit records.
+- per-destination delivery claims, leases, attempts, responses, and errors;
+- single-use Purchase browser-delivery claims; and
+- privacy choices, suppression tombstones, and deletion audit records.
 
-Raw email remains in the existing checkout/fulfillment system only where
-needed. Tracking identity tables store normalized hashes and provider IDs.
-Request IP and user agent may be retained only for the configured retry and
-diagnostic window, then removed or anonymized.
+Raw email remains only in the existing purpose-authorized
+checkout/fulfillment system. Tracking identity tables store tenant-scoped HMAC
+claims and approved provider IDs. Meta-normalized SHA-256 values live only in a
+bounded retry snapshot. Raw PII never enters browser responses, generic Queue
+messages, Tinybird, logs, or error metadata.
+
+D1 retains active identity, outbox, claims, compact delivery state, and short
+replay context only. Tinybird owns long-term normalized event analytics. Phase
+1 uses one Queue consumer concurrency, indexed cleanup queries, and a volume
+estimate for the five funnels. Revisit concurrency or storage only if measured
+queue latency breaches the SLO or D1 approaches half of its current platform
+limit; do not add R2 or another database preemptively.
 
 The initial Maestro retention defaults are:
 
-- raw retry context, including IP and user agent: seven days after final
-  destination resolution;
+- raw retry context, including IP, user agent, and Meta-specific identity
+  hashes: no later than seven days from event occurrence, whether or not a job
+  resolves;
 - redacted delivery attempts and diagnostics: ninety days;
-- normalized Tinybird analytics events: twenty-five months; and
-- inactive visitor/person aliases: five years unless a privacy deletion,
-  contractual requirement, or separate customer-record rule requires earlier
-  removal or longer retention.
+- normalized Tinybird analytics events: twenty-five months;
+- inactive anonymous visitor aliases: twenty-five months;
+- identified customer/person aliases: no later than five years from the last
+  verified interaction, unless deleted or a shorter policy applies.
 
-These are tenant configuration values, not constants in collector logic.
+Hard deadlines run from event occurrence or last verified interaction, not
+from eventual delivery success. A scheduled Worker cleanup enforces them,
+including existing raw webhook payloads. Privacy deletion overrides
+marketing/analytics retention. Legally required accounting and transaction
+records use a separate purpose and cannot extend tracking retention. Defaults
+are deployment configuration, not hidden constants.
 
 ## Tinybird projection
 
@@ -428,25 +688,28 @@ Tinybird receives append-only normalized projections for:
 - destination delivery outcomes; and
 - privacy-safe diagnostic metrics.
 
-Rows include `tenant_id`, `site_id`, event date, event name, funnel/offer,
-campaign dimensions, visitor/person pseudonymous IDs, bot state, and delivery
-state. Tinybird powers real-time funnel, attribution, EMQ-input completeness,
-deduplication, failure, and latency dashboards.
+Rows use a version-controlled field allowlist and include a deterministic
+canonical key, `tenant_id`, `site_id`, event date, event name, funnel/offer,
+campaign dimensions, purpose-permitted pseudonymous IDs, bot state, and
+delivery state. They exclude raw PII, IP, user agent, full query strings, and
+generic event properties.
+
+The Worker uses a datasource-scoped append token and requests synchronous
+ingestion acknowledgement. Invalid rows enter a D1-recorded quarantine rather
+than being silently discarded. Because append can repeat after an ambiguous
+failure, dashboards query a deduplicated view keyed by the canonical event key;
+raw physical uniqueness is not promised. Tinybird datasource and pipe
+definitions are version-controlled and promoted before a producer sends a new
+schema.
 
 Tinybird ingestion is an independent destination with its own retries. It is
 never called directly from the browser and never gates checkout.
 
-## Destination contract
+## First-release sender contract
 
-A destination adapter receives:
-
-- canonical event envelope;
-- resolved identity view;
-- tenant destination configuration;
-- a scoped credential accessor; and
-- delivery attempt metadata.
-
-It returns a normalized result containing:
+The direct Meta and Tinybird senders receive a canonical event snapshot,
+resolved identity view, deployment configuration, secret binding, and delivery
+attempt metadata. They return one small normalized result:
 
 - accepted, retryable failure, or permanent failure;
 - provider request/trace identifier when available;
@@ -454,12 +717,23 @@ It returns a normalized result containing:
 - retry-after information; and
 - validation diagnostics.
 
-The first release implements Meta CAPI and Tinybird. Admaxxer remains an
-optional compatibility adapter. Google, TikTok, LinkedIn, CRM, warehouse,
-webhook, and identity-resolution providers are later adapters using the same
-contract.
+Delivery records store envelope version, transform version, provider API
+version, and a payload hash. Credentials remain sender-specific Worker secrets.
+Google, TikTok, CRM, warehouse, webhook, and identity-resolution integrations
+are deferred. A future CRM gets a contract based on its real OAuth, upsert,
+merge, reconciliation, deletion, and backfill lifecycle rather than being
+forced into an event-POST abstraction.
 
 ## Observability
+
+Initial service targets are:
+
+- first-party collector: 99.9% monthly availability;
+- 99% of accepted, permitted advertising events delivered within five minutes,
+  with suppressed or failed events resolved and alerted within five minutes;
+  and
+- every verified Purchase represented by an outbox row in the same D1 batch and
+  delivered, explicitly suppressed, or alerted within five minutes.
 
 Operators can inspect, without exposing secrets or raw PII:
 
@@ -473,22 +747,37 @@ Operators can inspect, without exposing secrets or raw PII:
   and attribution fields; and
 - missing or anomalous Purchase events relative to verified Dodo payments.
 
-Alerts fire for sustained collection drops, queue backlog, destination failure,
-missing Purchase delivery, high duplicate-claim rates, and material loss of
-match-quality fields.
+Cloudflare Queue metrics plus the D1 delivery ledger are authoritative for
+backlog/failure alerts; Tinybird cannot be the only alarm path for its own
+outage. An external probe checks collector health. Alerts fire for sustained
+collection drops, oldest unresolved delivery age, queue/DLQ growth, permanent
+failure, verified-payment/Meta mismatch, Tinybird quarantine rows, high
+duplicate-claim rates, and material loss of fields that were available at the
+source. Every alert names an owner, runbook, kill-switch action, and bounded
+replay procedure.
 
 ## Failure behavior
 
 - Tracking failures never prevent page rendering.
 - PageView collection uses a beacon-compatible request and tolerates navigation.
-- Lead and InitiateCheckout event failures do not invalidate an otherwise valid
-  checkout, but produce retryable operational records and alerts.
+- Lead is not accepted unless its business row and event outbox row commit
+  together. InitiateCheckout is not recorded unless the provider session update
+  and outbox row commit together.
+- A provider checkout created just before a local write failure is reconciled
+  by its stable lead/funnel metadata; it never causes a guessed conversion.
 - Purchase delivery failure causes destination retry without repeating payment,
   fulfillment, or successful destinations.
 - Invalid permanent destination payloads enter failed state with redacted
   diagnostics; they do not retry forever.
-- Dead-lettered events remain inspectable and replay requires an explicit,
-  idempotent operator action.
+- The Worker's DLQ consumer records each unresolved failure in D1 before
+  acknowledging the DLQ message. Replay requires an explicit, idempotent
+  operator action and the original event ID.
+- The consumer supports the current and previous envelope versions during a
+  rolling deploy. Unknown versions are quarantined and alerted.
+- Event ordering is never assumed. Refund-before-Purchase and stale identity
+  updates are resolved from authoritative state and timestamps.
+- A no-deploy Meta kill switch stops new sends while collection and the outbox
+  continue, unless privacy or abuse requires intake suppression too.
 
 ## Test strategy
 
@@ -496,77 +785,156 @@ match-quality fields.
 
 - event schema validation and size limits;
 - cookie creation, signature validation, expiry, and rolling refresh;
-- deterministic identifier normalization and hashing;
-- identity alias and merge rules;
+- exact cookie Domain/deletion attributes, duplicate-cookie rejection, and
+  signing-key rotation;
+- tenant-keyed identifier HMAC and Meta field-specific normalization fixtures;
+- identity alias, redirect, quarantine, revocation, and unmerge rules;
 - attribution first-touch/latest-touch behavior;
 - Meta payload mapping for all four events;
 - privacy, GPC, regional, and bot suppression;
 - destination result classification; and
-- event/destination idempotency keys.
+- event/destination idempotency keys and delivery leases.
 
 ### Integration tests
 
 - bootstrap and credentialed CORS behavior on the first-party hostname;
-- D1 identity and unique-claim transactions;
-- queue duplicate delivery and retry behavior;
+- Host/Origin mismatch, `null` Origin, unapproved scheme/port, and compromised
+  sibling-host cookie forgery attempts;
+- D1 identity, business-state/outbox, and unique-claim batches;
+- queue duplicate, unordered delivery, lease expiry, and retry behavior;
+- crash windows immediately before and after each provider call and D1 status
+  update;
 - checkout Lead and InitiateCheckout authority boundaries;
 - verified Dodo Purchase emission and refund/revocation isolation;
+- webhook-only Purchase uses the captured buyer context and never Dodo request
+  headers;
+- one base-plus-bump payment produces one Purchase and separate payment IDs
+  produce separate Purchases;
 - Tinybird ingestion retry isolation; and
-- no secret or raw disallowed PII in logs, Tinybird, or browser responses.
+- no secret or raw disallowed PII in queues, logs, Tinybird, or browser
+  responses.
 
 ### Browser tests
 
 - initial PageView, navigation PageView, and beacon behavior;
 - first-party cookie persistence and rolling refresh;
 - `fbclid`, `_fbp`, `_fbc`, UTM, referrer, and landing-page capture;
-- Pixel/CAPI shared event IDs;
-- opt-out and GPC suppression; and
-- completion-page Purchase only after verified server state.
+- Pixel/CAPI shared event IDs and no implicit/unkeyed PageView;
+- no Meta/Tinybird/tracking cookies before required prior consent;
+- opt-out, GPC, stale consent, unknown region, and withdrawal suppression; and
+- completion-page Purchase only after verified server state, with atomic
+  single-use browser issuance across reloads; and
+- missing-token, cross-flow token, leaked-link, and replay attempts against the
+  browser-event claim endpoint.
+
+### Data-lifecycle and abuse tests
+
+- deletion by anonymous visitor and deterministic identifier;
+- queued, retrying, DLQ, Tinybird, and replay behavior after a suppression
+  tombstone;
+- hard retention deadlines even for unresolved deliveries;
+- concurrent writers bridging two people, duplicate messages, stale reads,
+  shared/revoked identifiers, and correction/unmerge;
+- PageView/Lead reversal, refund-before-Purchase, and current/previous/unknown
+  envelope versions; and
+- bounded storage/provider cost when public endpoints receive abusive traffic.
 
 ### Live validation
 
-1. Use Meta Test Events for PageView, Lead, and InitiateCheckout.
-2. Confirm browser/server pairing and one deduplicated result per event.
-3. Inspect every available matching field and normalization result.
-4. Run one approved live `$1` Dodo Purchase canary.
-5. Confirm payment, webhook, fulfillment, Pixel, CAPI, Tinybird, and delivery
-   ledger evidence.
-6. Refund and revoke the test purchase immediately.
-7. Repeat for every paid funnel stage before enabling ads.
+1. Use Meta Test Events only on explicit operator validation sessions for
+   PageView, Lead, InitiateCheckout, and the later live Purchase canary.
+2. Capture a redacted Pixel network payload and the exact pre-send CAPI fixture
+   for every event. Assert field-level normalization and identical
+   `(event_name, event_id, pixel_id)` pairing, and record the CAPI response and
+   request/trace ID. Meta Test Events confirms browser/server receipt only; it
+   does not prove normalization, match quality, or deduplication.
+3. Confirm no third sender through browser network evidence and captured sender
+   configuration.
+4. Because Dodo test mode cannot validate the one-click upsell path, configure a
+   separate temporary live `$1` product for every paid stage. Each canary product
+   must exist in the local product catalog at its exact `$1` amount so webhook
+   cart/amount/currency validation remains fully enabled.
+5. Use the owner's live card only when supplied for the scheduled test. Mark the
+   funnel flow as an explicit validation session; never weaken catalog or
+   webhook validation and never use an unverified discount shortcut.
+6. Confirm payment, saved-card/one-click transition, webhook, fulfillment,
+   browser claim, Pixel, CAPI, Tinybird, D1 ledger, and privacy evidence for each
+   stage.
+7. Refund/revoke each canary immediately and verify access and event-state
+   handling. A `$1` canary validates live transport and funnel chaining, not the
+   production offer's catalog price; production IDs and prices receive a
+   separate configuration check.
+8. Repeat the complete path for all five funnels before enabling ads.
 
 ## Rollout
 
-1. Deploy collector, identity cookies, D1 migrations, Queue, and Tinybird in
-   shadow mode with external advertising delivery disabled.
-2. Validate collection, attribution, identity, privacy choices, bot filtering,
-   and dashboards.
-3. Enable Meta Test Events for the four standard events.
-4. Remove or disable legacy Meta senders and Admaxxer Meta forwarding.
-5. Enable live PageView, Lead, and InitiateCheckout delivery.
-6. Run the approved `$1` Purchase canary and verify deduplication.
-7. Roll out to the remaining funnels and stages.
-8. Activate paid campaigns only after event counts, diagnostics, identity
-   fields, delivery health, refund/revocation behavior, and owner evidence are
-   green.
+1. Add migrations beginning at `0010_*`; update migration tests to apply the
+   complete lexically sorted directory, including both existing `0007_*` files.
+   Record the exact pending filenames and D1 Time Travel recovery point.
+2. Provision isolated preview and production D1, Queue/DLQ, Tinybird, Worker
+   secrets, kill switches, and the exact Worker custom domain.
+3. Deploy a backward-compatible Worker in shadow mode with Meta delivery off,
+   then deploy the Pages outbox/browser producer. The consumer supports the
+   current and previous envelope during the rolling change.
+4. Validate collection, attribution, identity conflicts, privacy choices, GPC,
+   abuse limits, retention cleanup, Tinybird deduplication, and independent
+   alerts.
+5. Run explicit Meta Test Events validation for the four standard events.
+6. Capture evidence that Admaxxer Meta forwarding and every legacy Pixel/CAPI
+   sender are disabled, then enable live PageView, Lead, and InitiateCheckout.
+7. Run the approved per-stage `$1` live Purchase canaries and verify browser/
+   server pairing without promising remote exactly-once delivery.
+8. Roll out to every funnel and paid stage. Activate campaigns only after
+   event counts, diagnostics, buyer-context fields, delivery SLOs,
+   refund/revocation behavior, privacy behavior, and owner evidence are green.
+
+Rollback uses the Meta kill switch first, preserves collection/outbox state,
+and keeps the consumer compatible with already queued envelope versions. It
+does not roll back additive D1 migrations while older code may still run.
 
 ## Acceptance criteria
 
 - The first-party collector is served from `events.shop.maestrogtm.com`.
+- The existing Pages project writes authoritative business state plus event
+  outbox rows; the standalone Worker owns collection, Queue consumption,
+  scheduled dispatch, cleanup, Meta, and Tinybird.
 - A returning browser retains one visitor identity across sessions while the
   cookie remains available.
-- Deterministic identification aliases anonymous history to one person without
-  probabilistic fingerprinting.
+- Cookie Domain, credentialed CORS, key rotation, privacy-gated issuance, and
+  cross-subdomain trust are explicit and tested.
+- Approved verified claims can alias anonymous history without probabilistic
+  fingerprinting; asserted or conflicting claims cannot silently merge people.
 - PageView, Lead, InitiateCheckout, and Purchase have matching browser/server
   event names and IDs where a browser counterpart exists.
-- Meta Test Events shows all available supported matching and commerce fields.
-- Queue retries and duplicate messages cannot produce duplicate destination
-  deliveries.
+- Pixel emits no implicit PageView, and Purchase browser payloads are issued by
+  an atomic single-use claim so reloads cannot emit a second browser Purchase.
+- Purchase CAPI uses the original buyer-context snapshot and never Dodo's
+  request IP, user agent, URL, or geo.
+- One Dodo payment ID creates one Purchase with verified major-unit value,
+  currency, and aggregated contents.
+- Redacted Pixel network evidence and pre-send CAPI fixtures prove field-level
+  normalization and identical `(event_name, event_id, pixel_id)` pairing for
+  all four events; Meta Test Events is only receipt evidence.
+- Internal aliases use tenant-scoped HMAC; Meta-specific normalized SHA-256 is
+  exact, single-pass, and bounded to the retry window.
+- Queue and remote delivery are described and tested as at-least-once. Every
+  retry preserves the stable destination key; ambiguous outcomes are recorded,
+  Meta receives the same deduplication identifiers, and Tinybird queries
+  deduplicate canonical keys.
 - Tinybird failure cannot block Meta, checkout, or fulfillment.
-- Opt-out and GPC choices suppress advertising delivery.
+- Prior-consent regions receive no tracking cookies, Tinybird row, native pixel,
+  CRM sync, or resolver call before consent. US opt-out and GPC suppress
+  advertising, sale/share-classified processing, enrichment, and pending jobs.
+- A verified operator privacy workflow covers D1, Tinybird, pending/replay
+  state, suppression tombstones, retention, and documented Meta limitations.
 - No forbidden data or credentials appear in browser responses, logs, D1
-  tracking tables, Tinybird, or destination payloads.
-- The Maestro deployment is configured through tenant/site data rather than
-  hardcoded core behavior.
-- A future tenant can use a different hostname, cookie scope, dataset, token,
-  privacy policy, and destination set without changing the event or identity
-  contracts.
+  tracking tables, Queue payloads, Tinybird, or destination payloads.
+- Collector availability and five-minute event/Purchase resolution SLOs are
+  observable through D1/Queue plus an external probe, with owned runbooks and
+  no-deploy kill switches.
+- Preview and production resources are isolated. The Maestro deployment uses
+  configuration and Worker secrets rather than hardcoded core behavior.
+- A future customer can deploy an isolated stack with different hostname,
+  cookie scope, dataset, token, privacy policy, and sender set without changing
+  the four event or identity contracts, but no shared SaaS control plane is
+  built before it is needed.
