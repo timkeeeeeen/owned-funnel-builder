@@ -65,6 +65,9 @@ async function trackingDatabase(): Promise<DatabaseSync> {
     '0004_delivery_safety.sql',
     '0005_runtime_safety.sql',
     '0006_waf_capability.sql',
+    '0007_context_exchange.sql',
+    '0007_privacy_destinations.sql',
+    '0008_security_fix_wave.sql',
   ]) {
     database.exec(await readFile(new URL(`../migrations/${name}`, import.meta.url), 'utf8'));
   }

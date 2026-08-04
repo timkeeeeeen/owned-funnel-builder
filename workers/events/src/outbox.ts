@@ -24,6 +24,7 @@ export type OutboxEnv = Record<string, unknown> & {
   TRACKING_DB: D1Database;
   EVENTS_QUEUE?: QueueLike;
 };
+export type PersistOptions = { buyerContext?: Record<string, unknown> };
 
 async function digest(value: string): Promise<string> {
   const bytes = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(value));
@@ -63,7 +64,8 @@ export async function persistCanonicalEvent(
   input: unknown,
   privacy: PrivacyState,
   privacySubjectId?: string,
-  now = new Date()
+  now = new Date(),
+  options: PersistOptions = {}
 ): Promise<PersistResult> {
   const event = validateCanonicalEvent(input);
   if (
@@ -73,7 +75,8 @@ export async function persistCanonicalEvent(
     throw new TypeError('event_scope_mismatch');
   }
   const key = await eventKey(event);
-  const selected = destinationKillSwitch(env) ? [] : destinations(event, privacy);
+  const killSwitch = destinationKillSwitch(env);
+  const selected = destinations(event, privacy);
   const suppressed = selected.length === 0 || !allows(privacy, 'advertising');
   const timestamp = now.toISOString();
   const database = env.TRACKING_DB;
@@ -118,8 +121,8 @@ export async function persistCanonicalEvent(
       `INSERT INTO tracking_events
        (event_key, tenant_id, site_id, event_name, event_id, source_system, occurred_at,
         received_at, envelope_json, privacy_state_json, bot_state, created_at,
-        canonical_payload_hash, privacy_subject_id)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        canonical_payload_hash, privacy_subject_id, buyer_context_json)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
        ON CONFLICT(event_key) DO NOTHING`,
       [
         key,
@@ -136,6 +139,7 @@ export async function persistCanonicalEvent(
         timestamp,
         canonicalPayloadHash,
         privacySubjectId ?? null,
+        JSON.stringify(options.buyerContext ?? {}),
       ]
     ),
     statement(
@@ -144,7 +148,7 @@ export async function persistCanonicalEvent(
        (event_key, state, next_attempt_at, attempt_count, created_at, updated_at)
        VALUES (?, ?, ?, 0, ?, ?)
        ON CONFLICT(event_key) DO NOTHING`,
-      [key, selected.length ? 'pending' : 'suppressed', timestamp, timestamp, timestamp]
+      [key, killSwitch && selected.length ? 'paused' : selected.length ? 'pending' : 'suppressed', timestamp, timestamp, timestamp]
     ),
     ...selected.map((destination) =>
       statement(
@@ -153,7 +157,7 @@ export async function persistCanonicalEvent(
          (delivery_key, tenant_id, site_id, event_key, destination, state,
           attempt_count, created_at, updated_at, destination_payload_hash,
           transform_version, transform_metadata_json)
-         VALUES (?, ?, ?, ?, ?, 'pending', 0, ?, ?, ?, '1', '{}')
+         VALUES (?, ?, ?, ?, ?, ?, 0, ?, ?, ?, '1', '{}')
          ON CONFLICT(event_key, destination) DO NOTHING`,
         [
           `${key}:${destination}`,
@@ -161,6 +165,7 @@ export async function persistCanonicalEvent(
           event.site_id,
           key,
           destination,
+          killSwitch ? 'paused' : 'pending',
           timestamp,
           timestamp,
           '',

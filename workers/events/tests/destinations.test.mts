@@ -17,11 +17,10 @@ test('Meta emits a validated, redacted CAPI payload and accepts 2xx', async () =
   let request: Request | undefined;
   const result = await sendMeta(event as never, {
     META_PIXEL_ID: '123', META_ACCESS_TOKEN: 'secret', META_GRAPH_VERSION: 'v23.0',
-    META_BUYER_CONTEXT: { event_source_url: 'https://shop.maestrogtm.com/thanks', email: ' Buyer@Example.COM ', phone: '+1 (212) 555-0123', ip: '203.0.113.1', user_agent: 'Mozilla/5.0' },
     fetch: async (input: RequestInfo | URL, init?: RequestInit) => {
       request = new Request(input, init); return new Response(JSON.stringify({ events_received: 1, fbtrace_id: 'trace_1' }), { status: 200 });
     },
-  });
+  }, { event_source_url: 'https://shop.maestrogtm.com/thanks', email: ' Buyer@Example.COM ', phone: '+1 (212) 555-0123', ip: '203.0.113.1', user_agent: 'Mozilla/5.0', meta_identity_version: 'meta-v1' });
   assert.equal(result.state, 'accepted');
   const payload = await request!.json() as { data: Array<Record<string, unknown>> };
   assert.equal(request!.url, 'https://graph.facebook.com/v23.0/123/events');
@@ -33,7 +32,7 @@ test('Meta emits a validated, redacted CAPI payload and accepts 2xx', async () =
 });
 
 test('Meta classifies throttles and Tinybird rejects invalid append responses', async () => {
-  const meta = await sendMeta(event as never, { META_PIXEL_ID: '123', META_ACCESS_TOKEN: 'secret', fetch: async () => new Response('', { status: 429, headers: { 'retry-after': '9' } }) });
+  const meta = await sendMeta(event as never, { META_PIXEL_ID: '123', META_ACCESS_TOKEN: 'secret', fetch: async () => new Response('', { status: 429, headers: { 'retry-after': '9' } }) }, { event_source_url: 'https://shop.maestrogtm.com/thanks' });
   assert.deepEqual(meta, { state: 'retryable', retryAfterSeconds: 9 });
   const tinybird = await sendTinybird(event as never, { TINYBIRD_APPEND_URL: 'https://api.tinybird.co/v0/events', TINYBIRD_APPEND_TOKEN: 'secret', fetch: async () => new Response('bad', { status: 400 }) });
   assert.equal(tinybird.state, 'permanent');

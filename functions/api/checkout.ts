@@ -322,7 +322,7 @@ export async function onRequestPost(context: PagesContext): Promise<Response> {
         : {}),
       attribution,
       captured_at: now,
-      meta_identity_version: '1',
+      meta_identity_version: 'meta-v1',
       ...(await verifiedBuyerIdentity(request, env, scope)),
     };
     const leadSourceEventId = `lead:${leadId}`;

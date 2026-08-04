@@ -35,6 +35,7 @@ import {
   suppressPendingForSubject,
 } from './privacy.ts';
 import { persistCanonicalEvent, type QueueLike } from './outbox.ts';
+import { createPrivacyRequest } from './privacy-requests.ts';
 import { healthResponse, jsonResponse, redactError } from './observability.ts';
 import {
   SOURCE_SYSTEMS,
@@ -49,6 +50,7 @@ export type CollectorEnv = Record<string, unknown> & {
   EVENTS_QUEUE?: QueueLike;
   TRACKING_CONTEXT_SIGN?: TrackingContextSigner;
   TRACKING_CONTEXT_VERIFY?: TrackingContextVerifier;
+  TRACKING_FLOW_BINDING_VERIFY?: (flowBinding: string, funnelId: string) => Promise<boolean> | boolean;
 };
 
 export type ExecutionContextLike = { waitUntil?(promise: Promise<unknown>): void };
@@ -73,6 +75,8 @@ type EventContext = {
   subject_id: string;
   subject_deleted: boolean;
   policy_version: string;
+  flow_binding?: string;
+  buyer_context?: Record<string, unknown>;
 };
 type TrackingContextVerifier = (
   contextHash: string
@@ -211,7 +215,9 @@ function projectedEvent(
   state: { decisions: Parameters<typeof projectPermittedFields>[1] }
 ): CanonicalEvent {
   validateTrackingArtifacts(trackingControls);
-  return projectPermittedFields(event, state.decisions, trackingFieldPolicy);
+  const projected = projectPermittedFields(event, state.decisions, trackingFieldPolicy);
+  if (!projected.identity.funnel_id) throw new TypeError('canonical_funnel_id_required');
+  return projected;
 }
 
 export function sourceRuntimeReady(
@@ -239,6 +245,7 @@ async function verifyEventContext(
 ): Promise<EventContext | null> {
   if (!contextHash) return null;
   const verifier = env.TRACKING_CONTEXT_VERIFY;
+  const externallyVerified = typeof verifier === 'function';
   let context =
     typeof verifier === 'function'
       ? /^[a-f0-9]{64}$/i.test(contextHash)
@@ -252,11 +259,14 @@ async function verifyEventContext(
       funnel_slug: string;
       server_subject_ref: string;
       privacy_snapshot_json: string;
+      buyer_context_json: string;
+      flow_binding: string;
       expires_at: string;
     } | null = null;
     try {
       row = await env.TRACKING_DB.prepare(
-        `SELECT tenant_id, site_id, funnel_slug, server_subject_ref, privacy_snapshot_json, expires_at
+        `SELECT tenant_id, site_id, funnel_slug, flow_binding, server_subject_ref,
+                privacy_snapshot_json, buyer_context_json, expires_at
          FROM tracking_context_exchanges WHERE context_hash = ? AND expires_at > ? LIMIT 1`
       )
         .bind(contextHash, new Date().toISOString())
@@ -275,6 +285,8 @@ async function verifyEventContext(
               subject_id: row.server_subject_ref,
               subject_deleted: false,
               policy_version: snapshot.policy_version,
+              flow_binding: row.flow_binding,
+              buyer_context: JSON.parse(row.buyer_context_json || '{}') as Record<string, unknown>,
             }
           : null;
       } catch {
@@ -297,6 +309,16 @@ async function verifyEventContext(
     event.privacy.policy_version !== policyVersion
   )
     return null;
+  if (!externallyVerified && /^[a-f0-9]{64}$/i.test(contextHash)) {
+    const consumed = await env.TRACKING_DB.prepare(
+      `UPDATE tracking_context_exchanges
+       SET consumed_at = ?, consumed_event_id = ?, consumed_flow_binding = flow_binding
+       WHERE context_hash = ? AND expires_at > ? AND consumed_at IS NULL`
+    )
+      .bind(new Date().toISOString(), event.event_id, contextHash, new Date().toISOString())
+      .run();
+    if (Number(consumed.meta?.changes ?? 0) !== 1) return null;
+  }
   return context;
 }
 const PUBLIC_BROWSER_EVENTS = new Set<EventName>(['PageView']);
@@ -639,7 +661,9 @@ async function browserEvents(
       env,
       projectedEvent(candidate, state),
       state,
-      eventContext.subject_id
+      eventContext.subject_id,
+      new Date(),
+      { buyerContext: eventContext.buyer_context }
     );
     return jsonResponse({ accepted: true, suppressed: true }, 202, cors(request, env));
   }
@@ -647,7 +671,9 @@ async function browserEvents(
     env,
     projectedEvent(candidate, state),
     state,
-    eventContext.subject_id
+    eventContext.subject_id,
+    new Date(),
+    { buyerContext: eventContext.buyer_context }
   );
   return jsonResponse({ accepted: true, suppressed: false }, 202, cors(request, env));
 }
@@ -745,7 +771,9 @@ async function sourceEvents(request: Request, env: CollectorEnv): Promise<Respon
     env,
     projectedEvent(event, state),
     state,
-    eventContext.subject_id
+    eventContext.subject_id,
+    new Date(),
+    { buyerContext: eventContext.buyer_context }
   );
   return jsonResponse(
     { accepted: true, event_key: result.eventKey, suppressed: result.suppressed },
@@ -964,20 +992,12 @@ async function privacyRequest(request: Request, env: CollectorEnv): Promise<Resp
   if (!verifiedVisitor || (subject !== 'self' && verifiedVisitor !== subject))
     return jsonError('verification_required', 403, request, env);
   const subjectKey = verifiedVisitor;
-  const requestId = crypto.randomUUID();
-  await env.TRACKING_DB.prepare(
-    `INSERT INTO tracking_deletion_requests (request_id, tenant_id, subject_key, request_type, state, verification_state, created_at, audit_json) VALUES (?, ?, ?, ?, 'received', 'pending', ?, ?)`
-  )
-    .bind(
-      requestId,
-      textEnv(env, 'TRACKING_TENANT_ID', 'default'),
-      subjectKey,
-      requestType,
-      new Date().toISOString(),
-      JSON.stringify({ source: 'worker', purpose: 'privacy_request' })
-    )
-    .run();
-  return jsonResponse({ request_id: requestId, state: 'received' }, 202, cors(request, env));
+  const requestId = await createPrivacyRequest(env, {
+    action: requestType as 'access' | 'correction' | 'deletion',
+    subjectId: subjectKey,
+    verified: true,
+  });
+  return jsonResponse({ request_id: requestId, state: 'tombstone_committed' }, 202, cors(request, env));
 }
 
 async function browserClaims(request: Request, env: CollectorEnv): Promise<Response> {
@@ -1008,6 +1028,14 @@ async function browserClaims(request: Request, env: CollectorEnv): Promise<Respo
   if (typeof funnelSlug !== 'string' || !/^[A-Za-z0-9:_-]{1,180}$/.test(funnelSlug) ||
       typeof flowBinding !== 'string' || !/^[A-Za-z0-9:_-]{1,180}$/.test(flowBinding))
     return jsonError('invalid_request', 400, request, env);
+  if (typeof env.TRACKING_FLOW_BINDING_VERIFY !== 'function')
+    return jsonError('tracking_unavailable', 503, request, env);
+  try {
+    if (!(await env.TRACKING_FLOW_BINDING_VERIFY(flowBinding, funnelSlug)))
+      return jsonError('invalid_flow', 403, request, env);
+  } catch {
+    return jsonError('tracking_unavailable', 503, request, env);
+  }
   const paymentIds = Array.isArray(body.payment_ids)
     ? body.payment_ids
         .filter(

@@ -10,7 +10,8 @@ if (execute && !approvalId) throw new Error('--execute requires --approval-id');
 if (execute) throw new Error('deployment blocked: provider, source, and CI readbacks are unverified');
 
 const wrangler = new URL('../node_modules/.bin/wrangler', import.meta.url).pathname;
-await promisify(execFile)(wrangler, ['deploy', '--config', 'workers/events/wrangler.jsonc', '--dry-run'], {
+const wranglerArgs = ['deploy', '--config', 'workers/events/wrangler.jsonc', ...(environment === 'live' ? ['--env', 'production'] : []), '--dry-run'];
+await promisify(execFile)(wrangler, wranglerArgs, {
   maxBuffer: 8 * 1024 * 1024,
 });
 console.log(JSON.stringify({ action: 'events_worker_deploy', environment, mode: 'dry-run', mutations: false }));

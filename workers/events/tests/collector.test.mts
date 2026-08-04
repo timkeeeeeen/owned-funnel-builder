@@ -114,6 +114,9 @@ async function BunlessMigration(): Promise<string> {
     new URL('../migrations/0004_delivery_safety.sql', import.meta.url),
     new URL('../migrations/0005_runtime_safety.sql', import.meta.url),
     new URL('../migrations/0006_waf_capability.sql', import.meta.url),
+    new URL('../migrations/0007_context_exchange.sql', import.meta.url),
+    new URL('../migrations/0007_privacy_destinations.sql', import.meta.url),
+    new URL('../migrations/0008_security_fix_wave.sql', import.meta.url),
   ];
   const chunks = [] as string[];
   for (const file of files)

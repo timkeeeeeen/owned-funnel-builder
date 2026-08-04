@@ -96,7 +96,13 @@ export async function onRequestPost({ request, env }: PagesContext): Promise<Res
     : [];
   if (typeof funnel !== 'string' || !/^[A-Za-z0-9:_-]{1,180}$/.test(funnel) || !paymentIds.length)
     return json({ error: 'invalid_request' }, 400);
-  const payload = JSON.stringify({ funnel_slug: funnel, flow_binding: await hashFlowToken(flow), payment_ids: paymentIds });
+  const flowBinding = await hashFlowToken(flow);
+  const flowVerifier = env.TRACKING_FLOW_BINDING_VERIFY;
+  if (typeof flowVerifier !== 'function') return json({ error: 'tracking_unavailable' }, 503);
+  try {
+    if (!(await (flowVerifier as (hash: string, funnel: string) => Promise<boolean>)(flowBinding, funnel))) return json({ error: 'invalid_flow' }, 403);
+  } catch { return json({ error: 'tracking_unavailable' }, 503); }
+  const payload = JSON.stringify({ funnel_slug: funnel, flow_binding: flowBinding, payment_ids: paymentIds });
   const headers = await signHeaders(env, payload);
   const sourceBridge = bridge(env);
   if (!headers || !sourceBridge) return json({ error: 'tracking_unavailable' }, 503);

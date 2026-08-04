@@ -9,6 +9,7 @@ export const REQUIRED_TRACKING_MIGRATIONS = [
   '0006_waf_capability.sql',
   '0007_context_exchange.sql',
   '0007_privacy_destinations.sql',
+  '0008_security_fix_wave.sql',
 ] as const;
 
 type RuntimeSafetyEnv = Record<string, unknown> & { TRACKING_DB: D1Database };

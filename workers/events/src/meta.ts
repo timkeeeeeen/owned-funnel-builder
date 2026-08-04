@@ -16,22 +16,18 @@ const normalizeEmail = (value: unknown) => text(value).toLowerCase();
 const normalizePhone = (value: unknown) => text(value).replace(/\D/g, '');
 const retryAfter = (response: Response) => Math.min(300, Math.max(1, Number(response.headers.get('retry-after')) || 30));
 
-function buyerContext(env: EventsEnv): Record<string, unknown> {
-  const context = env.META_BUYER_CONTEXT;
-  return context && typeof context === 'object' && !Array.isArray(context) ? context as Record<string, unknown> : {};
-}
-
-export async function sendMeta(event: CanonicalEvent, env: EventsEnv): Promise<DeliveryResult> {
+export async function sendMeta(event: CanonicalEvent, env: EventsEnv, context: Record<string, unknown> = {}): Promise<DeliveryResult> {
   const pixelId = text(env.META_PIXEL_ID);
   const token = text(env.META_ACCESS_TOKEN);
   const version = text(env.META_GRAPH_VERSION) || 'v23.0';
   if (!/^[\d]+$/.test(pixelId) || !/^v\d+\.\d+$/.test(version) || !token) return { state: 'permanent' };
-  const context = buyerContext(env);
-  if (context.meta_identity_version !== undefined && context.meta_identity_version !== 'meta-v1') return { state: 'permanent' };
+  const identityBearing = Boolean(context.email || context.phone || context.external_id);
+  if (identityBearing && context.meta_identity_version !== 'meta-v1') return { state: 'permanent' };
   const email = normalizeEmail(context.email);
   const phone = normalizePhone(context.phone);
   if (hashed(email) || hashed(phone)) return { state: 'permanent' };
-  const sourceUrl = text(context.event_source_url);
+  const sourceUrl = text(context.event_source_url || context.source_url);
+  if (!sourceUrl) return { state: 'retryable', retryAfterSeconds: 30 };
   try {
     const url = new URL(sourceUrl);
     if (url.protocol !== 'https:' || url.hostname !== 'shop.maestrogtm.com' || url.search || url.hash) return { state: 'permanent' };

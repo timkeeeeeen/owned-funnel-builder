@@ -58,6 +58,7 @@ test('source browser claims expose only the canonical claim fields', async () =>
     }),
     env: {
       TRACKING_PAGES_BRIDGE_KEY_CURRENT: 'pages-bridge-secret',
+      TRACKING_FLOW_BINDING_VERIFY: async () => true,
       TRACKING_SOURCE_BRIDGE: {
         fetch: async () => new Response(JSON.stringify({ claims: [{
           event_name: 'Purchase',
