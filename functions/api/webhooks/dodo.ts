@@ -44,6 +44,7 @@ interface WebhookPayload {
 
 type DodoWebhookResult = 'processed' | 'busy';
 const WEBHOOK_STALE_AFTER_MS = 5 * 60 * 1000;
+const WEBHOOK_TIMESTAMP_SKEW_SECONDS = 5 * 60;
 
 function metadataRecord(value: unknown): Record<string, string> {
   if (!value || typeof value !== 'object' || Array.isArray(value)) return {};
@@ -275,11 +276,22 @@ async function markPaymentSucceeded(
     payload: purchasePayload,
     payloadHash: await sourcePayloadHash(purchasePayload),
   };
+  const ownership = await providerMappingStatement(database, purchaseEvent, 'dodo', paymentId).run();
+  if ((ownership.meta?.changes ?? 0) !== 1) {
+    await database
+      .prepare(
+        `INSERT INTO source_tracking_delivery_audit (
+          tenant_id, site_id, source_event_id, owner, result, created_at
+        ) VALUES (?, ?, ?, ?, 'ignored_not_owner', ?)`
+      )
+      .bind(tenantId, siteId, purchaseSourceEventId, webhookId, now)
+      .run();
+    return;
+  }
   businessStatements.push(sourceOutboxStatement(database, purchaseEvent));
-  businessStatements.push(providerMappingStatement(database, purchaseEvent, 'dodo', paymentId));
   const businessResult = await database.batch(businessStatements);
   if (businessResult.some((result) => !result.success)) throw new Error('Payment capture failed.');
-  if (env.TRACKING_SOURCE_BRIDGE) await drainSourceEvent(database, env, purchaseSourceEventId);
+  if (env.TRACKING_SOURCE_BRIDGE) await drainSourceEvent(database, env, purchaseEvent);
 
   if (!getProductDefinition(productKey)) throw new Error('Purchased product is not configured.');
   await deliverPurchase(env, database, { paymentId, productKey, leadId, provider: 'dodo' });
@@ -318,6 +330,13 @@ export async function onRequestPost({ request, env }: PagesContext): Promise<Res
   const webhookTimestamp = cleanString(request.headers.get('webhook-timestamp'), 100);
   if (!webhookId || !webhookSignature || !webhookTimestamp) {
     return json({ error: 'Webhook signature headers are missing.' }, 400);
+  }
+  const timestamp = Number(webhookTimestamp);
+  if (
+    !Number.isSafeInteger(timestamp) ||
+    Math.abs(Math.floor(Date.now() / 1000) - timestamp) > WEBHOOK_TIMESTAMP_SKEW_SECONDS
+  ) {
+    return json({ error: 'Webhook timestamp is stale.' }, 400);
   }
 
   const apiKey = readEnvironmentValue(env, 'DODO_PAYMENTS_API_KEY');

@@ -43,6 +43,7 @@ export async function onRequestPost({ request, env }: PagesContext): Promise<Res
   const sourceBridge = bridge(env);
   if (!sourceBridge) return json({ error: 'tracking_unavailable' }, 503);
   const token = cleanString(env.TRACKING_SOURCE_BRIDGE_TOKEN, 4096);
+  if (!token) return json({ error: 'tracking_unavailable' }, 503);
   try {
     const purchases = await claimUnseenPurchases(flow, async (flowToken) => {
       const response = await sourceBridge.fetch(
@@ -59,7 +60,7 @@ export async function onRequestPost({ request, env }: PagesContext): Promise<Res
       const payload = (await response.json()) as { purchases?: BrowserPurchaseClaim[] };
       return Array.isArray(payload.purchases) ? payload.purchases : [];
     });
-    return json({ purchases: purchases.map(toSafeBrowserPurchase) });
+    return json({ purchases: purchases.map(toSafeBrowserPurchase).filter(Boolean) });
   } catch {
     return json({ error: 'tracking_unavailable' }, 503);
   }

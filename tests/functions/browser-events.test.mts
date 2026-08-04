@@ -66,3 +66,59 @@ test('browser claims reject cross-origin and preflight requests', async () => {
     assert.equal((await onRequestPost({ request, env })).status, 403);
   }
 });
+
+test('browser claims fail closed without bridge credentials and strip untrusted Worker fields', async () => {
+  let calls = 0;
+  const bridge = {
+    fetch: async () => {
+      calls += 1;
+      return Response.json({
+        purchases: [
+          {
+            payment_id: 'pay_unsafe',
+            event_id: 'event_unsafe',
+            custom_data: {
+              content_ids: ['product'],
+              content_type: 'product',
+              value: 49,
+              currency: 'USD',
+              num_items: 1,
+              email: 'buyer@example.com',
+            },
+            buyer_context: { email: 'buyer@example.com' },
+          },
+        ],
+      });
+    },
+  };
+  const request = () =>
+    new Request('https://funnels.example/api/funnel/browser-events', {
+      method: 'POST',
+      headers: { Origin: 'https://funnels.example', 'Content-Type': 'application/json' },
+      body: JSON.stringify({ flow }),
+    });
+
+  assert.equal(
+    (await onRequestPost({ request: request(), env: { TRACKING_SOURCE_BRIDGE: bridge } })).status,
+    503
+  );
+  assert.equal(calls, 0);
+
+  const response = await onRequestPost({
+    request: request(),
+    env: { TRACKING_SOURCE_BRIDGE: bridge, TRACKING_SOURCE_BRIDGE_TOKEN: 'bridge-secret' },
+  });
+  assert.deepEqual((await response.json()).purchases, [
+    {
+      payment_id: 'pay_unsafe',
+      event_id: 'event_unsafe',
+      custom_data: {
+        content_ids: ['product'],
+        content_type: 'product',
+        value: 49,
+        currency: 'USD',
+        num_items: 1,
+      },
+    },
+  ]);
+});

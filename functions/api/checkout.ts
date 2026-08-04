@@ -21,6 +21,7 @@ import {
   validateStripeCheckoutUrl,
 } from '../_lib/stripe';
 import { drainSourceEvent, sourceOutboxStatement, sourcePayloadHash } from '../_lib/source-outbox';
+import { verifySignedCookie } from '../_lib/tracking-cookie';
 import { MARKETING_CONSENT_COPY, MARKETING_CONSENT_VERSION } from '../../src/data/emailConsent';
 
 interface CheckoutRequest {
@@ -106,13 +107,33 @@ function trackingCookie(request: Request, name: 'fbp' | 'fbc'): string {
   return value && /^[A-Za-z0-9._-]{1,256}$/.test(value) ? value : '';
 }
 
-function safeSourceUrl(value: string): string {
+function safeSourceUrl(value: string, expectedOrigin: string): string {
   try {
     const url = new URL(value);
-    return url.protocol === 'https:' ? `${url.origin}${url.pathname}` : '';
+    return url.protocol === 'https:' && url.origin === expectedOrigin ? `${url.origin}${url.pathname}` : '';
   } catch {
     return '';
   }
+}
+
+async function verifiedBuyerIdentity(
+  request: Request,
+  env: PagesContext['env'],
+  scope: { tenantId: string; siteId: string }
+): Promise<Record<string, string>> {
+  const keys = env.TRACKING_COOKIE_VERIFY_KEYS;
+  if (!keys || typeof keys !== 'object' || Array.isArray(keys)) return {};
+  const externalId = await verifySignedCookie(
+    request.headers.get('cookie'),
+    'ma_vid',
+    keys as Record<string, CryptoKey>,
+    {
+      tenantId: scope.tenantId,
+      siteId: scope.siteId,
+      environment: readEnvironmentValue(env, 'TRACKING_ENVIRONMENT') === 'preview' ? 'preview' : 'live',
+    }
+  );
+  return externalId ? { signed_external_id: externalId } : {};
 }
 
 function sourceScope(env: PagesContext['env'], requestUrl: URL): { tenantId: string; siteId: string } {
@@ -263,9 +284,13 @@ export async function onRequestPost(context: PagesContext): Promise<Response> {
       ...(cleanString(request.headers.get('user-agent'), 512)
         ? { client_user_agent: cleanString(request.headers.get('user-agent'), 512) }
         : {}),
-      ...(safeSourceUrl(referrer) ? { source_url: safeSourceUrl(referrer) } : {}),
+      ...(safeSourceUrl(request.headers.get('referer') ?? '', requestUrl.origin)
+        ? { source_url: safeSourceUrl(request.headers.get('referer') ?? '', requestUrl.origin) }
+        : {}),
       attribution,
       captured_at: now,
+      meta_identity_version: '1',
+      ...(await verifiedBuyerIdentity(request, env, scope)),
     };
     const leadSourceEventId = `lead:${leadId}`;
     const leadPayload = {
@@ -360,7 +385,8 @@ export async function onRequestPost(context: PagesContext): Promise<Response> {
     );
     const businessResult = await env.LEADS.batch(businessStatements);
     if (businessResult.some((result) => !result.success)) throw new Error('Lead capture failed.');
-    if (env.TRACKING_SOURCE_BRIDGE) await drainSourceEvent(env.LEADS, env, leadSourceEventId);
+    if (env.TRACKING_SOURCE_BRIDGE)
+      await drainSourceEvent(env.LEADS, env, { ...scope, sourceEventId: leadSourceEventId });
 
     const configuredReturnUrl =
       paymentProvider === 'dodo' ? readEnvironmentValue(env, 'DODO_PAYMENTS_RETURN_URL') : '';
@@ -429,7 +455,8 @@ export async function onRequestPost(context: PagesContext): Promise<Response> {
           payloadHash: await sourcePayloadHash(initiatePayload),
         }),
       ]);
-      if (env.TRACKING_SOURCE_BRIDGE) await drainSourceEvent(env.LEADS, env, initiateEventId);
+      if (env.TRACKING_SOURCE_BRIDGE)
+        await drainSourceEvent(env.LEADS, env, { ...scope, sourceEventId: initiateEventId });
 
       return json({ checkoutUrl, mode: checkoutMode, provider: paymentProvider });
     }
@@ -535,7 +562,8 @@ export async function onRequestPost(context: PagesContext): Promise<Response> {
         payloadHash: await sourcePayloadHash(initiatePayload),
       }),
     ]);
-    if (env.TRACKING_SOURCE_BRIDGE) await drainSourceEvent(env.LEADS, env, initiateEventId);
+    if (env.TRACKING_SOURCE_BRIDGE)
+      await drainSourceEvent(env.LEADS, env, { ...scope, sourceEventId: initiateEventId });
 
     return json({ checkoutUrl, mode: checkoutMode, provider: paymentProvider });
   } catch (error) {

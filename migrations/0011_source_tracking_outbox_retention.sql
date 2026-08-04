@@ -12,7 +12,7 @@ CREATE TABLE source_tracking_outbox (
   event_name TEXT NOT NULL,
   payload_json TEXT NOT NULL,
   payload_hash TEXT NOT NULL DEFAULT '',
-  state TEXT NOT NULL CHECK (state IN ('pending', 'sending', 'delivered', 'retryable', 'quarantined')),
+  state TEXT NOT NULL CHECK (state IN ('pending', 'sending', 'delivered', 'retryable', 'quarantined', 'expired')),
   next_attempt_at TEXT NOT NULL,
   attempt_count INTEGER NOT NULL DEFAULT 0,
   last_error TEXT,
