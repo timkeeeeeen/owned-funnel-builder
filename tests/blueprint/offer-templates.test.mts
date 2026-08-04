@@ -29,12 +29,23 @@ test('video-lead comparison reuses the original offer content and checkout', asy
   assert.deepEqual(comparison.faqs, original.faqs);
 });
 
-test('video-lead adapter forwards the checkout funnel slug', async () => {
-  const source = await readFile(
+test('video-lead adapter keeps offer identity while forwarding the checkout funnel slug', async () => {
+  const adapter = await readFile(
     'src/components/offers/templates/VideoLeadOfferLandingPage.astro',
     'utf8'
   );
+  const landing = await readFile('src/components/offers/OfferLandingPage.astro', 'utf8');
 
-  assert.match(source, /const checkoutSlug = offer\.checkoutFunnelSlug \?\? offer\.slug;/);
-  assert.match(source, /<OfferLandingPage offer=\{\{ \.\.\.offer, slug: checkoutSlug \}\} \/>/);
+  assert.match(
+    adapter,
+    /<OfferLandingPage offer=\{offer\} checkoutFunnelSlug=\{offer\.checkoutFunnelSlug\} \/>/
+  );
+  assert.doesNotMatch(adapter, /offer=\{\{ \.\.\.offer, slug:/);
+  assert.match(landing, /checkoutFunnelSlug\?: string;/);
+  assert.match(landing, /const \{ offer, checkoutFunnelSlug = offer\.slug \} = Astro\.props;/);
+  assert.match(landing, /const funnel = getFunnel\(checkoutFunnelSlug\);/);
+  assert.match(
+    landing,
+    /<OfferCheckoutDialog offer=\{\{ \.\.\.offer, slug: checkoutFunnelSlug \}\} checkout=\{offer\.checkout\} \/>/
+  );
 });

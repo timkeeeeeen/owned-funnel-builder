@@ -7,7 +7,6 @@ interface Props {
 }
 
 const { offer } = Astro.props;
-const checkoutSlug = offer.checkoutFunnelSlug ?? offer.slug;
 ---
 
-<OfferLandingPage offer={{ ...offer, slug: checkoutSlug }} />
+<OfferLandingPage offer={offer} checkoutFunnelSlug={offer.checkoutFunnelSlug} />
