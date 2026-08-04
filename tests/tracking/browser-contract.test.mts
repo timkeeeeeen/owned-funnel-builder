@@ -18,8 +18,17 @@ test('the browser has one consent-gated tracker and no legacy Admaxxer pixel bou
   assert.match(tracker, /events\.shop\.maestrogtm\.com\/v1\/events/);
   assert.match(tracker, /eventID/);
   assert.match(tracker, /collectPageView/);
+  assert.match(tracker, /v1\/bootstrap/);
+  assert.match(tracker, /source_system:\s*['"]event_worker['"]/);
+  assert.match(tracker, /x-csrf-nonce/);
+  assert.match(tracker, /x-tracking-context-hash/);
+  assert.match(tracker, /policy_version/);
+  assert.match(tracker, /pathname\}/);
+  assert.doesNotMatch(tracker, /location\.hash/);
   assert.match(tracker, /credentials:\s*['"]include['"]/);
-  assert.match(tracker, /keepalive|sendBeacon/);
+  assert.match(tracker, /keepalive/);
+  assert.doesNotMatch(tracker, /sendBeacon/);
+  assert.doesNotMatch(tracker, /sessionStorage/);
   assert.match(tracker, /fbclid/);
   assert.match(tracker, /_fbp/);
   assert.match(tracker, /_fbc/);
@@ -33,6 +42,8 @@ test('the browser has one consent-gated tracker and no legacy Admaxxer pixel bou
   assert.match(consent, /aria-(?:modal|live|label)/);
   assert.match(consent, /globalPrivacyControl|sec-gpc/i);
   assert.match(consent, /withdraw|reopen|preferences/i);
+  assert.match(consent, /v1\/privacy/);
+  assert.match(consent, /x-csrf-nonce/);
 });
 
 test('checkout emits non-PII Lead and InitiateCheckout payloads from the server response', async () => {

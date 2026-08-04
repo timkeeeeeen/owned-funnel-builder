@@ -1,5 +1,13 @@
+---
+const collectorUrl =
+  import.meta.env.PUBLIC_TRACKING_COLLECTOR_URL?.trim() ||
+  'https://events.shop.maestrogtm.com/v1/events';
+const privacyUrl = collectorUrl.replace(/\/v1\/events\/?$/, '/v1/privacy');
+---
+
 <aside
   data-consent-banner
+  data-privacy-url={privacyUrl}
   hidden
   class="fixed inset-x-4 bottom-4 z-[120] mx-auto max-w-3xl rounded-2xl border border-border bg-background p-5 text-foreground shadow-2xl sm:inset-x-auto sm:right-6 sm:p-7"
   aria-labelledby="consent-title"
@@ -107,7 +115,22 @@
       preferences.hidden = true;
       banner.querySelector('[data-consent-accept]')?.focus();
     };
-    const save = (analytics, advertising, source = 'ui') => {
+    const persist = async (purpose, allowed, choiceId) => {
+      const bootstrap = window.__maestroBootstrapReady;
+      if (bootstrap && typeof bootstrap.then === 'function') await bootstrap;
+      const nonce = window.__maestroCsrfNonce;
+      if (typeof nonce !== 'string' || !nonce) return false;
+      const response = await fetch(banner.dataset.privacyUrl || '', {
+        method: 'POST',
+        credentials: 'include',
+        headers: { 'Content-Type': 'application/json', 'x-csrf-nonce': nonce },
+        body: JSON.stringify({ purpose, allowed, choice_id: choiceId }),
+      });
+      if (!response.ok) return false;
+      const body = await response.json().catch(() => null);
+      return typeof body?.choice_id === 'string';
+    };
+    const save = async (analytics, advertising, source = 'ui') => {
       const state = {
         resolved: true,
         analytics: Boolean(analytics) && !gpc,
@@ -116,6 +139,14 @@
         source: gpc ? 'gpc' : source,
         effectiveAt: new Date().toISOString(),
       };
+      const purposes = [
+        ['analytics', state.analytics],
+        ['advertising', state.advertising],
+      ];
+      const persisted = await Promise.all(
+        purposes.map(([purpose, allowed]) => persist(purpose, allowed, state.policyVersion))
+      );
+      if (persisted.some((value) => !value)) return;
       try {
         localStorage.setItem(storageKey, JSON.stringify(state));
       } catch {
@@ -136,10 +167,10 @@
     }
     banner
       .querySelector('[data-consent-accept]')
-      ?.addEventListener('click', () => save(true, true));
+      ?.addEventListener('click', () => void save(true, true));
     banner
       .querySelector('[data-consent-reject]')
-      ?.addEventListener('click', () => save(false, false));
+      ?.addEventListener('click', () => void save(false, false));
     banner.querySelector('[data-consent-customize]')?.addEventListener('click', () => {
       const panel = banner.querySelector('[data-consent-customize-panel]');
       const saveButton = banner.querySelector('[data-consent-save]');
@@ -148,12 +179,12 @@
       banner.querySelector('[data-consent-analytics]')?.focus();
     });
     banner.querySelector('[data-consent-save]')?.addEventListener('click', () => {
-      save(
+      void save(
         banner.querySelector('[data-consent-analytics]')?.checked,
         banner.querySelector('[data-consent-advertising]')?.checked
       );
     });
     preferences.addEventListener('click', show);
-    window.addEventListener('maestro:consent-withdraw', () => save(false, false));
+    window.addEventListener('maestro:consent-withdraw', () => void save(false, false));
   })();
 </script>

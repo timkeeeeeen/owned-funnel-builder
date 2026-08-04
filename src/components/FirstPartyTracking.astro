@@ -3,9 +3,10 @@ const pixelId = import.meta.env.PUBLIC_META_PIXEL_ID?.trim() ?? '';
 const collectorUrl =
   import.meta.env.PUBLIC_TRACKING_COLLECTOR_URL?.trim() ||
   'https://events.shop.maestrogtm.com/v1/events';
+const bootstrapUrl = collectorUrl.replace(/\/v1\/events\/?$/, '/v1/bootstrap');
 ---
 
-<script is:inline define:vars={{ pixelId, collectorUrl }}>
+<script is:inline define:vars={{ pixelId, collectorUrl, bootstrapUrl }}>
   (() => {
     const EVENT_NAMES = new Set(['PageView', 'Lead', 'InitiateCheckout', 'Purchase']);
     const ATTRIBUTION_KEYS = [
@@ -31,6 +32,7 @@ const collectorUrl =
     const trackerWindow = window;
     let pixelBootstrapped = false;
     let consent = trackerWindow.__maestroConsent;
+    let bootstrapPromise;
     const sent = new Set();
 
     const eventId = (candidate) => {
@@ -56,26 +58,11 @@ const collectorUrl =
       return output;
     };
     const pagePath = () =>
-      `${window.location.pathname}${window.location.hash ? window.location.hash : ''}`.slice(
-        0,
-        512
-      );
+      window.location.pathname.slice(0, 512);
     const referrerPath = () => {
       try {
         const value = document.referrer ? new URL(document.referrer) : null;
         return value ? `${value.pathname}`.slice(0, 512) : '';
-      } catch {
-        return '';
-      }
-    };
-    const sessionId = () => {
-      try {
-        const key = 'maestro:browser-session';
-        const existing = sessionStorage.getItem(key);
-        if (existing) return existing;
-        const created = `session:${crypto.randomUUID()}`;
-        sessionStorage.setItem(key, created);
-        return created;
       } catch {
         return '';
       }
@@ -123,6 +110,22 @@ const collectorUrl =
         consent[purpose] === true &&
         !(navigator.globalPrivacyControl === true && purpose !== 'necessary')
       );
+    const ensureBootstrap = () => {
+      if (bootstrapPromise) return bootstrapPromise;
+      bootstrapPromise = fetch(bootstrapUrl, {
+        credentials: 'include',
+        headers: { Accept: 'application/json' },
+      })
+        .then(async (response) => {
+          if (!response.ok) throw new Error('bootstrap_failed');
+          const nonce = response.headers.get('x-csrf-nonce');
+          if (nonce) trackerWindow.__maestroCsrfNonce = nonce;
+          return response.json();
+        })
+        .catch(() => null);
+      trackerWindow.__maestroBootstrapReady = bootstrapPromise;
+      return bootstrapPromise;
+    };
     const bootstrapPixel = () => {
       if (!pixelId || pixelBootstrapped || !allowedToTrack('advertising')) return;
       pixelBootstrapped = true;
@@ -149,7 +152,7 @@ const collectorUrl =
       if (typeof trackerWindow.fbq !== 'function') return;
       trackerWindow.fbq('track', name, data, { eventID: id });
     };
-    const collect = (data, id) => {
+    const collect = (data, id, context) => {
       if (!allowedToTrack('analytics')) return;
       const body = {
         schema_version: '1',
@@ -158,10 +161,10 @@ const collectorUrl =
         event_id: id,
         event_name: 'PageView',
         source: 'browser',
-        source_system: document.documentElement.dataset.sourceSystem || 'pages',
+        source_system: 'event_worker',
         occurred_at: new Date().toISOString(),
         visitor: {},
-        session: sessionId() ? { id: sessionId() } : {},
+        session: {},
         page: {
           path: pagePath(),
           ...(document.title ? { title: document.title } : {}),
@@ -170,22 +173,26 @@ const collectorUrl =
         attribution: attribution(),
         identity: {},
         commerce: {},
-        privacy: { gpc: navigator.globalPrivacyControl === true, opted_out: false },
+        privacy: {
+          gpc: navigator.globalPrivacyControl === true,
+          opted_out: false,
+          policy_version: context.policyVersion,
+        },
       };
       const payload = JSON.stringify(body);
       const endpoint = `${collectorUrl.replace(/\/$/, '')}`;
       try {
-        if (navigator.sendBeacon && document.visibilityState === 'hidden') {
-          navigator.sendBeacon(endpoint, new Blob([payload], { type: 'application/json' }));
-        } else {
-          void fetch(endpoint, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            credentials: 'include',
-            body: payload,
-            keepalive: true,
-          });
-        }
+        void fetch(endpoint, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'x-csrf-nonce': context.csrfNonce,
+            'x-tracking-context-hash': context.contextHash,
+          },
+          credentials: 'include',
+          body: payload,
+          keepalive: true,
+        });
       } catch {
         /* analytics must never block the funnel */
       }
@@ -203,8 +210,19 @@ const collectorUrl =
         if (sent.has(id)) return;
         sent.add(id);
         const safe = safeCustomData(customData);
-        trackPixel('PageView', safe, id);
-        collect(safe, id);
+        void ensureBootstrap().then((bootstrapped) => {
+          const policyVersion = bootstrapped?.policy_version;
+          const contextHash = bootstrapped?.tracking_context_hash;
+          const csrfNonce = trackerWindow.__maestroCsrfNonce;
+          if (
+            !/^\d{4}-\d{2}-\d{2}$/.test(policyVersion || '') ||
+            !/^[A-Za-z0-9_-]{16,256}$/.test(contextHash || '') ||
+            !/^[A-Za-z0-9_-]{43}$/.test(csrfNonce || '')
+          )
+            return;
+          trackPixel('PageView', safe, id);
+          collect(safe, id, { policyVersion, contextHash, csrfNonce });
+        });
       },
       canTrack(purpose = 'advertising') {
         return allowedToTrack(purpose);
@@ -213,10 +231,13 @@ const collectorUrl =
     trackerWindow.maestroTracking = tracker;
     const onConsent = (event) => {
       consent = event.detail;
-      if (allowedToTrack('advertising')) bootstrapPixel();
+      bootstrapPromise = null;
+      void ensureBootstrap().then((bootstrapped) => {
+        if (bootstrapped && allowedToTrack('advertising')) bootstrapPixel();
+      });
     };
     window.addEventListener('maestro:consent', onConsent);
-    if (consent && allowedToTrack('advertising')) bootstrapPixel();
+    void ensureBootstrap();
     window.addEventListener('astro:after-swap', () => {
       trackerWindow.maestroTracking = tracker;
     });
