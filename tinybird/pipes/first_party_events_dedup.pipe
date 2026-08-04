@@ -1,0 +1,10 @@
+NODE first_party_events_dedup
+SQL >
+  SELECT * EXCEPT (row_number) FROM (
+    SELECT *, row_number() OVER (PARTITION BY canonical_key ORDER BY occurred_at DESC) AS row_number
+    FROM first_party_events
+  ) e LEFT ANTI JOIN privacy_tombstones t
+    ON e.privacy_subject_key = t.privacy_subject_key AND t.expires_at > now()
+  WHERE row_number = 1
+TYPE endpoint
+TOKEN "read"

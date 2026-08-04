@@ -12,7 +12,7 @@ export async function onRequestGet({ request, env }: PagesContext): Promise<Resp
     const definition = getFunnelDefinition(state.run.offer_slug);
     if (!definition) return json({ error: 'This checkout funnel no longer exists.' }, 404);
 
-    return json({
+    const response = json({
       offerSlug: definition.offerSlug,
       supportEmail: definition.supportEmail,
       baseStatus: state.run.base_status,
@@ -32,6 +32,8 @@ export async function onRequestGet({ request, env }: PagesContext): Promise<Resp
       nextPath: nextFunnelPath(state),
       completion: definition.completion,
     });
+    response.headers.set('Referrer-Policy', 'strict-origin');
+    return response;
   } catch (error) {
     console.error('Funnel status request failed.');
     return json(

@@ -101,6 +101,10 @@ class CampaignDatabase implements D1Database {
       return null;
     });
   }
+
+  async batch(_statements: D1PreparedStatement[]): Promise<D1RunResult[]> {
+    return [];
+  }
 }
 
 const originalFetch = globalThis.fetch;

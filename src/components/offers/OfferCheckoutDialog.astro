@@ -281,53 +281,6 @@ const frameId = `payment-checkout-${offer.slug}`;
     'msclkid',
   ];
 
-  interface AdmaxxerClient {
-    (eventName: string, metadata?: Record<string, unknown>): void;
-    identify?: (email: string) => void;
-    getVisitorId?: () => string | null;
-  }
-
-  const trackedLeads = new Set<string>();
-
-  const getAdmaxxer = () => (window as Window & { admaxxer?: AdmaxxerClient }).admaxxer;
-
-  const getAdmaxxerVisitorId = () => {
-    const visitorId = getAdmaxxer()?.getVisitorId?.();
-    if (visitorId) return visitorId;
-    return document.cookie
-      .split('; ')
-      .find((cookie) => cookie.startsWith('admx_vid='))
-      ?.slice('admx_vid='.length);
-  };
-
-  const trackLead = (email: string, offer: string, placement: string, bumpSelected: boolean) => {
-    const admaxxer = getAdmaxxer();
-    if (!admaxxer) return;
-
-    admaxxer.identify?.(email);
-    const leadKey = `${offer}:${email.toLowerCase()}`;
-    let alreadyTracked = trackedLeads.has(leadKey);
-    try {
-      alreadyTracked ||= sessionStorage.getItem(`admaxxer:lead:${leadKey}`) === '1';
-    } catch {
-      // Tracking still works when storage is unavailable.
-    }
-    if (alreadyTracked) return;
-
-    admaxxer('Lead', {
-      offer_slug: offer,
-      placement,
-      bump_selected: bumpSelected,
-      source: 'checkout_email',
-    });
-    trackedLeads.add(leadKey);
-    try {
-      sessionStorage.setItem(`admaxxer:lead:${leadKey}`, '1');
-    } catch {
-      // The in-memory guard still prevents duplicate events in this page view.
-    }
-  };
-
   const checkoutDialog = document.querySelector<HTMLDialogElement>('[data-offer-checkout-dialog]');
 
   if (checkoutDialog) {
@@ -480,9 +433,17 @@ const frameId = `payment-checkout-${offer.slug}`;
       setLoading(true);
 
       try {
+        const trackingContextToken = (
+          window as Window & { __maestroTrackingContextToken?: unknown }
+        ).__maestroTrackingContextToken;
         const response = await fetch('/api/checkout', {
           method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
+          headers: {
+            'Content-Type': 'application/json',
+            ...(typeof trackingContextToken === 'string' && trackingContextToken
+              ? { 'x-tracking-context-token': trackingContextToken }
+              : {}),
+          },
           body: JSON.stringify({
             email: emailInput.value,
             offerSlug,
@@ -493,13 +454,18 @@ const frameId = `payment-checkout-${offer.slug}`;
             attribution,
             referrer: document.referrer,
             bumpAccepted: bumpInput?.checked === true,
-            admaxxerVisitorId: getAdmaxxerVisitorId(),
           }),
         });
         const result = (await response.json()) as {
           checkoutUrl?: string;
           mode?: CheckoutMode;
           provider?: 'dodo' | 'stripe';
+          lead?: { event_id?: string; event_name?: 'Lead'; custom_data?: Record<string, unknown> };
+          initiateCheckout?: {
+            event_id?: string;
+            event_name?: 'InitiateCheckout';
+            custom_data?: Record<string, unknown>;
+          };
           error?: string;
         };
 
@@ -508,6 +474,30 @@ const frameId = `payment-checkout-${offer.slug}`;
         }
 
         trackLead(emailInput.value, analyticsOfferSlug, placement, bumpInput?.checked === true);
+        const tracker = (
+          window as Window & {
+            maestroTracking?: {
+              track(
+                name: 'Lead' | 'InitiateCheckout',
+                customData: Record<string, unknown>,
+                eventId: string
+              ): void;
+            };
+          }
+        ).maestroTracking;
+        if (result.lead?.event_id && result.lead.event_name === 'Lead') {
+          tracker?.track('Lead', result.lead.custom_data ?? {}, result.lead.event_id);
+        }
+        if (
+          result.initiateCheckout?.event_id &&
+          result.initiateCheckout.event_name === 'InitiateCheckout'
+        ) {
+          tracker?.track(
+            'InitiateCheckout',
+            result.initiateCheckout.custom_data ?? {},
+            result.initiateCheckout.event_id
+          );
+        }
 
         if (result.provider === 'stripe') {
           window.location.assign(result.checkoutUrl);

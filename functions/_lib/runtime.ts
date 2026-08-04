@@ -12,6 +12,7 @@ export interface D1PreparedStatement {
 
 export interface D1Database {
   prepare(query: string): D1PreparedStatement;
+  batch(statements: D1PreparedStatement[]): Promise<D1RunResult[]>;
 }
 
 export interface Environment {

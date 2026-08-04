@@ -58,6 +58,15 @@ checkout return, or environment variable merely exists.
 
 The consolidated owner handoff is [`owner-launch-inputs.md`](./owner-launch-inputs.md).
 
+## Campaign readiness gate
+
+[`meta-campaign-ledger.md`](./meta-campaign-ledger.md) is a paused,
+evidence-only sub-ledger. Campaign gate: not created / paused for every funnel.
+Draft copy remains in [`five-funnel-copy-deck.md`](./five-funnel-copy-deck.md)
+until owner approval. `campaign_enabled` is not recorded: every funnel lacks
+the exact-SHA, canary/refund, privacy/DSAR, threshold, rollback, and fresh
+enablement-approval evidence required to advance.
+
 ## Live `$1` canary matrix
 
 These are temporary non-public live products, not replacements for the approved

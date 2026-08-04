@@ -1,0 +1,23 @@
+{
+  "schema": "maestro.tracking.rollout-state",
+  "version": "1",
+  "owner": "maestro-launch",
+  "policy_version": "2026-08-04",
+  "pilot_funnel": "owned-funnel-builder",
+  "context": {"funnel":"owned-funnel-builder","bound_funnel":"owned-funnel-builder","subject_deleted":false,"policy_version":"2026-08-04"},
+  "funnels": {
+    "owned-funnel-builder":"shadow",
+    "talking-head-video-vbuilder":"shadow",
+    "vibe-code-anything":"shadow",
+    "app-idea-evaluator":"shadow",
+    "blueprint":"shadow"
+  },
+  "funnel_sources": {
+    "owned-funnel-builder":"pages",
+    "talking-head-video-vbuilder":"pages",
+    "vibe-code-anything":"pages",
+    "app-idea-evaluator":"app_idea",
+    "blueprint":"blueprint"
+  },
+  "campaign_enablement_owner": "task-11"
+}

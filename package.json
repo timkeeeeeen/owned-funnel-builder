@@ -33,6 +33,8 @@
     "validate:config": "node scripts/validate-funnel-config.mjs",
     "check:functions": "wrangler pages functions build functions --outdir .wrangler/functions-build --project-directory . --build-output-directory dist/client",
     "publish": "node scripts/run-friendly.mjs publish-cloudflare.mjs",
+    "deploy:pages": "node scripts/run-friendly.mjs publish-cloudflare.mjs",
+    "deploy:events:dry": "node scripts/publish-events-worker.mjs --dry-run",
     "offer:new": "node scripts/new-offer.mjs",
     "check:kpis": "node .claude/scripts/check-kpis.mjs",
     "quality:discover": "tsx tooling/quality/cli.mts discover",
@@ -42,6 +44,8 @@
     "test:quality": "node --import tsx --test tests/quality/*.test.mts",
     "test:blueprint": "node --import tsx --test tests/blueprint/*.test.mts",
     "test:functions": "node --import tsx --test tests/functions/*.test.mts",
+    "test:events": "node --import tsx --test workers/events/tests/collector.test.mts workers/events/tests/queue.test.mts workers/events/tests/observability.test.mts",
+    "check:events": "wrangler deploy --config workers/events/wrangler.jsonc --dry-run",
     "mcp:build": "npm --prefix packages/mcp run build",
     "mcp:test": "npm --prefix packages/mcp test",
     "mcp:start": "npm --prefix packages/mcp start"

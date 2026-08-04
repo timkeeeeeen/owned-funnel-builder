@@ -214,12 +214,16 @@ test('the live bridge remains a thin client of canonical Maestro authorities', a
   for (const path of [
     'capabilities/leadMagnets/publicPersonalizations:start',
     'capabilities/leadMagnets/personalizations:watchPersonalization',
-    'capabilities/billing/blueprintCheckoutStarts:start',
-    'capabilities/billing/blueprintPurchases:getCheckoutStatus',
     'capabilities/leadMagnets/personalizationDelivery:readAsset',
   ]) {
     assert.match(client, new RegExp(path.replaceAll('/', '\\/')));
   }
+  assert.match(client, /\/api\/blueprint\/\$\{operation\}/);
+  assert.match(client, /'checkout-start'/);
+  assert.match(client, /'checkout-status'/);
+  assert.match(client, /tracking_context_token/);
+  assert.match(client, /candidate_event_id/);
+  assert.doesNotMatch(client, /callConvex\(config,\s*['"](?:action|query)['"]\s*,\s*CHECKOUT_/);
   assert.match(client, /cmo-game-plan-direct/);
   assert.match(client, /authority-snapshot/);
   assert.match(client, /publicSessionToken/);

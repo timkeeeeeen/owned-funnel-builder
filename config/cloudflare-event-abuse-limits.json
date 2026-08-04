@@ -1,0 +1,8 @@
+{
+  "schema": "maestro.tracking.cloudflare-event-abuse-limits",
+  "version": "1",
+  "owner": "maestro-platform",
+  "policy_version": "2026-08-04",
+  "limits": { "ip_per_minute": 60, "signed_visitor_per_minute": 120, "tenant_per_hour": 10000, "queue_per_minute": 10000, "meta_spend_limit_micros_per_minute": 1000000000 },
+  "readback": { "status": "unverified", "managed_bot_scoring": "unverified", "fallback": "worker_counter" }
+}

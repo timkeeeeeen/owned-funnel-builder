@@ -5,20 +5,24 @@ import SEO from '@/components/SEO.astro';
 import FontPreload from '@/components/FontPreload.astro';
 import ThemeScript from '@/components/ThemeScript.astro';
 import AnimationObserver from '@/components/AnimationObserver.astro';
-import AdmaxxerPixel from '@/components/AdmaxxerPixel.astro';
+import ConsentBanner from '@/components/ConsentBanner.astro';
+import FirstPartyTracking from '@/components/FirstPartyTracking.astro';
 
 interface Props {
   title: string;
   description: string;
   image?: string;
   noindex?: boolean;
+  sourceSystem?: 'pages' | 'blueprint' | 'app_idea';
 }
 
-const { title, description, image, noindex = false } = Astro.props;
+const { title, description, image, noindex = false, sourceSystem } = Astro.props;
+const resolvedSourceSystem =
+  sourceSystem ?? (Astro.url.pathname.startsWith('/blueprint') ? 'blueprint' : 'pages');
 ---
 
 <!doctype html>
-<html lang="en">
+<html lang="en" data-source-system={resolvedSourceSystem}>
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
@@ -29,7 +33,7 @@ const { title, description, image, noindex = false } = Astro.props;
     <SEO title={title} description={description} image={image} noindex={noindex} />
     <ClientRouter />
     <ThemeScript />
-    <AdmaxxerPixel />
+    <FirstPartyTracking />
   </head>
   <body class="min-h-screen antialiased">
     <a
@@ -41,6 +45,30 @@ const { title, description, image, noindex = false } = Astro.props;
     <main id="main-content" class="min-h-screen">
       <slot />
     </main>
+    <ConsentBanner />
     <AnimationObserver />
   </body>
 </html>
+
+<script is:inline>
+  (() => {
+    let pageKey = '';
+    let pageViewId = '';
+    const sendPageView = () => {
+      const tracker = window.maestroTracking;
+      const locationKey = `${window.location.pathname}${window.location.search}`;
+      if (!tracker || !tracker.canTrack('analytics')) return;
+      if (pageKey !== locationKey) {
+        pageKey = locationKey;
+        pageViewId = `pageview:${crypto.randomUUID()}`;
+      }
+      tracker.collectPageView({}, pageViewId);
+    };
+    window.addEventListener('maestro:consent', sendPageView);
+    document.addEventListener('astro:page-load', () => {
+      pageKey = '';
+      sendPageView();
+    });
+    queueMicrotask(sendPageView);
+  })();
+</script>
