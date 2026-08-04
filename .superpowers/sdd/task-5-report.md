@@ -72,3 +72,17 @@ Status: DONE
 - RED: Worker collector 12/18, with the production-shaped privacy grant returning 503 instead of 202 and downstream PageViews failing without the removed fixture.
 - GREEN: Worker collector 18/18; browser contract 4/4; tracking privacy 6/6; Blueprint direct equivalent 14/14; browser events 3/3; Blueprint proxy 3/3.
 - GREEN: focused Prettier check, Pages Functions compilation, Events Worker preview and production dry-runs, and `git diff --check`. The production dry-run retained Wrangler's pre-existing warning about unrelated non-inherited vars.
+
+## Final verifier remediation
+
+Status: DONE
+
+- Added the matching production verifier for versioned tracking-context tokens. It selects the current or previous secret by key ID, verifies the exact HMAC-signed bytes, decodes a bounded canonical payload, enforces the five-minute expiry, and then applies the existing tenant/site/funnel/deletion/policy checks.
+- Retained the optional injected verifier for isolated tests. Production-shaped requests no longer require a function binding.
+- Added an end-to-end consent grant → bootstrap token → PageView assertion. The minted token is accepted; tampered, stale-policy, expired, deleted, and missing-key contexts are rejected.
+
+### Final verifier verification
+
+- RED: Worker collector 19/20; the end-to-end PageView returned 403 instead of 202 because no production verifier existed.
+- GREEN: Worker collector 20/20; browser contract 4/4; tracking privacy 6/6.
+- GREEN: focused Prettier check, Events Worker preview and production dry-runs, and `git diff --check`. The dry-runs retained the previously documented environment warnings.

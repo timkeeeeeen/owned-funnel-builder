@@ -75,6 +75,21 @@ function base64url(value: Uint8Array): string {
   return btoa(binary).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
 }
 
+function decodeBase64url(value: string): Uint8Array | null {
+  if (!/^[A-Za-z0-9_-]+$/.test(value)) return null;
+  try {
+    const binary = atob(
+      value
+        .replace(/-/g, '+')
+        .replace(/_/g, '/')
+        .padEnd(Math.ceil(value.length / 4) * 4, '=')
+    );
+    return Uint8Array.from(binary, (character) => character.charCodeAt(0));
+  } catch {
+    return null;
+  }
+}
+
 async function signTrackingContext(
   env: CollectorEnv,
   context: EventContext
@@ -107,6 +122,77 @@ async function signTrackingContext(
   const unsigned = `v1.${keyId}.${payload}`;
   const signature = await crypto.subtle.sign('HMAC', key, new TextEncoder().encode(unsigned));
   return `${unsigned}.${base64url(new Uint8Array(signature))}`;
+}
+
+async function verifyTrackingContextToken(
+  env: CollectorEnv,
+  token: string
+): Promise<EventContext | null> {
+  const match = token.match(
+    /^v1\.([A-Za-z0-9_-]{1,64})\.([A-Za-z0-9_-]{16,512})\.([A-Za-z0-9_-]{43})$/
+  );
+  if (!match) return null;
+  const [, keyId, payload, encodedSignature] = match;
+  const currentKeyId = textEnv(env, 'TRACKING_CONTEXT_SIGNING_KEY_ID_CURRENT');
+  const previousKeyId = textEnv(env, 'TRACKING_CONTEXT_SIGNING_KEY_ID_PREVIOUS');
+  const secret =
+    keyId === currentKeyId
+      ? env.TRACKING_CONTEXT_SIGNING_KEY_CURRENT
+      : keyId === previousKeyId
+        ? env.TRACKING_CONTEXT_SIGNING_KEY_PREVIOUS
+        : null;
+  if (typeof secret !== 'string' || secret.length < 32) return null;
+  const signature = decodeBase64url(encodedSignature);
+  if (!signature) return null;
+  const key = await crypto.subtle.importKey(
+    'raw',
+    new TextEncoder().encode(secret),
+    { name: 'HMAC', hash: 'SHA-256' },
+    false,
+    ['verify']
+  );
+  if (
+    !(await crypto.subtle.verify(
+      'HMAC',
+      key,
+      signature,
+      new TextEncoder().encode(`v1.${keyId}.${payload}`)
+    ))
+  )
+    return null;
+  const decodedPayload = decodeBase64url(payload);
+  if (!decodedPayload) return null;
+  try {
+    const context = JSON.parse(new TextDecoder().decode(decodedPayload)) as unknown;
+    if (!Array.isArray(context) || context.length !== 7) return null;
+    const [tenantId, siteId, funnelId, subjectId, subjectDeleted, policyVersion, expiresAt] =
+      context;
+    const boundedString = (value: unknown, maximum: number): value is string =>
+      typeof value === 'string' && value.length > 0 && value.length <= maximum;
+    const now = Math.floor(Date.now() / 1000);
+    if (
+      !boundedString(tenantId, 128) ||
+      !boundedString(siteId, 256) ||
+      !boundedString(funnelId, 256) ||
+      !boundedString(subjectId, 256) ||
+      (subjectDeleted !== 0 && subjectDeleted !== 1) ||
+      !boundedString(policyVersion, 128) ||
+      !Number.isSafeInteger(expiresAt) ||
+      expiresAt <= now ||
+      expiresAt > now + 300
+    )
+      return null;
+    return {
+      tenant_id: tenantId,
+      site_id: siteId,
+      funnel_id: funnelId,
+      subject_id: subjectId,
+      subject_deleted: subjectDeleted === 1,
+      policy_version: policyVersion,
+    };
+  } catch {
+    return null;
+  }
 }
 
 function projectedEvent(
@@ -142,10 +228,14 @@ async function verifyEventContext(
   event: CanonicalEvent,
   contextHash: string | null
 ): Promise<boolean> {
-  if (!contextHash || !/^[a-f0-9]{64}$/i.test(contextHash)) return false;
+  if (!contextHash) return false;
   const verifier = env.TRACKING_CONTEXT_VERIFY;
-  if (typeof verifier !== 'function') return false;
-  const context = await verifier(contextHash);
+  const context =
+    typeof verifier === 'function'
+      ? /^[a-f0-9]{64}$/i.test(contextHash)
+        ? await verifier(contextHash)
+        : null
+      : await verifyTrackingContextToken(env, contextHash);
   if (!context) return false;
   const rolloutContext = rolloutState.context;
   const policyVersion = String(privacyPolicy.policy_version);

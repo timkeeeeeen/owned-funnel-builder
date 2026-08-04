@@ -118,6 +118,53 @@ const pageView = (overrides: Record<string, unknown> = {}) => ({
   ...overrides,
 });
 
+const contextSecret = 'production-shaped-context-secret-key-2026';
+
+function testBase64url(value: Uint8Array): string {
+  let binary = '';
+  for (const byte of value) binary += String.fromCharCode(byte);
+  return btoa(binary).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+}
+
+async function productionContextToken(overrides: Record<string, unknown> = {}): Promise<string> {
+  const context = {
+    tenant_id: 'tenant_demo',
+    site_id: 'site_demo',
+    funnel_id: 'owned-funnel-builder',
+    subject_id: 'worker-subject',
+    subject_deleted: false,
+    policy_version: '2026-08-04',
+    expires_at: Math.floor(Date.now() / 1000) + 300,
+    ...overrides,
+  };
+  const payload = testBase64url(
+    new TextEncoder().encode(
+      JSON.stringify([
+        context.tenant_id,
+        context.site_id,
+        context.funnel_id,
+        context.subject_id,
+        context.subject_deleted ? 1 : 0,
+        context.policy_version,
+        context.expires_at,
+      ])
+    )
+  );
+  const unsigned = `v1.current.${payload}`;
+  const signature = await crypto.subtle.sign(
+    'HMAC',
+    await crypto.subtle.importKey(
+      'raw',
+      new TextEncoder().encode(contextSecret),
+      { name: 'HMAC', hash: 'SHA-256' },
+      false,
+      ['sign']
+    ),
+    new TextEncoder().encode(unsigned)
+  );
+  return `${unsigned}.${testBase64url(new Uint8Array(signature))}`;
+}
+
 test('bootstrap requires exact host/origin and returns non-cacheable signed cookies', async () => {
   const bindings = await env();
   const response = await worker.fetch(request('/v1/bootstrap'), bindings as never, {} as never);
@@ -266,6 +313,70 @@ test('privacy grants fail closed when the production context-signing secret is m
     {} as never
   );
   assert.equal(response.status, 503);
+});
+
+test('production context verifier accepts a granted token and rejects tampering or a missing key', async () => {
+  const { TRACKING_CONTEXT_VERIFY: _testVerifier, ...bindings } = await env();
+  const bootstrap = await worker.fetch(request('/v1/bootstrap'), bindings as never, {} as never);
+  const cookie = (bootstrap.headers.get('set-cookie') ?? '').split(';', 1)[0];
+  const granted = await worker.fetch(
+    request('/v1/privacy', {
+      method: 'POST',
+      headers: { cookie, 'x-csrf-nonce': bootstrap.headers.get('x-csrf-nonce') ?? '' },
+      body: JSON.stringify({
+        schema_version: '1',
+        choice_id: `choice:${crypto.randomUUID()}`,
+        policy_version: '2026-08-04',
+        action: 'customize',
+        purposes: { analytics: true, advertising: false },
+      }),
+    }),
+    bindings as never,
+    {} as never
+  );
+  assert.equal(granted.status, 202);
+  const resolved = await worker.fetch(
+    request('/v1/bootstrap', { headers: { cookie } }),
+    bindings as never,
+    {} as never
+  );
+  const token = ((await resolved.json()) as { tracking_context_hash: string })
+    .tracking_context_hash;
+  const collect = (contextHash: string, eventId: string, eventBindings = bindings) =>
+    worker.fetch(
+      request('/v1/events', {
+        method: 'POST',
+        headers: { 'x-tracking-context-hash': contextHash },
+        body: JSON.stringify(pageView({ event_id: eventId })),
+      }),
+      eventBindings as never,
+      {} as never
+    );
+  assert.equal((await collect(token, 'evt_production_context')).status, 202);
+  const tampered = `${token.slice(0, -1)}${token.endsWith('A') ? 'B' : 'A'}`;
+  assert.equal((await collect(tampered, 'evt_tampered_context')).status, 403);
+  const { TRACKING_CONTEXT_SIGNING_KEY_CURRENT: _missing, ...missingKeyBindings } = bindings;
+  assert.equal((await collect(token, 'evt_missing_context_key', missingKeyBindings)).status, 403);
+});
+
+test('production context verifier rejects stale, expired, and deleted contexts', async () => {
+  const { TRACKING_CONTEXT_VERIFY: _testVerifier, ...bindings } = await env();
+  for (const [name, token] of [
+    ['stale', await productionContextToken({ policy_version: '2026-08-03' })],
+    ['expired', await productionContextToken({ expires_at: Math.floor(Date.now() / 1000) - 1 })],
+    ['deleted', await productionContextToken({ subject_deleted: true })],
+  ] as const) {
+    const response = await worker.fetch(
+      request('/v1/events', {
+        method: 'POST',
+        headers: { 'x-tracking-context-hash': token },
+        body: JSON.stringify(pageView({ event_id: `evt_${name}_context` })),
+      }),
+      bindings as never,
+      {} as never
+    );
+    assert.equal(response.status, 403);
+  }
 });
 
 test('browser collector accepts PageView, is idempotent, and blocks authoritative events', async () => {
