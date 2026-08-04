@@ -1,0 +1,398 @@
+{
+  "published": false,
+  "template": "video-lead",
+  "checkoutFunnelSlug": "owned-funnel-builder",
+  "slug": "owned-funnel-builder-video-lead",
+  "productName": "Owned Funnel Builder",
+  "eyebrow": "The landing-page and checkout system you own forever",
+  "headline": "Never rent your funnel builder",
+  "headlineAccent": "again.",
+  "subheadline": "Tell your coding agent what you sell. It builds the page, connects the checkout, checks every screen size, and publishes it to your Cloudflare account. When you want to change a sentence yourself, open the simple visual editor.",
+  "metaTitle": "Owned Funnel Builder — Build and Own Every Funnel",
+  "metaDescription": "Own a polished Astro funnel builder with visual copy editing, Dodo or Stripe checkout, a $19 order bump, two one-click upsells, Cloudflare publishing, and agent skills that handle the technical work.",
+  "ogImage": "/og-owned-funnel-builder.png",
+  "audience": "For creators, consultants, agencies, and small businesses who want high-converting offer pages without another monthly funnel-software bill or a pile of technical setup.",
+  "checkoutUrl": "/owned-funnel-builder/#checkout",
+  "checkout": {
+    "provider": "provider-checkout",
+    "enabled": true,
+    "eyebrow": "Secure checkout",
+    "title": "First, where should we send your builder?",
+    "description": "Enter your best email. We will open secure checkout and send your access and setup instructions there after purchase.",
+    "emailLabel": "Email address",
+    "emailPlaceholder": "you@company.com",
+    "buttonLabel": "Continue to secure checkout",
+    "summaryDescription": "The complete builder, visual copy editor, checkout funnel, publishing workflow, agent skills, and lifetime access.",
+    "guaranteeLabel": "30-day guarantee",
+    "paymentTrustLabel": "Secure payment processing",
+    "consentCopy": "We use this email to open secure checkout and deliver anything you purchase.",
+    "consentVersion": "marketing-v1-2026-08-02",
+    "bump": {
+      "title": "Yes — add the Conversion Copy Swipe File for $19",
+      "description": "Get the headlines, section prompts, objection answers, and offer angles that make a blank page much easier to turn into persuasive copy.",
+      "price": "$19",
+      "items": [
+        "50 headline and hook starters",
+        "Section-by-section copy prompts",
+        "Objection and guarantee swipe copy"
+      ]
+    }
+  },
+  "heroPreview": {
+    "ariaLabel": "Owned Funnel Builder workflow showing a plain-language request becoming a checked and published sales funnel",
+    "windowLabel": "your-offer / launch",
+    "promptLabel": "tell your agent",
+    "prompt": "Help me launch my $29 guide this afternoon.",
+    "description": "The agent handles the files and setup. You approve the offer, copy, and final page.",
+    "steps": [
+      { "label": "01 / OFFER", "title": "Clarify what you sell" },
+      { "label": "02 / PAGE", "title": "Build the conversion page" },
+      { "label": "03 / CHECKOUT", "title": "Connect bump and upsells" },
+      { "label": "04 / PUBLISH", "title": "Check it and put it live" }
+    ]
+  },
+  "sections": {
+    "highlights": [
+      "You own the code",
+      "Edit copy visually",
+      "$19 bump + 2 upsells",
+      "Cloudflare ready"
+    ],
+    "problemEyebrow": "The monthly-software tax",
+    "outcomesEyebrow": "The simpler way",
+    "outcomesTitle": "Describe the offer. Review the page. Publish it.",
+    "includedEyebrow": "What you get",
+    "includedTitle": "A complete funnel system—not another page template.",
+    "bonusesEyebrow": "Also included",
+    "bonusesTitle": "The instructions that let your agent do the technical work for you.",
+    "proofEyebrow": "Dogfooded end to end",
+    "proofTitle": "The checkout you are using is the checkout you receive.",
+    "proofDescription": "This sales page, its payment flow, order bump, two upsells, fulfillment path, and release checks are built with the same system inside the product.",
+    "proofLinkLabel": "Open the working funnel",
+    "guaranteeBadge": "30",
+    "guaranteeEyebrow": "The own-it-for-real guarantee",
+    "pricingEyebrow": "Founding launch offer",
+    "pricingTitle": "One good funnel can pay for the builder. Then it is yours.",
+    "pricingDescription": "Stop paying a monthly platform just to keep your pages online. Keep the source in your GitHub account, publish from your Cloudflare account, and create the next offer with the same system.",
+    "priceLabel": "One-time launch price",
+    "priceNote": "One payment. Lifetime access to your copy.",
+    "priceIncludes": [
+      "Complete Astro funnel-builder source",
+      "Visual Keystatic copy editor",
+      "Dodo or Stripe checkout, bump, and two upsells",
+      "Agent skills and local launch assistant",
+      "Cloudflare and verified delivery setup workflow",
+      "30-day money-back guarantee"
+    ],
+    "faqEyebrow": "Questions, answered",
+    "faqTitle": "No technical mystery box."
+  },
+  "demoUrl": "",
+  "currentPrice": "$49",
+  "regularPrice": "$299",
+  "priceAmount": 49,
+  "currency": "USD",
+  "ctaLabel": "Get the complete builder for $49",
+  "ctaNote": "One payment · own the source · 30-day guarantee",
+  "painTitle": "You should not need a $97 monthly subscription to publish a good sales page.",
+  "painBody": "Most funnel software makes you rent the page, learn a complicated dashboard, and keep paying after the campaign ends. A custom build sounds better until you face checkout wiring, mobile bugs, ugly payment screens, and deployment. This gives your agent the finished system and the context to operate it.",
+  "withoutLabel": "Renting the funnel",
+  "withoutTitle": "Pay forever. Learn somebody else’s maze.",
+  "withLabel": "Owning the funnel",
+  "withTitle": "Keep the code. Ask your agent for the next page.",
+  "without": [
+    "Keep paying to leave old campaigns online",
+    "Fight a crowded editor every time copy changes",
+    "Bolt checkout, bumps, and upsells onto separate tools",
+    "Trust a mobile preview that misses real payment problems",
+    "Lose the whole system when you cancel"
+  ],
+  "with": [
+    "Store every page safely in your own GitHub account",
+    "Hand-edit copy in a clean visual editor",
+    "Reuse the polished checkout, bump, and upsell flow",
+    "Let automated checks catch ugly or broken screens",
+    "Publish from your own Cloudflare account"
+  ],
+  "outcomes": [
+    {
+      "title": "Launch without learning web development",
+      "description": "Say what you want in plain English. Your agent works in the repository, previews the result, and asks you for the business decisions that matter."
+    },
+    {
+      "title": "Edit the words without calling a developer",
+      "description": "Open Keystatic, choose the page, change the headline or price, and save. The forms use normal labels instead of exposing source code."
+    },
+    {
+      "title": "Keep more of the funnel economics",
+      "description": "Use the built-in $19 order bump and up to two polished one-click upsells instead of sending every buyer straight to a plain thank-you page."
+    }
+  ],
+  "video": {
+    "eyebrow": "Watch the whole launch",
+    "title": "From ‘help me launch’ to a live checkout.",
+    "description": "The walkthrough will show a nontechnical owner asking an agent for a page, editing one sentence visually, previewing the checkout, and publishing it to Cloudflare.",
+    "embedUrl": "",
+    "fallbackTitle": "A focused launch walkthrough belongs here.",
+    "fallbackBody": "The video slot is ready. Until the recording is added, the page shows the exact four-step workflow customers receive."
+  },
+  "productPreview": {
+    "eyebrow": "What it looks like",
+    "title": "A clean editor for you. A real repository for your agent.",
+    "description": "You can edit ordinary fields like headline, price, benefits, guarantee, bump, and upsells. Behind that simple screen is a fast Astro site with reusable design primitives and version history.",
+    "workspaceLabel": "YOUR FUNNEL LIBRARY",
+    "productLabel": "Owned Funnel Builder",
+    "productDescription": "Pages, checkout, and publishing",
+    "navItems": ["Offers", "Checkout", "Upsells", "Site settings", "Publish"],
+    "activeNavItem": "Offers",
+    "activeEyebrow": "Landing page / editing",
+    "activeTitle": "Summer Workshop",
+    "activeDescription": "Change the copy in normal fields, then ask your agent to preview or publish it.",
+    "statusLabel": "Ready to preview",
+    "stages": ["Copy", "Design", "Checkout", "Publish"],
+    "panels": [
+      {
+        "title": "Headline and offer",
+        "description": "Edit the promise, audience, price, CTA, guarantee, and proof without opening code."
+      },
+      {
+        "title": "Checkout funnel",
+        "description": "Set the main product, $19 bump, two upsells, delivery emails, and customer access links."
+      },
+      {
+        "title": "Safe publishing",
+        "description": "Your agent checks the page, commits the change, and publishes from your accounts."
+      }
+    ]
+  },
+  "assistant": {
+    "eyebrow": "Talk to your funnel builder",
+    "title": "You do not operate the terminal. Your agent does.",
+    "description": "The repository includes focused skills and a local assistant that explain the system to Claude Code, Codex, or another capable coding agent. Give it the goal in plain English; it handles the technical sequence and stops when it needs a real business choice or secret.",
+    "skills": [
+      {
+        "title": "Launch a funnel",
+        "description": "Turns your offer idea into a page, checkout path, preview, and clear launch checklist."
+      },
+      {
+        "title": "Write funnel copy",
+        "description": "Builds a specific promise, qualification, objections, proof, guarantee, and CTA around the actual offer."
+      },
+      {
+        "title": "Design the page",
+        "description": "Uses the existing type, spacing, contrast, buttons, cards, and checkout patterns without making every page identical."
+      },
+      {
+        "title": "Configure payments",
+        "description": "Connects Dodo or Stripe in test mode, maps products, configures the signed webhook, and verifies the funnel without exposing your secret key."
+      },
+      {
+        "title": "Configure delivery",
+        "description": "Configures Dodo-native access or required Stripe delivery through Postmark, with idempotent email that stays separate from payment receipts."
+      },
+      {
+        "title": "Publish and audit",
+        "description": "Checks mobile, accessibility, checkout activation, stale screenshots, and Cloudflare state before calling the page live."
+      }
+    ],
+    "conversation": [
+      {
+        "speaker": "You",
+        "text": "Help me launch my offer. I sell a $29 workshop recording and want a simple bump."
+      },
+      {
+        "speaker": "Your agent",
+        "text": "I will create the unpublished page and checkout funnel first. I need the workshop promise, who it is for, the bump deliverable, and where buyers should receive access."
+      },
+      {
+        "speaker": "You",
+        "text": "Use the copy we wrote, show me the page, and do not publish yet."
+      },
+      {
+        "speaker": "Your agent",
+        "text": "The desktop and mobile previews are ready. Checkout is still in test mode. I found two claims that need proof and one missing access link before launch."
+      }
+    ]
+  },
+  "included": [
+    {
+      "title": "The complete Astro landing-page system",
+      "description": "Fast static pages, self-hosted fonts, conversion-focused sections, large obvious buttons, responsive layouts, SEO, legal pages, and reusable design tokens."
+    },
+    {
+      "title": "The Keystatic visual copy editor",
+      "description": "A friendly local editor for landing-page copy, offers, prices, checkout products, bump copy, upsells, delivery links, and site settings."
+    },
+    {
+      "title": "The polished Dodo-or-Stripe payment funnel",
+      "description": "Email capture before secure checkout, a clear order summary, a $19 bump, up to two saved-card upsells, hosted fallback payments, and an order-complete page."
+    },
+    {
+      "title": "Verified access delivery",
+      "description": "Use Dodo-native entitlements and customer-portal downloads, or choose Stripe with required branded access delivery through Postmark."
+    },
+    {
+      "title": "Cloudflare Pages and D1 setup",
+      "description": "Setup scripts create or reuse the site and database, apply migrations, upload secrets, deploy the page, and configure the payment webhook."
+    },
+    {
+      "title": "Agent skills and local launch tools",
+      "description": "Focused context for copy, design, editing, Dodo, Stripe, Postmark, Cloudflare, and auditing—plus safe tools for creating, previewing, publishing, and rolling back funnels."
+    }
+  ],
+  "gates": {
+    "eyebrow": "Guardrails, explained simply",
+    "title": "The agent creates freely. Five checks protect the result.",
+    "description": "A gate is just a test the page must pass before launch. It does not make design decisions for the agent. It catches the expensive, embarrassing failures that a confident-looking preview can hide.",
+    "items": [
+      {
+        "label": "01 / OFFER",
+        "question": "Does a stranger understand what this is?",
+        "description": "Checks that the headline, audience, deliverable, price, CTA, qualification, and guarantee tell one coherent story.",
+        "catches": "Vague promises, mismatched prices, missing deliverables, and copy that sounds polished but says nothing."
+      },
+      {
+        "label": "02 / SCREEN",
+        "question": "Does it still look good on a phone?",
+        "description": "Opens the real built page at desktop, tablet, and mobile sizes and checks overflow, visible actions, fonts, spacing, and screenshots.",
+        "catches": "Tiny text, cut-off sections, hidden buttons, awkward wrapping, and payment boxes crushed against the edge."
+      },
+      {
+        "label": "03 / ACCESS",
+        "question": "Can every buyer actually use it?",
+        "description": "Runs accessibility checks for readable contrast, meaningful structure, keyboard focus, and a checkout action that can be activated.",
+        "catches": "Low-contrast copy, invisible focus, broken headings, and buttons that only work with a mouse."
+      },
+      {
+        "label": "04 / MONEY",
+        "question": "Does the purchase path agree end to end?",
+          "description": "Validates product keys, prices, bump selection, upsell order, webhook signing, status, and delivery configuration.",
+        "catches": "Wrong totals, dead checkout sessions, duplicate fulfillment, missing products, and buyers paying without access."
+      },
+      {
+        "label": "05 / RELEASE",
+        "question": "Is this exact version the one going live?",
+        "description": "Compares the built files, browser receipt, screenshots, Git commit, and Cloudflare deployment before reporting success.",
+        "catches": "Stale previews, uncommitted edits, deploying the wrong build, and ‘it worked on my machine’ claims."
+      }
+    ]
+  },
+  "fit": {
+    "eyebrow": "Who this is for",
+    "title": "You can be completely nontechnical. You do need an agent and accounts you control.",
+    "description": "This is intentionally built for owners who do not know Git, Astro, Cloudflare, or a terminal. Your agent handles those. You decide what you sell, review the words and page, and provide credentials through safe setup screens when asked.",
+    "forYou": [
+      "You sell digital products, workshops, templates, services, coaching, or other focused offers.",
+      "You can use Claude Code, Codex, Claude Cowork, or another agent capable of working with a repository.",
+      "You want your pages and customer data in accounts you control.",
+      "You are willing to review the promise, price, proof, and final checkout before publishing."
+    ],
+    "notForYou": [
+      "You need a complete CRM, phone system, SMS platform, appointment calendar, and marketing-automation suite in one dashboard.",
+      "You expect the agent to invent true testimonials, results, legal terms, or product access links for you.",
+      "You want someone else to own and operate every account indefinitely.",
+      "You are unwilling to use an AI coding agent or ask one for help."
+    ]
+  },
+  "examples": {
+    "eyebrow": "Funnels it can build",
+    "title": "Use one strong system for very different offers.",
+    "description": "The visual language stays clear and trustworthy while the agent adapts the sections, proof, offer mechanics, and copy to what you actually sell.",
+    "items": [
+      {
+        "label": "DOGFOODED FUNNEL",
+        "title": "Low-ticket software template",
+        "description": "A $29 technical template page with an above-fold video, qualification, product preview, simple gate explanation, $19 prompt-pack bump, and two post-purchase upgrades."
+      },
+      {
+        "label": "DOGFOODED FUNNEL",
+        "title": "The builder you are viewing now",
+        "description": "This page uses the same content records, design primitives, checkout dialog, bump, upsells, completion page, and browser gates included in the repository."
+      },
+      {
+        "label": "GOOD FIT",
+        "title": "Workshop or course recording",
+        "description": "Sell the main recording, add a worksheet bump, offer a template pack, and finish with a higher-value implementation guide."
+      },
+      {
+        "label": "GOOD FIT",
+        "title": "Consulting or productized service",
+        "description": "Qualify the buyer, explain the method, collect a paid diagnostic or deposit, and offer relevant preparation or follow-up products."
+      }
+    ]
+  },
+  "bonuses": [
+    {
+      "title": "The no-computer-skills quickstart",
+      "description": "Plain-English instructions that begin with ‘open your agent and say this’ instead of assuming you know repositories, terminals, environment variables, or deployment."
+    },
+    {
+      "title": "The offer-launch interview",
+      "description": "A focused agent workflow that gets the promise, buyer, deliverables, price, proof, guarantee, bump, and upsells before it starts writing the page."
+    },
+    {
+      "title": "The release and rollback playbook",
+      "description": "A safe sequence for previewing, checking, publishing, keeping GitHub backups, and returning to the last good version if a launch edit goes wrong."
+    }
+  ],
+  "proof": [
+    {
+      "value": "2",
+      "label": "complete dogfood funnels",
+      "detail": "The original paid offer and this builder offer share the same generic page and payment architecture."
+    },
+    {
+      "value": "$19",
+      "label": "checkout order bump",
+      "detail": "A clear add-on decision appears before payment and updates the visible total."
+    },
+    {
+      "value": "2",
+      "label": "one-click upsell slots",
+      "detail": "Each funnel can accept or decline two relevant post-purchase offers without losing the main order."
+    },
+    {
+      "value": "9+",
+      "label": "browser checks per release",
+      "detail": "Desktop, tablet, mobile, checkout activation, accessibility, overflow, and error checks protect each configured funnel."
+    }
+  ],
+  "guaranteeTitle": "Launch a real offer with it for 30 days. Keep it only if ownership feels better.",
+  "guaranteeBody": "Use the builder with your agent, edit the copy, preview the checkout, and publish a real offer or test funnel. If the system does not give you a meaningfully better path than renting another page builder, email within 30 days for a full refund.",
+  "faqs": [
+    {
+      "question": "Do I need to know how to code?",
+      "answer": "No. The intended workflow is to open a capable coding agent and say, ‘Help me launch my offer.’ The agent handles Git, files, commands, builds, and deployment. You provide the offer details, accounts, and approvals."
+    },
+    {
+      "question": "Can I change the copy myself?",
+      "answer": "Yes. Run the included editor through your agent, open the local Keystatic screen, choose the page, and edit normal labeled fields. You can change headlines, prices, benefits, proof, FAQs, checkout copy, bump copy, upsells, and site settings without touching source code."
+    },
+    {
+      "question": "Is this really a replacement for GoHighLevel?",
+      "answer": "It replaces the landing-page and paid-funnel part for owners who want pages, checkout, bumps, upsells, delivery, and publishing under their control. It is not pretending to replace a full CRM, phone, SMS, calendar, and automation suite."
+    },
+    {
+      "question": "What accounts do I need?",
+      "answer": "You need GitHub for safe source backup, Cloudflare for hosting and the small D1 database, either Dodo Payments or Stripe for checkout, Postmark for email, and a coding agent that can work with a repository. Postmark is optional with Dodo native delivery and required with Stripe so buyers receive access. Your agent walks you through each connection."
+    },
+    {
+      "question": "Does it include order bumps and upsells?",
+      "answer": "Yes. Every funnel can include one clear order bump during the email-to-checkout step and up to two polished post-purchase upsell pages. The product records, status, customer decisions, and delivery emails share one funnel configuration."
+    },
+    {
+      "question": "Can I use Stripe instead of Dodo?",
+      "answer": "Yes. Dodo remains the default, but Stripe is included as a first-class option. The setup connects hosted Stripe Checkout, saves the first card for one-click upsells, falls back to hosted checkout when authentication is required, verifies signed webhooks, and delivers access through Postmark."
+    },
+    {
+      "question": "Will every page look the same?",
+      "answer": "No. The repository provides good typography, spacing, contrast, buttons, cards, checkout patterns, and verification. The agent can compose, remove, or redesign sections around the offer. The constraints protect clarity and reliability, not one universal block order."
+    },
+    {
+      "question": "Are there still ongoing costs?",
+      "answer": "There is no required monthly fee for this builder itself. Your payment processor, email provider, domain, hosting, AI agent, or other services may charge their own account or usage fees. Those accounts remain yours."
+    }
+  ],
+  "finalTitle": "Your next funnel should be an asset—not another subscription.",
+  "finalBody": "Own the source, let your agent handle the technical work, edit the words whenever you want, and launch the next offer from a system that is already wired for payment and growth."
+}
