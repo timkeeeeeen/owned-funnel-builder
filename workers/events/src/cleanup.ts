@@ -3,9 +3,17 @@ import { redactError } from './observability.ts';
 
 export type CleanupResult = { expiredEvents: number; expiredDeliveries: number; watermark: string };
 
-function numberEnv(env: Record<string, unknown>, key: string, fallback: number): number {
+const DEFAULT_CLEANUP_BATCH_SIZE = 1_500;
+const MAX_CLEANUP_BATCH_SIZE = 5_000;
+
+function numberEnv(
+  env: Record<string, unknown>,
+  key: string,
+  fallback: number,
+  maximum: number
+): number {
   const value = Number(env[key]);
-  return Number.isFinite(value) && value > 0 ? Math.min(Math.floor(value), 3650) : fallback;
+  return Number.isFinite(value) && value > 0 ? Math.min(Math.floor(value), maximum) : fallback;
 }
 
 export async function runCleanup(
@@ -14,8 +22,13 @@ export async function runCleanup(
 ): Promise<CleanupResult> {
   const database = env.TRACKING_DB as D1Database | undefined;
   if (!database) return { expiredEvents: 0, expiredDeliveries: 0, watermark: now.toISOString() };
-  const retentionDays = numberEnv(env, 'TRACKING_RETENTION_DAYS', 395);
-  const batchSize = numberEnv(env, 'TRACKING_CLEANUP_BATCH_SIZE', 100);
+  const retentionDays = numberEnv(env, 'TRACKING_RETENTION_DAYS', 395, 3_650);
+  const batchSize = numberEnv(
+    env,
+    'TRACKING_CLEANUP_BATCH_SIZE',
+    DEFAULT_CLEANUP_BATCH_SIZE,
+    MAX_CLEANUP_BATCH_SIZE
+  );
   const cutoff = new Date(now.getTime() - retentionDays * 86_400_000).toISOString();
   const budgetCutoff = Math.floor(now.getTime() / 60_000) * 60;
   let expiredEvents = 0;

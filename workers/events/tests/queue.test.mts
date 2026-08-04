@@ -5,7 +5,7 @@ import { test } from 'node:test';
 
 import { claimDelivery, completeDelivered, processQueue } from '../src/queue.ts';
 import { persistCanonicalEvent } from '../src/outbox.ts';
-import { reclaimExpiredLeases } from '../src/cleanup.ts';
+import { reclaimExpiredLeases, runCleanup } from '../src/cleanup.ts';
 import worker from '../src/index.ts';
 import { REQUIRED_TRACKING_MIGRATIONS } from '../src/safety.ts';
 
@@ -908,6 +908,51 @@ test('scheduled cleanup reclaims an expired lease without resetting its fence', 
         .get(eventKey),
     },
     { state: 'retryable', lease_owner: null, lease_deadline: null, fencing_token: 7 }
+  );
+});
+
+test('budget cleanup clears a full 1200-row peak minute by default', async () => {
+  const database = await trackingDatabase();
+  const insert = database.prepare(
+    `INSERT INTO tracking_delivery_budgets
+     (bucket_key, window_start, used, budget_limit, updated_at)
+     VALUES (?, 1, 1, 1, '2020-01-01T00:00:00.000Z')`
+  );
+  for (let index = 0; index < 1_200; index += 1) insert.run(`peak_budget_${index}`);
+
+  await runCleanup({ TRACKING_DB: d1(database) }, new Date('2026-08-04T12:00:00.000Z'));
+
+  assert.equal(
+    (
+      database.prepare('SELECT count(*) AS count FROM tracking_delivery_budgets').get() as {
+        count: number;
+      }
+    ).count,
+    0
+  );
+});
+
+test('budget cleanup hard-caps an oversized batch override', async () => {
+  const database = await trackingDatabase();
+  const insert = database.prepare(
+    `INSERT INTO tracking_delivery_budgets
+     (bucket_key, window_start, used, budget_limit, updated_at)
+     VALUES (?, 1, 1, 1, '2020-01-01T00:00:00.000Z')`
+  );
+  for (let index = 0; index < 5_001; index += 1) insert.run(`bounded_budget_${index}`);
+
+  await runCleanup(
+    { TRACKING_DB: d1(database), TRACKING_CLEANUP_BATCH_SIZE: 1_000_000 },
+    new Date('2026-08-04T12:00:00.000Z')
+  );
+
+  assert.equal(
+    (
+      database.prepare('SELECT count(*) AS count FROM tracking_delivery_budgets').get() as {
+        count: number;
+      }
+    ).count,
+    1
   );
 });
 

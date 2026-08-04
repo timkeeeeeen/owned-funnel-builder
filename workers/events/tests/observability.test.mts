@@ -32,5 +32,14 @@ test('queue bindings pin retry, batching, concurrency, and DLQ safety values', a
     /BUSINESS_DB|checkout_leads|DODO_API_KEY|META_ACCESS_TOKEN|TINYBIRD_TOKEN/.test(config),
     false
   );
+  const cleanupBatchSizes = [...config.matchAll(/"TRACKING_CLEANUP_BATCH_SIZE": "(\d+)"/g)].map(
+    (match) => Number(match[1])
+  );
+  assert.equal(cleanupBatchSizes.length, 2);
+  assert.equal(
+    cleanupBatchSizes.every((size) => size >= 1_200 && size <= 5_000),
+    true,
+    'preview and production cleanup capacity must clear the 1200-row/minute peak within the hard cap'
+  );
   assert.ok((50 * 4 * 4) / 60 > 10, 'recorded 10 events/sec peak clears inside five minutes');
 });
