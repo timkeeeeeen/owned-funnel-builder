@@ -22,6 +22,7 @@ import {
 } from '../_lib/stripe';
 import { drainSourceEvent, sourceOutboxStatement, sourcePayloadHash } from '../_lib/source-outbox';
 import { verifySignedCookie } from '../_lib/tracking-cookie';
+import { base64url, sourceSignatureInput, validatePrivacySnapshot, type PrivacySnapshot } from '../../workers/events/src/source-bridge';
 import { MARKETING_CONSENT_COPY, MARKETING_CONSENT_VERSION } from '../../src/data/emailConsent';
 
 interface CheckoutRequest {
@@ -35,6 +36,7 @@ interface CheckoutRequest {
   referrer?: unknown;
   bumpAccepted?: unknown;
   admaxxerVisitorId?: unknown;
+  trackingContextToken?: unknown;
 }
 
 interface DodoCheckoutResponse {
@@ -158,6 +160,57 @@ function sourceScope(
   return {
     tenantId: cleanString(env.TRACKING_TENANT_ID, 128) || 'owned-funnel-builder',
     siteId: cleanString(env.TRACKING_SITE_ID, 128) || requestUrl.hostname,
+  };
+}
+
+const CONTEXT_TOKEN_PATTERN = /^v1\.[A-Za-z0-9_-]{16,2048}\.[A-Za-z0-9_-]{32,512}$/;
+
+async function exchangeTrackingContext(
+  env: PagesContext['env'],
+  token: string
+): Promise<{ contextHash: string; contextExpiresAt: string; privacySnapshot: PrivacySnapshot } | null> {
+  const bridge = env.TRACKING_SOURCE_BRIDGE;
+  if (!bridge || typeof bridge !== 'object' || !('fetch' in bridge) || !CONTEXT_TOKEN_PATTERN.test(token)) return null;
+  const keyValue = cleanString(env.TRACKING_PAGES_BRIDGE_KEY_CURRENT, 4096);
+  if (keyValue.length < 16) return null;
+  const body = JSON.stringify({ tracking_context_token: token });
+  const timestamp = String(Math.floor(Date.now() / 1000));
+  const nonce = base64url(crypto.getRandomValues(new Uint8Array(32)));
+  const key = await crypto.subtle.importKey('raw', new TextEncoder().encode(keyValue), { name: 'HMAC', hash: 'SHA-256' }, false, ['sign']);
+  const signature = await crypto.subtle.sign('HMAC', key, new TextEncoder().encode(await sourceSignatureInput(timestamp, nonce, body)));
+  const response = await (bridge as { fetch(request: Request): Promise<Response> }).fetch(
+    new Request('https://tracking.internal/internal/context-exchange', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'X-Maestro-Issuer': 'pages',
+        'X-Maestro-Key-Id': cleanString(env.TRACKING_PAGES_BRIDGE_KEY_ID_CURRENT, 64) || 'pages-current',
+        'X-Maestro-Timestamp': timestamp,
+        'X-Maestro-Nonce': nonce,
+        'X-Maestro-Signature': base64url(new Uint8Array(signature)),
+      },
+      body,
+    })
+  );
+  if (!response.ok) return null;
+  const payload = (await response.json()) as Record<string, unknown>;
+  const contextHash = cleanString(payload.context_hash, 128);
+  const contextExpiresAt = cleanString(payload.context_expires_at, 64);
+  const privacySnapshot = validatePrivacySnapshot(payload.privacy_snapshot);
+  return /^[a-f0-9]{64}$/i.test(contextHash) && contextExpiresAt && privacySnapshot
+    ? { contextHash, contextExpiresAt, privacySnapshot }
+    : null;
+}
+
+function fallbackPrivacySnapshot(env: PagesContext['env'], subject: string, now: string, expires: string): PrivacySnapshot {
+  return {
+    schema_version: '1', server_subject_ref: subject, subject_ref_version: 'v1',
+    snapshot_issued_at: now, snapshot_expires_at: expires,
+    snapshot_key_id: cleanString(env.TRACKING_PRIVACY_SNAPSHOT_KEY_ID, 64) || 'pages-current',
+    snapshot_signature: base64url(crypto.getRandomValues(new Uint8Array(32))),
+    purposes: { necessary: 'granted', analytics: 'unknown', advertising: 'unknown', identity_enrichment: 'unknown', sale_share: 'unknown' },
+    policy_version: cleanString(env.TRACKING_POLICY_VERSION, 80) || '2026-08-02',
+    choice_id: 'checkout', decision_source: 'policy', notice_locale: 'en-US', region: 'unknown', region_source: 'unknown', gpc: false, observed_at: now,
   };
 }
 
@@ -303,20 +356,37 @@ export async function onRequestPost(context: PagesContext): Promise<Response> {
     const flowToken = randomFlowToken();
     const flowTokenHash = await hashFlowToken(flowToken);
     const now = new Date().toISOString();
+    const contextExpiresAt = new Date(Date.now() + 10 * 60_000).toISOString();
     const country = cleanString(
       (request as Request & { cf?: { country?: unknown } }).cf?.country,
       2
     ).toUpperCase();
     const scope = sourceScope(env, requestUrl);
-    const contextHash = cleanString(env.TRACKING_CONTEXT_HASH, 128) || flowTokenHash;
+    const requestedContextToken = cleanString(input.trackingContextToken, 4096) || cleanString(request.headers.get('x-tracking-context-token'), 4096);
+    const exchangedContext = requestedContextToken
+      ? await exchangeTrackingContext(env, requestedContextToken)
+      : null;
+    if (env.TRACKING_SOURCE_BRIDGE && requestedContextToken && !exchangedContext)
+      throw new RequestError('Checkout context is unavailable.', 503, 'tracking_context_unavailable');
+    const fallbackDigest = await crypto.subtle.digest('SHA-256', crypto.getRandomValues(new Uint8Array(32)));
+    const fallbackContextHash = Array.from(new Uint8Array(fallbackDigest), (byte) => byte.toString(16).padStart(2, '0')).join('');
+    const contextHash = exchangedContext?.contextHash || (env.TRACKING_SOURCE_BRIDGE ? '' : fallbackContextHash);
+    if (env.TRACKING_SOURCE_BRIDGE && !contextHash)
+      throw new RequestError('Checkout context is unavailable.', 503, 'tracking_context_unavailable');
+    const privacySnapshot = exchangedContext?.privacySnapshot || fallbackPrivacySnapshot(env, `privacy_${leadId}`, now, contextExpiresAt);
+    const effectiveContextExpiresAt = exchangedContext?.contextExpiresAt || contextExpiresAt;
     const leadSourceEventId = `lead:${leadId}`;
     const leadPayload = {
       schema_version: '1',
-      event_id: leadSourceEventId,
+      source_system: 'pages',
+      source_event_id: leadSourceEventId,
       event_name: 'Lead',
       occurred_at: now,
       context_hash: contextHash,
-      identity: { lead_id: leadId, funnel_id: funnelId },
+      context_expires_at: effectiveContextExpiresAt,
+      funnel_slug: offerSlug,
+      lead_id: leadId,
+      privacy_snapshot: privacySnapshot,
     };
     const leadStatement = env.LEADS.prepare(
       `INSERT INTO checkout_leads (
@@ -463,11 +533,16 @@ export async function onRequestPost(context: PagesContext): Promise<Response> {
       const initiateEventId = `initiate_checkout:${sessionId}`;
       const initiatePayload = {
         schema_version: '1',
-        event_id: initiateEventId,
+        source_system: 'pages',
+        source_event_id: initiateEventId,
         event_name: 'InitiateCheckout',
         occurred_at: new Date().toISOString(),
         context_hash: contextHash,
-        identity: { lead_id: leadId, funnel_id: funnelId },
+        context_expires_at: effectiveContextExpiresAt,
+        funnel_slug: offerSlug,
+        lead_id: leadId,
+        checkout_session_id: sessionId,
+        privacy_snapshot: privacySnapshot,
       };
       const initiateResult = await env.LEADS.batch([
         env.LEADS.prepare(
@@ -591,11 +666,16 @@ export async function onRequestPost(context: PagesContext): Promise<Response> {
     const initiateEventId = `initiate_checkout:${sessionId}`;
     const initiatePayload = {
       schema_version: '1',
-      event_id: initiateEventId,
+      source_system: 'pages',
+      source_event_id: initiateEventId,
       event_name: 'InitiateCheckout',
       occurred_at: new Date().toISOString(),
       context_hash: contextHash,
-      identity: { lead_id: leadId, funnel_id: funnelId },
+      context_expires_at: effectiveContextExpiresAt,
+      funnel_slug: offerSlug,
+      lead_id: leadId,
+      checkout_session_id: sessionId,
+      privacy_snapshot: privacySnapshot,
     };
     const initiateResult = await env.LEADS.batch([
       env.LEADS.prepare(

@@ -880,7 +880,14 @@ async function contextExchange(request: Request, env: CollectorEnv): Promise<Res
   } catch {
     return jsonError('tracking_unavailable', 503, request, env);
   }
-  return jsonResponse({ context_hash: contextHash, context_expires_at: expiresAt }, 201);
+  return jsonResponse(
+    {
+      context_hash: contextHash,
+      context_expires_at: expiresAt,
+      privacy_snapshot: exchange.privacy_snapshot,
+    },
+    201
+  );
 }
 
 async function privacyMutation(request: Request, env: CollectorEnv): Promise<Response> {
@@ -998,7 +1005,14 @@ async function privacyRequest(request: Request, env: CollectorEnv): Promise<Resp
     subjectId: subjectKey,
     verified: true,
   });
-  return jsonResponse({ request_id: requestId, state: 'tombstone_committed' }, 202, cors(request, env));
+  return jsonResponse(
+    {
+      request_id: requestId,
+      state: requestType === 'deletion' ? 'tombstone_committed' : 'pending',
+    },
+    202,
+    cors(request, env)
+  );
 }
 
 async function browserClaims(request: Request, env: CollectorEnv): Promise<Response> {
@@ -1026,17 +1040,6 @@ async function browserClaims(request: Request, env: CollectorEnv): Promise<Respo
   }
   const funnelSlug = body.funnel_slug;
   const flowBinding = body.flow_binding;
-  if (typeof funnelSlug !== 'string' || !/^[A-Za-z0-9:_-]{1,180}$/.test(funnelSlug) ||
-      typeof flowBinding !== 'string' || !/^[A-Za-z0-9:_-]{1,180}$/.test(flowBinding))
-    return jsonError('invalid_request', 400, request, env);
-  if (typeof env.TRACKING_FLOW_BINDING_VERIFY !== 'function')
-    return jsonError('tracking_unavailable', 503, request, env);
-  try {
-    if (!(await env.TRACKING_FLOW_BINDING_VERIFY(flowBinding, funnelSlug, paymentIds)))
-      return jsonError('invalid_flow', 403, request, env);
-  } catch {
-    return jsonError('tracking_unavailable', 503, request, env);
-  }
   const paymentIds = Array.isArray(body.payment_ids)
     ? body.payment_ids
         .filter(
@@ -1045,6 +1048,32 @@ async function browserClaims(request: Request, env: CollectorEnv): Promise<Respo
         )
         .slice(0, 50)
     : [];
+  if (typeof funnelSlug !== 'string' || !/^[A-Za-z0-9:_-]{1,180}$/.test(funnelSlug) ||
+      typeof flowBinding !== 'string' || !/^[A-Za-z0-9:_-]{1,180}$/.test(flowBinding))
+    return jsonError('invalid_request', 400, request, env);
+  try {
+    const validFlow = typeof env.TRACKING_FLOW_BINDING_VERIFY === 'function'
+      ? await env.TRACKING_FLOW_BINDING_VERIFY(flowBinding, funnelSlug, paymentIds)
+      : Boolean(
+          await env.TRACKING_DB.prepare(
+            `SELECT 1 AS valid FROM tracking_context_exchanges
+             WHERE tenant_id = ? AND site_id = ? AND funnel_slug = ? AND flow_binding = ?
+               AND expires_at > ? LIMIT 1`
+          )
+            .bind(
+              textEnv(env, 'TRACKING_TENANT_ID', 'default'),
+              textEnv(env, 'TRACKING_SITE_ID', 'default'),
+              funnelSlug,
+              flowBinding,
+              new Date().toISOString()
+            )
+            .first()
+        );
+    if (!validFlow)
+      return jsonError('invalid_flow', 403, request, env);
+  } catch {
+    return jsonError('tracking_unavailable', 503, request, env);
+  }
   if (!paymentIds.length) return jsonResponse({ claims: [] }, 200);
   const placeholders = paymentIds.map(() => '?').join(', ');
   const events = await env.TRACKING_DB.prepare(
