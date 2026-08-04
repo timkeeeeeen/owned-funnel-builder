@@ -10,17 +10,20 @@ CREATE TABLE IF NOT EXISTS tracking_visitors (
 );
 
 CREATE TABLE IF NOT EXISTS tracking_people (
-  person_id TEXT PRIMARY KEY,
   tenant_id TEXT NOT NULL,
+  person_id TEXT NOT NULL,
   created_at TEXT NOT NULL,
-  updated_at TEXT NOT NULL
+  updated_at TEXT NOT NULL,
+  PRIMARY KEY (tenant_id, person_id)
 );
 
 CREATE TABLE IF NOT EXISTS tracking_person_redirects (
-  from_person_id TEXT PRIMARY KEY,
+  tenant_id TEXT NOT NULL,
+  from_person_id TEXT NOT NULL,
   to_person_id TEXT NOT NULL,
   reason TEXT NOT NULL,
-  created_at TEXT NOT NULL
+  created_at TEXT NOT NULL,
+  PRIMARY KEY (tenant_id, from_person_id)
 );
 
 CREATE TABLE IF NOT EXISTS tracking_identity_conflicts (
@@ -47,7 +50,7 @@ CREATE TABLE IF NOT EXISTS tracking_sessions (
 );
 
 CREATE TABLE IF NOT EXISTS tracking_aliases (
-  alias_key TEXT PRIMARY KEY,
+  alias_key TEXT NOT NULL,
   tenant_id TEXT NOT NULL,
   identifier_type TEXT NOT NULL,
   issuer_namespace TEXT NOT NULL,
@@ -61,6 +64,7 @@ CREATE TABLE IF NOT EXISTS tracking_aliases (
   revoked_at TEXT,
   created_at TEXT NOT NULL,
   updated_at TEXT NOT NULL,
+  PRIMARY KEY (tenant_id, alias_key),
   UNIQUE (tenant_id, identifier_type, issuer_namespace, normalization_version, keyed_digest)
 );
 
@@ -188,6 +192,7 @@ CREATE TABLE IF NOT EXISTS tracking_suppression_tombstones (
   tenant_id TEXT NOT NULL,
   site_id TEXT NOT NULL,
   alias_key TEXT,
+  hmac_key_id TEXT,
   visitor_id TEXT,
   reason TEXT NOT NULL,
   created_at TEXT NOT NULL

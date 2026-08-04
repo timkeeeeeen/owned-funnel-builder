@@ -25,6 +25,7 @@ const PURPOSES: PrivacyPurpose[] = [
 ];
 const GPC_HEADER = 'sec-gpc';
 const GPC_PURPOSES = new Set<PrivacyPurpose>(['advertising', 'identity_enrichment', 'sale_share']);
+const KNOWN_REGIONS = new Set(['US', 'EEA', 'UK', 'CA', 'AU', 'NZ', 'CH']);
 
 function currentChoices(stored: StoredPrivacyChoice[], region: string): Map<PrivacyPurpose, StoredPrivacyChoice> {
   const latest = new Map<PrivacyPurpose, StoredPrivacyChoice>();
@@ -43,6 +44,7 @@ export function resolvePrivacy(
 ): PrivacyDecision[] {
   const choices = currentChoices(stored, policy.region);
   const gpc = request.headers.get(GPC_HEADER) === '1';
+  const failClosed = policy.failClosed || !KNOWN_REGIONS.has(policy.region);
   return PURPOSES.map((purpose) => {
     const choice = choices.get(purpose);
     const staleGrant = choice?.allowed && choice.policyVersion !== policy.policyVersion;
@@ -53,7 +55,7 @@ export function resolvePrivacy(
           ? false
           : gpc && GPC_PURPOSES.has(purpose)
             ? false
-            : policy.failClosed
+            : failClosed
               ? choice?.allowed === true && !staleGrant
               : true;
     return { purpose, allowed, policyVersion: policy.policyVersion };

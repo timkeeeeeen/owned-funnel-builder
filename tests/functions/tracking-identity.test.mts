@@ -1,12 +1,15 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
+import { DatabaseSync } from 'node:sqlite';
 
 import {
+  D1IdentityClaimStore,
   InMemoryIdentityClaimStore,
   deriveAliasKey,
   deriveAliasKeysForRotation,
   resolveIdentityClaim,
 } from '../../functions/_lib/tracking-identity.ts';
+import type { D1Database, D1PreparedStatement, D1RunResult } from '../../functions/_lib/runtime.ts';
 
 async function hmacKey(secret: string): Promise<CryptoKey> {
   return crypto.subtle.importKey('raw', new TextEncoder().encode(secret), { name: 'HMAC', hash: 'SHA-256' }, false, ['sign']);
@@ -15,6 +18,62 @@ async function hmacKey(secret: string): Promise<CryptoKey> {
 const aliasInput = {
   tenantId: 'tenant-a', identifierType: 'email', issuerNamespace: 'checkout', normalizationVersion: 'email-v1', canonicalValue: 'buyer@example.com',
 };
+
+class SqliteStatement implements D1PreparedStatement {
+  private values: Array<string | number | null> = [];
+  constructor(private readonly database: DatabaseSync, private readonly query: string) {}
+  bind(...values: Array<string | number | null>): D1PreparedStatement {
+    this.values = values;
+    return this;
+  }
+  async run(): Promise<D1RunResult> {
+    this.database.prepare(this.query).run(...this.values);
+    return { success: true };
+  }
+  async first<T>(): Promise<T | null> {
+    return (this.database.prepare(this.query).get(...this.values) as T | undefined) ?? null;
+  }
+  async all<T>(): Promise<{ results?: T[] }> {
+    return { results: this.database.prepare(this.query).all(...this.values) as T[] };
+  }
+}
+
+class SqliteD1 implements D1Database {
+  constructor(readonly database = new DatabaseSync(':memory:')) {
+    database.exec(`
+      CREATE TABLE tracking_people (person_id TEXT NOT NULL, tenant_id TEXT NOT NULL, created_at TEXT NOT NULL, updated_at TEXT NOT NULL, PRIMARY KEY (tenant_id, person_id));
+      CREATE TABLE tracking_aliases (
+        alias_key TEXT NOT NULL, tenant_id TEXT NOT NULL, identifier_type TEXT NOT NULL,
+        issuer_namespace TEXT NOT NULL, normalization_version TEXT NOT NULL, keyed_digest TEXT NOT NULL,
+        hmac_key_id TEXT NOT NULL, person_id TEXT, verification_class TEXT NOT NULL,
+        provenance_json TEXT NOT NULL, revoked_at TEXT, created_at TEXT NOT NULL, updated_at TEXT NOT NULL,
+        PRIMARY KEY (tenant_id, alias_key),
+        UNIQUE (tenant_id, identifier_type, issuer_namespace, normalization_version, keyed_digest)
+      );
+      CREATE TABLE tracking_person_redirects (tenant_id TEXT NOT NULL, from_person_id TEXT NOT NULL, to_person_id TEXT NOT NULL, reason TEXT NOT NULL, created_at TEXT NOT NULL, PRIMARY KEY (tenant_id, from_person_id));
+      CREATE TABLE tracking_identity_conflicts (
+        conflict_id TEXT PRIMARY KEY, tenant_id TEXT NOT NULL, alias_key TEXT NOT NULL,
+        left_person_id TEXT, right_person_id TEXT, state TEXT NOT NULL, details_json TEXT NOT NULL,
+        created_at TEXT NOT NULL, resolved_at TEXT
+      );
+    `);
+  }
+  prepare(query: string): D1PreparedStatement {
+    return new SqliteStatement(this.database, query);
+  }
+  async batch(statements: D1PreparedStatement[]): Promise<D1RunResult[]> {
+    this.database.exec('BEGIN');
+    try {
+      const results: D1RunResult[] = [];
+      for (const statement of statements) results.push(await statement.run());
+      this.database.exec('COMMIT');
+      return results;
+    } catch (error) {
+      this.database.exec('ROLLBACK');
+      throw error;
+    }
+  }
+}
 
 test('derives domain-separated aliases and supports current/previous key lookup during rotation', async () => {
   const current = await hmacKey('current-identity-key');
@@ -34,26 +93,61 @@ test('quarantines revoked and asserted conflicts without silently merging people
   const store = new InMemoryIdentityClaimStore();
   store.revoke('revoked-alias');
   assert.deepEqual(
-    await resolveIdentityClaim({ tenantId: 'tenant-a', aliasKey: 'revoked-alias', verificationClass: 'verified', store }),
+    await resolveIdentityClaim({ tenantId: 'tenant-a', aliasKey: 'revoked-alias', verificationClass: 'verified' }, store),
     { personId: null, state: 'conflict' }
   );
   await store.seed('shared-alias', 'person-a', 'verified');
   assert.deepEqual(
-    await resolveIdentityClaim({ tenantId: 'tenant-a', aliasKey: 'shared-alias', verificationClass: 'asserted', personId: 'person-b', store }),
+    await resolveIdentityClaim({ tenantId: 'tenant-a', aliasKey: 'shared-alias', verificationClass: 'asserted', personId: 'person-b' }, store),
     { personId: null, state: 'conflict' }
   );
-  assert.equal(store.conflicts.length, 1);
+  assert.equal(store.conflicts.length, 2);
 });
 
 test('concurrent verified claims choose a stable winner and record a redirect', async () => {
   const store = new InMemoryIdentityClaimStore();
   await store.seed('shared-alias', 'person-b', 'verified');
   const [first, second] = await Promise.all([
-    resolveIdentityClaim({ tenantId: 'tenant-a', aliasKey: 'shared-alias', verificationClass: 'verified', personId: 'person-a', store }),
-    resolveIdentityClaim({ tenantId: 'tenant-a', aliasKey: 'shared-alias', verificationClass: 'verified', personId: 'person-a', store }),
+    resolveIdentityClaim({ tenantId: 'tenant-a', aliasKey: 'shared-alias', verificationClass: 'verified', personId: 'person-a' }, store),
+    resolveIdentityClaim({ tenantId: 'tenant-a', aliasKey: 'shared-alias', verificationClass: 'verified', personId: 'person-a' }, store),
   ]);
 
   assert.equal(first.personId, 'person-a');
   assert.equal(second.personId, 'person-a');
   assert.equal(store.redirects.get('person-b'), 'person-a');
+});
+
+test('D1 claims persist tenant-scoped aliases, conflicts, redirects, and key rotation', async () => {
+  const database = new SqliteD1();
+  const store = new D1IdentityClaimStore(database, { currentHmacKeyId: 'current', now: () => '2026-08-04T00:00:00.000Z' });
+  const created = await store.resolve({
+    tenantId: 'tenant-a', aliasKey: 'alias-a', verificationClass: 'verified', identifierType: 'email',
+  });
+  assert.equal(created.state, 'created');
+  assert.equal(database.database.prepare('SELECT hmac_key_id FROM tracking_aliases WHERE tenant_id = ? AND alias_key = ?').get('tenant-a', 'alias-a').hmac_key_id, 'current');
+
+  database.database.prepare('INSERT INTO tracking_people VALUES (?, ?, ?, ?)').run('person-b', 'tenant-a', '2026-08-04', '2026-08-04');
+  database.database.prepare('UPDATE tracking_aliases SET person_id = ?, hmac_key_id = ? WHERE tenant_id = ? AND alias_key = ?').run('person-b', 'previous', 'tenant-a', 'alias-a');
+  const winner = await store.resolveWithRotation(
+    { tenantId: 'tenant-a', aliasKey: 'alias-current', personId: 'person-a', verificationClass: 'verified' },
+    [
+      { aliasKey: 'alias-current', hmacKeyId: 'current' },
+      { aliasKey: 'alias-a', hmacKeyId: 'previous' },
+    ]
+  );
+  assert.deepEqual(winner, { personId: 'person-a', state: 'linked' });
+  assert.equal(database.database.prepare('SELECT to_person_id FROM tracking_person_redirects WHERE tenant_id = ? AND from_person_id = ?').get('tenant-a', 'person-b').to_person_id, 'person-a');
+  assert.equal(database.database.prepare('SELECT hmac_key_id FROM tracking_aliases WHERE alias_key = ?').get('alias-a').hmac_key_id, 'previous');
+  assert.equal(
+    database.database.prepare('SELECT person_id FROM tracking_aliases WHERE tenant_id = ? AND alias_key = ?').get('tenant-a', 'alias-current').person_id,
+    'person-a'
+  );
+
+  const conflict = await store.resolve({ tenantId: 'tenant-a', aliasKey: 'alias-a', personId: 'person-z', verificationClass: 'asserted' });
+  assert.deepEqual(conflict, { personId: null, state: 'conflict' });
+  assert.equal(database.database.prepare('SELECT tenant_id FROM tracking_identity_conflicts ORDER BY created_at DESC LIMIT 1').get().tenant_id, 'tenant-a');
+
+  const isolated = await store.resolve({ tenantId: 'tenant-b', aliasKey: 'alias-a', verificationClass: 'verified' });
+  assert.equal(isolated.state, 'created');
+  assert.equal(database.database.prepare('SELECT count(*) AS count FROM tracking_aliases WHERE alias_key = ?').get('alias-a').count, 2);
 });

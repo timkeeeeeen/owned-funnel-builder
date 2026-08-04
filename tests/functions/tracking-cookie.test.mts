@@ -8,43 +8,62 @@ import {
   verifySignedCookie,
 } from '../../functions/_lib/tracking-cookie.ts';
 
-const secret = 'current-cookie-secret-that-is-long-enough';
+async function key(secret: string, usages: KeyUsage[] = ['sign', 'verify']): Promise<CryptoKey> {
+  return crypto.subtle.importKey('raw', new TextEncoder().encode(secret), { name: 'HMAC', hash: 'SHA-256' }, false, usages);
+}
+
+const context = { tenantId: 'tenant-a', siteId: 'shop', environment: 'live' } as const;
+
+test('rejects cookie contexts outside the preview/live audience boundary', async () => {
+  await assert.rejects(
+    issueSignedCookie(
+      { ...context, environment: 'production' as never, name: 'ma_vid', value: 'visitor-1', keyId: 'current', maxAge: 1 },
+      await key('current-cookie-secret-that-is-long-enough', ['sign'])
+    ),
+    /Invalid tracking cookie/
+  );
+});
 
 test('issues parent-domain, HttpOnly, secure tracking cookies for 400 days', async () => {
-  const cookie = await issueSignedCookie('ma_vid', 'visitor-1', 'current', 34_560_000, secret);
+  const cookie = await issueSignedCookie({ ...context, name: 'ma_vid', value: 'visitor-1', keyId: 'current', maxAge: 34_560_000 }, await key('current-cookie-secret-that-is-long-enough', ['sign']));
 
-  assert.match(cookie, /^ma_vid=v1\.current\./);
+  assert.match(cookie, /^ma_vid=v2\.current\./);
   assert.match(cookie, /Max-Age=34560000/);
   assert.match(cookie, /Domain=shop\.maestrogtm\.com/);
   assert.match(cookie, /Path=\//);
   assert.match(cookie, /HttpOnly/);
   assert.match(cookie, /Secure/);
   assert.match(cookie, /SameSite=Lax/);
-  assert.equal(await verifySignedCookie(cookie, 'ma_vid', { current: secret }), 'visitor-1');
+  assert.equal(await verifySignedCookie(cookie, 'ma_vid', { current: await key('current-cookie-secret-that-is-long-enough', ['verify']) }, context), 'visitor-1');
 });
 
 test('accepts a previous signing key but rejects duplicate and forged cookies', async () => {
-  const previous = await issueSignedCookie('ma_vid', 'old-visitor', 'previous', 34_560_000, 'old-secret');
-  const current = await issueSignedCookie('ma_vid', 'new-visitor', 'current', 34_560_000, secret);
+  const previous = await issueSignedCookie({ ...context, name: 'ma_vid', value: 'old-visitor', keyId: 'previous', maxAge: 34_560_000 }, await key('old-secret', ['sign']));
+  const current = await issueSignedCookie({ ...context, name: 'ma_vid', value: 'new-visitor', keyId: 'current', maxAge: 34_560_000 }, await key('current-cookie-secret-that-is-long-enough', ['sign']));
 
   assert.equal(
-    await verifySignedCookie(previous, 'ma_vid', { current: secret, previous: 'old-secret' }),
+    await verifySignedCookie(previous, 'ma_vid', { current: await key('current-cookie-secret-that-is-long-enough', ['verify']), previous: await key('old-secret', ['verify']) }, context),
     'old-visitor'
   );
   assert.equal(
-    await verifySignedCookie(`${previous}; ${current}`, 'ma_vid', { current: secret, previous: 'old-secret' }),
+    await verifySignedCookie(`${previous}; ${current}`, 'ma_vid', { current: await key('current-cookie-secret-that-is-long-enough', ['verify']), previous: await key('old-secret', ['verify']) }, context),
     null
   );
   assert.equal(
     await verifySignedCookie(
-      current.replace(/(ma_vid=v1\.current\.[^.]+\.)[^;]+/, '$1forged'),
+        current.replace(/(ma_vid=v2\.current\.[^.]+\.)[^;]+/, '$1forged'),
       'ma_vid',
-      { current: secret }
+      { current: await key('current-cookie-secret-that-is-long-enough', ['verify']) },
+      context
     ),
     null
   );
   assert.equal(
-    await verifySignedCookie(current.replace('ma_vid=', 'ma_sid='), 'ma_sid', { current: secret }),
+    await verifySignedCookie(current.replace('ma_vid=', 'ma_sid='), 'ma_sid', { current: await key('current-cookie-secret-that-is-long-enough', ['verify']) }, context),
+    null
+  );
+  assert.equal(
+    await verifySignedCookie(current, 'ma_vid', { current: await key('current-cookie-secret-that-is-long-enough', ['verify']) }, { ...context, environment: 'preview' }),
     null
   );
 });

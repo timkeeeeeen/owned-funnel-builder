@@ -1,8 +1,9 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 
-import { corsHeaders } from '../../functions/_lib/tracking-cors.ts';
+import { corsHeaders, createCsrfNonce, sameOriginNoCors, verifyCsrfNonce } from '../../functions/_lib/tracking-cors.ts';
 import { resolvePrivacy, type StoredPrivacyChoice } from '../../functions/_lib/tracking-privacy.ts';
+import { TRACKING_SECURITY_CONTRACT } from '../../functions/_lib/tracking-security-contract.ts';
 
 const policy = { region: 'US', failClosed: false, policyVersion: '2026-08' };
 const priorConsent = { region: 'EEA', failClosed: true, policyVersion: '2026-08' };
@@ -42,16 +43,39 @@ test('prior-consent, withdrawal, and unknown-region policy fail closed', () => {
     allowed(resolvePrivacy(request(), [], { region: 'unknown', failClosed: true, policyVersion: '2026-08' }), 'advertising'),
     false
   );
+  assert.equal(allowed(resolvePrivacy(request(), [], { region: 'unknown', failClosed: false, policyVersion: '2026-08' }), 'analytics'), false);
 });
 
 test('returns credentialed CORS only for the exact configured origin', () => {
   const allowedOrigin = 'https://shop.maestrogtm.com';
-  const good = corsHeaders(allowedOrigin, allowedOrigin);
+  const good = corsHeaders(allowedOrigin, [allowedOrigin], { host: 'events.shop.maestrogtm.com', allowedHost: 'events.shop.maestrogtm.com', preflightMethod: 'POST', requestedHeaders: 'content-type' });
   assert.equal(good.get('Access-Control-Allow-Origin'), allowedOrigin);
   assert.equal(good.get('Access-Control-Allow-Credentials'), 'true');
   assert.equal(good.get('Vary'), 'Origin');
 
   for (const origin of [null, 'null', 'https://evil.shop.maestrogtm.com', 'https://shop.maestrogtm.com:443', 'http://shop.maestrogtm.com']) {
-    assert.equal(corsHeaders(origin, allowedOrigin).get('Access-Control-Allow-Origin'), null);
+    assert.equal(corsHeaders(origin, [allowedOrigin], { host: 'events.shop.maestrogtm.com', allowedHost: 'events.shop.maestrogtm.com' }).get('Access-Control-Allow-Origin'), null);
   }
+  assert.equal(corsHeaders(allowedOrigin, [allowedOrigin], { host: 'evil.shop.maestrogtm.com', allowedHost: 'events.shop.maestrogtm.com' }).get('Access-Control-Allow-Origin'), null);
+  assert.equal(corsHeaders(allowedOrigin, [allowedOrigin], { preflightMethod: 'GET' }).get('Access-Control-Allow-Origin'), null);
+});
+
+test('CSRF nonce contract accepts only same-origin POSTs with the exact nonce', () => {
+  const nonce = createCsrfNonce();
+  const headers = { origin: 'https://shop.maestrogtm.com', 'sec-fetch-site': 'same-origin', 'x-csrf-nonce': nonce };
+  const requestWithNonce = new Request('https://shop.maestrogtm.com/api/tracking/source-browser-events', { method: 'POST', headers });
+  assert.match(nonce, /^[A-Za-z0-9_-]{43}$/);
+  assert.equal(sameOriginNoCors(requestWithNonce, 'https://shop.maestrogtm.com', 'shop.maestrogtm.com'), true);
+  assert.equal(verifyCsrfNonce(requestWithNonce, nonce, 'https://shop.maestrogtm.com', 'shop.maestrogtm.com'), true);
+  assert.equal(verifyCsrfNonce(requestWithNonce, 'wrong', 'https://shop.maestrogtm.com', 'shop.maestrogtm.com'), false);
+  assert.equal(
+    sameOriginNoCors(new Request(requestWithNonce, { headers: { ...headers, 'sec-fetch-site': 'cross-site' } }), 'https://shop.maestrogtm.com', 'shop.maestrogtm.com'),
+    false
+  );
+});
+
+test('exports the Worker/Pages parity security contract', () => {
+  assert.equal(TRACKING_SECURITY_CONTRACT.cookieVersion, 'v2');
+  assert.equal(TRACKING_SECURITY_CONTRACT.forbidsTrackingDbInPages, true);
+  assert.deepEqual(TRACKING_SECURITY_CONTRACT.authoritativeEvents, ['Lead', 'InitiateCheckout', 'Purchase']);
 });
