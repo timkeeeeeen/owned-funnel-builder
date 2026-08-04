@@ -77,6 +77,8 @@ async function env() {
   );
   return {
     TRACKING_DB: d1(database),
+    TINYBIRD_TOMBSTONE_APPEND_URL: 'https://tinybird.test/events',
+    TINYBIRD_TOMBSTONE_APPEND_TOKEN: 'test-token',
     TRACKING_TENANT_ID: 'tenant_demo',
     TRACKING_SITE_ID: 'site_demo',
     TRACKING_ENVIRONMENT: 'preview',
@@ -712,6 +714,8 @@ test('GPC suppresses advertising browser events without turning the signal into 
 
 test('privacy request returns only a request id and state', async () => {
   const bindings = await env();
+  const originalFetch = globalThis.fetch;
+  globalThis.fetch = async () => Response.json({ accepted: true });
   const firstBootstrap = await worker.fetch(
     request('/v1/bootstrap'),
     bindings as never,
@@ -784,8 +788,9 @@ test('privacy request returns only a request id and state', async () => {
   assert.equal(response.status, 202);
   const body = (await response.json()) as Record<string, unknown>;
   assert.equal(typeof body.request_id, 'string');
-  assert.equal(body.state, 'received');
+  assert.equal(body.state, 'tombstone_committed');
   assert.equal('subject_data' in body, false);
+  globalThis.fetch = originalFetch;
 });
 
 test('source bridge rejects a shadow runtime before persistence', async () => {
