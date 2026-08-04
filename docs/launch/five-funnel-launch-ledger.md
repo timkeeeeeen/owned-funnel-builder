@@ -1,6 +1,12 @@
 # Five-Funnel Launch Ledger
 
 Revision: 2026-08-03-r2
+Canonical artifact: this ledger owns funnel/canary state. The first-party event
+pipeline spec owns tracking, consent, identity, and destination behavior;
+Admaxxer/legacy-sender rows below are historical evidence only and cannot be
+used to enable forwarding. `five-funnel-canary-matrix.json` is its machine
+readback, and any future campaign ledger is a paused sub-ledger linked here,
+not a second launch authority.
 Rule: blank evidence is **unverified**, never green. `intentionally uncharged`
 is permitted only for a final real-price Purchase after live configuration and
 the separate $1 canary are proven.
