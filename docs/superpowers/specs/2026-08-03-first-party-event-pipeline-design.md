@@ -1,7 +1,7 @@
 # First-Party Event Pipeline and Identity Graph Design
 
 Date: 2026-08-03  
-Status: architecture approved; specialist-reviewed specification pending owner review
+Status: architecture approved; specialist-reviewed and owner-reviewed; implementation plan pending
 
 ## Purpose
 
@@ -27,17 +27,31 @@ control plane in the first release.
 
 ## First-release boundary
 
-Ship one Maestro-owned deployment for all five funnels:
+Ship one Maestro-owned tracking deployment for all five funnels:
 
-- the existing Cloudflare Pages project for storefront pages, checkout,
-  payment webhooks, and authoritative business-state writes;
+- Owned Funnel Builder;
+- Talking Head Video VBuilder;
+- Vibe Code Anything;
+- the App-Idea Evaluator/"what should I build?" offer; and
+- Maestro's $5 Blueprint offer.
+
+The funnel names above are launch scope. Slugs, product IDs, copy, and paid
+stage configuration remain deployment data rather than hardcoded tracking
+logic.
+
+- the existing Cloudflare Pages project for the three Pages-owned funnels
+  (Owned Funnel Builder, Talking Head Video VBuilder, and Vibe Code Anything),
+  their storefront pages, checkout, payment webhooks, and authoritative
+  business-state writes;
 - one standalone Cloudflare Worker for the first-party collector, Queue
   consumer, scheduled outbox dispatcher, retention cleanup, Meta CAPI, and
   Tinybird delivery;
-- one D1 database shared by those two runtimes, one main Queue plus dead-letter
-  queue, one Tinybird datasource, and one Meta dataset/pixel; and
-- isolated preview and production resources. Preview never sends ordinary live
-  Meta events.
+- the existing production D1 shared by Pages and the Worker through additive
+  migrations, one main Queue plus dead-letter queue, one Tinybird datasource,
+  and one Meta dataset/pixel; and
+- a separate preview D1/Queue/DLQ/Tinybird/Worker stack. Preview never sends
+  ordinary live Meta events and never becomes a second production business
+  database.
 
 The first release implements direct Meta and Tinybird senders behind one small
 delivery-result type. It does not build a generic destination framework,
@@ -55,7 +69,8 @@ requires them.
   claim permits it.
 - Deliver matching browser Pixel and server CAPI events with stable Meta
   deduplication inputs and controlled browser emission.
-- Include every permitted, available Meta matching and event-context field.
+- Include every available field on the explicit event and destination
+  allowlists, subject to purpose, consent, retention, and minimization rules.
 - Preserve first-touch and latest-touch attribution.
 - Make event receipt, transformation, delivery, retry, and failure inspectable.
 - Keep the event contract, identity rules, cookie configuration, and
@@ -100,6 +115,9 @@ identity + canonical claims + delivery leases
           |                         |
           v                         v
      Meta CAPI                  Tinybird
+
+App-Idea commercial runtime  ---- signed source outbox bridge ----^
+Blueprint commercial runtime ---- signed source outbox bridge ----^
 ```
 
 The browser never receives a Tinybird token, Meta access token, or other
@@ -112,11 +130,59 @@ exact custom domain is manually attached in Maestro's Cloudflare zone for the
 first release.
 
 Authoritative Lead, InitiateCheckout, and Purchase events use a transactional
-outbox. The business-state mutation and `event_outbox` row are submitted in one
-D1 `batch()` transaction. After commit, the Pages Function attempts an
-immediate Queue send. A scheduled Worker scan leases and republishes pending
-outbox rows, so a Queue outage or request crash cannot separate a successful
-business mutation from its conversion record.
+outbox. For Pages-owned funnels, the business-state mutation and `event_outbox`
+row are submitted in one D1 `batch()` transaction. After commit, the Pages
+Function attempts an immediate Queue send. A scheduled Worker scan leases and
+republishes pending outbox rows, so a Queue outage or request crash cannot
+separate a successful Pages business mutation from its conversion record.
+
+The App-Idea Evaluator and $5 Blueprint have separate commercial-state
+authorities and deployments. The tracking Worker is shared; D1 is the
+canonical tracking/delivery ledger, not a second source of truth for Convex
+sessions, payments, or fulfillment. Each Convex authority must write a
+source-side tracking outbox in the same mutation that durably records a
+checkout-session or verified-payment transition, then drain that outbox to the
+signed Worker bridge. If a source cannot provide that atomic outbox, the
+funnel remains shadow-only until provider reconciliation proves that every
+source payment maps to one tracking event.
+
+### Convex-backed funnel bridge
+
+The App-Idea Evaluator and $5 Blueprint flows use separate deployed runtimes and
+contracts. The Blueprint flow currently calls deployed Convex functions from
+`src/scripts/blueprint-funnel-client.ts`, including the checkout-start and
+checkout-status references. The App-Idea flow must have its own pinned client,
+checkout, payment, webhook, and fulfillment contract. Their deployed function
+names, argument schemas, return schemas, environments, and Dodo product
+metadata must be pinned as implementation prerequisites; a missing local source
+module is not a reason to guess a contract and blocks only that funnel.
+
+Convex remains the authority for its own session, generated result, claim, and
+fulfillment state. It does not become a second tracking ledger. The Worker
+issues a short-lived signed opaque `tracking_context_token` with issuer,
+audience, tenant/site, funnel, candidate event ID, nonce, expiry, and current
+privacy state, but no raw PII or cookie value. The browser passes that token and
+the candidate event ID to same-origin Pages proxy routes (for Blueprint,
+`POST /api/blueprint/checkout-start` and
+`GET /api/blueprint/checkout-status`). Those routes validate cookies, consent,
+flow/session binding, and schema, then make the server-to-server Convex call.
+Convex verifies the token signature/audience/expiry/nonce and rejects direct
+browser checkout calls or altered packets. The bridge is replay-safe and the
+Worker rechecks privacy and idempotency when the source outbox is drained. A
+Convex `InitiateCheckout` is emitted only when the source mutation durably
+stores a verified Dodo checkout-session ID, never when an action merely accepts
+or queues a request. A verified Dodo payment emits one `Purchase` through the
+single owner assigned to that product.
+
+Every environment has one version-controlled Dodo ownership manifest keyed by
+product ID. It assigns each product to exactly one commercial-state/webhook
+owner; Pages and each Convex runtime fail closed for unknown or non-owned
+products. Signed metadata is an input to validation, not the ownership
+authority. If both runtimes receive a provider delivery, one must record an
+explicit durable `ignored_not_owner` result; neither may emit a second Purchase,
+fulfillment grant, or destination delivery. Reconcile the manifest against live
+Dodo webhook configuration before launch. The shared uniqueness key remains
+`(tenant, provider, payment_id, Purchase)` across all paths.
 
 ## Why Tinybird is not the delivery authority
 
@@ -280,6 +346,7 @@ Every canonical event uses a versioned envelope:
   "event_name": "PageView",
   "occurred_at": "2026-08-03T00:00:00.000Z",
   "source": "browser",
+  "source_system": "pages",
   "visitor": {},
   "session": {},
   "page": {},
@@ -297,9 +364,14 @@ Meta and Tinybird projections. There is no open-ended `properties` bag. A field
 is collected only when its source, purpose, privacy category, retention, and
 destination allowlist are defined.
 
+`source_system` is a controlled value (`pages`, `app_idea`, `blueprint`, or
+`event_worker`); it is never accepted as an unvalidated tenant or authority
+selector from the browser.
+
 The allowlisted context can include:
 
-- event ID, browser time, server receipt time, source, and schema version;
+- event ID, browser time, server receipt time, source, source system, and schema
+  version;
 - visitor, session, person, lead, funnel, checkout, order, and payment IDs;
 - sanitized landing URL, current URL, path, page title/type, referrer, and
   referring domain;
@@ -384,8 +456,8 @@ encoding.
 
 - Trigger: a lead passes validation and is persisted.
 - Browser supplies a random candidate event ID with the lead request.
-- The server validates it and writes the lead plus Lead outbox row in one D1
-  batch before accepting the lead.
+- For Pages-owned funnels, the server validates it and writes the lead plus
+  Lead outbox row in one D1 batch before accepting the lead.
 - The checkout API returns a named, non-PII Lead browser payload. If lead
   persistence succeeds but provider checkout creation fails, the error response
   still identifies that the lead was accepted so the browser may emit the
@@ -399,9 +471,11 @@ encoding.
 - A stored random event UUID is mapped by the unique source key
   `(tenant, provider, checkout_session_id, InitiateCheckout)`; retries read the
   existing UUID rather than minting another.
-- The D1 session update and InitiateCheckout outbox row are one batch. The
-  checkout response returns separately named Lead and InitiateCheckout browser
-  payloads with only event IDs and normalized non-PII custom data.
+- For Pages-owned funnels, the D1 session update and InitiateCheckout outbox
+  row are one batch. For Convex-owned funnels, the source mutation and source
+  outbox provide the same atomic boundary. The checkout response returns
+  separately named Lead and InitiateCheckout browser payloads with only event
+  IDs and normalized non-PII custom data.
 - CAPI includes authoritative cart, products, quantities, value, currency,
   checkout session, offer, and attribution.
 
@@ -411,8 +485,11 @@ encoding.
   amount, currency, and revocation checks.
 - A stored random event UUID is mapped by the unique source key
   `(tenant, dodo, payment_id, Purchase)`.
-- The verified payment state and Purchase outbox row commit in one D1 batch
-  before CAPI or any other tracking side effect.
+- For Pages-owned funnels, the verified payment state and Purchase outbox row
+  commit in one D1 batch before CAPI or any other tracking side effect. For
+  Convex-owned funnels, the source payment mutation and source outbox commit
+  atomically; the Worker then creates the D1 canonical Purchase/outbox claim
+  idempotently before delivery.
 - Exactly one Purchase is emitted per Dodo payment ID. Base plus bump items in
   one Dodo payment are aggregated in that Purchase's `contents`; an upsell is a
   separate Purchase only when Dodo assigns a separate payment ID.
@@ -422,13 +499,16 @@ encoding.
 - A dedicated authorized `POST /api/funnel/browser-events` endpoint atomically
   creates a single browser delivery claim before returning `purchases[]`, one
   safe payload per newly verified payment. Authorization uses the existing
-  high-entropy flow token, exact same-origin request, and a server-side record
-  binding that token to the funnel; it returns claims only for that funnel and
-  no raw PII. Every flow page uses `Referrer-Policy: strict-origin`, and flow
-  tokens never enter analytics, logs, referrers, or destination payloads. The
-  existing GET status endpoint remains read-only. Reloads return no
-  already-claimed Purchase. Client-side persisted guards are defense in depth,
-  not the correctness boundary.
+  high-entropy flow token, an exact allowlisted storefront `Origin`, and a
+  server-side record binding that token to the funnel; `Origin` is a browser
+  signal, not authentication. This same-origin Pages endpoint enables no CORS:
+  it requires `POST`, rejects cross-origin and preflight requests, checks
+  `Sec-Fetch-Site: same-origin` when present, and returns claims only for that
+  funnel and no raw PII. Every flow page uses `Referrer-Policy: strict-origin`,
+  and flow tokens never enter analytics, logs, referrers, or destination
+  payloads. The existing GET status endpoint remains read-only. Reloads return
+  no already-claimed Purchase. Client-side persisted guards are defense in
+  depth, not the correctness boundary.
 - If the one browser claim is issued but the Pixel call fails, CAPI remains the
   reliable conversion record; the server does not issue repeated browser
   Purchases and risk overcounting.
@@ -470,7 +550,8 @@ same configured pixel/dataset and `action_source: "website"`. The
 occurred, never the collector, Dodo, or webhook URL. Originating browser IP and
 user agent come from the captured browser request.
 
-The server payload includes all available supported fields, including:
+The server payload includes every field present on the explicit Meta allowlist
+for that event and consent state, including:
 
 - `event_name`, `event_time`, `event_id`, `action_source`, and
   `event_source_url`;
@@ -732,8 +813,9 @@ Initial service targets are:
 - 99% of accepted, permitted advertising events delivered within five minutes,
   with suppressed or failed events resolved and alerted within five minutes;
   and
-- every verified Purchase represented by an outbox row in the same D1 batch and
-  delivered, explicitly suppressed, or alerted within five minutes.
+- every verified Purchase represented by a Pages D1 outbox batch or a Convex
+  source outbox tied to the payment, then delivered, explicitly suppressed, or
+  alerted within five minutes.
 
 Operators can inspect, without exposing secrets or raw PII:
 
@@ -808,6 +890,19 @@ replay procedure.
 - verified Dodo Purchase emission and refund/revocation isolation;
 - webhook-only Purchase uses the captured buyer context and never Dodo request
   headers;
+- one payment delivered concurrently to both candidate webhook routes, including
+  crash/retry, creates one Purchase, outbox row, and fulfillment result plus one
+  durable `ignored_not_owner` result;
+- source-outbox crashes before bridge send, after bridge acceptance, and before
+  source acknowledgement are recovered idempotently, and reconciliation alerts
+  on every verified Convex payment lacking one D1 canonical mapping;
+- direct browser calls to Convex and forged, altered, expired, or replayed
+  bridge packets cannot create tracking events;
+- browser-event cross-origin requests and preflights are rejected;
+- Convex checkout-start and checkout-status contract fixtures for the
+  App-Idea Evaluator and Blueprint flows;
+- signed Convex-to-tracking bridge expiry, replay, origin, and idempotency;
+- disjoint Dodo product ownership across Pages and Convex webhook routes; and
 - one base-plus-bump payment produces one Purchase and separate payment IDs
   produce separate Purchases;
 - Tinybird ingestion retry isolation; and
@@ -864,33 +959,48 @@ replay procedure.
    handling. A `$1` canary validates live transport and funnel chaining, not the
    production offer's catalog price; production IDs and prices receive a
    separate configuration check.
-8. Repeat the complete path for all five funnels before enabling ads.
+8. Complete and activate each funnel independently once its own path is green;
+   all five complete paths remain the program-level launch milestone.
 
 ## Rollout
 
 1. Add migrations beginning at `0010_*`; update migration tests to apply the
    complete lexically sorted directory, including both existing `0007_*` files.
    Record the exact pending filenames and D1 Time Travel recovery point.
-2. Provision isolated preview and production D1, Queue/DLQ, Tinybird, Worker
-   secrets, kill switches, and the exact Worker custom domain.
-3. Deploy a backward-compatible Worker in shadow mode with Meta delivery off,
-   then deploy the Pages outbox/browser producer. The consumer supports the
-   current and previous envelope during the rolling change.
-4. Validate collection, attribution, identity conflicts, privacy choices, GPC,
+2. Pin separate deployed contracts for App-Idea and Blueprint checkout,
+   payment, webhook, and fulfillment authorities, including the Blueprint
+   checkout/status references, schemas, environments, and Dodo product
+   metadata. Verify the signed token/bridge and source-outbox contracts before
+   changing any runtime.
+3. Reconcile the version-controlled Dodo product ownership manifest against
+   live webhook configuration. Provision a separate preview D1/Queue/DLQ,
+   Tinybird, Worker secrets, and kill switches; additively migrate the existing
+   production D1 and attach the exact Worker custom domain.
+4. Deploy a backward-compatible Worker in shadow mode with Meta delivery off,
+   then deploy the Pages outbox/browser producer and the Convex source-outbox
+   producers/bridge. The consumer supports the current and previous envelope
+   during the rolling change.
+5. Validate collection, attribution, identity conflicts, privacy choices, GPC,
    abuse limits, retention cleanup, Tinybird deduplication, and independent
    alerts.
-5. Run explicit Meta Test Events validation for the four standard events.
-6. Capture evidence that Admaxxer Meta forwarding and every legacy Pixel/CAPI
-   sender are disabled, then enable live PageView, Lead, and InitiateCheckout.
-7. Run the approved per-stage `$1` live Purchase canaries and verify browser/
-   server pairing without promising remote exactly-once delivery.
-8. Roll out to every funnel and paid stage. Activate campaigns only after
-   event counts, diagnostics, buyer-context fields, delivery SLOs,
-   refund/revocation behavior, privacy behavior, and owner evidence are green.
+6. Run explicit Meta Test Events validation for the four standard events on
+   each distinct runtime path, including both Convex-backed checkout paths.
+7. Capture evidence that Admaxxer Meta forwarding and every legacy Pixel/CAPI
+   sender for the launch products are disabled, then enable live PageView, Lead,
+   and InitiateCheckout per funnel.
+8. Run the approved per-stage `$1` live Purchase canaries for each funnel,
+   verify browser/server pairing, source reconciliation, refund/revocation, and
+   ownership evidence, then enable that funnel's production Purchase path.
+9. Activate campaigns per funnel only after its event counts, diagnostics,
+   buyer-context fields, delivery SLOs, privacy behavior, and owner evidence are
+   green. The five-funnel rollout is complete when all five independent gates
+   are green.
 
-Rollback uses the Meta kill switch first, preserves collection/outbox state,
-and keeps the consumer compatible with already queued envelope versions. It
-does not roll back additive D1 migrations while older code may still run.
+Rollback pauses the affected funnel's campaigns/traffic first, then disables
+that funnel's Purchase/destination sender while preserving collection/outbox
+state and consumer compatibility with already queued envelope versions. Use
+the global Meta kill switch only for a cross-funnel incident. Do not roll back
+additive D1 migrations while older code may still run.
 
 ## Acceptance criteria
 
@@ -912,6 +1022,19 @@ does not roll back additive D1 migrations while older code may still run.
   request IP, user agent, URL, or geo.
 - One Dodo payment ID creates one Purchase with verified major-unit value,
   currency, and aggregated contents.
+- Each named launch funnel resolves at runtime to an explicitly owned Dodo
+  product and webhook owner. Enabled Stripe checkout/webhook/sender paths for
+  those products block launch; dormant, unrelated Stripe support may remain.
+- App-Idea and Blueprint each have a pinned checkout, payment, webhook, and
+  fulfillment contract. Their source-side outboxes and reconciliation prove
+  that every verified source payment maps to exactly one D1 canonical Purchase
+  or an alert.
+- The deployed Blueprint checkout/status contract is pinned and its signed
+  bridge token produces one idempotent InitiateCheckout only after a verified
+  Dodo checkout-session ID is durably stored, with the same visitor/session,
+  attribution, consent, and event-ID rules as Pages.
+- The Dodo ownership manifest is version-controlled, reconciled against live
+  provider configuration, and fails closed for unknown or non-owned products.
 - Redacted Pixel network evidence and pre-send CAPI fixtures prove field-level
   normalization and identical `(event_name, event_id, pixel_id)` pairing for
   all four events; Meta Test Events is only receipt evidence.
@@ -932,8 +1055,11 @@ does not roll back additive D1 migrations while older code may still run.
 - Collector availability and five-minute event/Purchase resolution SLOs are
   observable through D1/Queue plus an external probe, with owned runbooks and
   no-deploy kill switches.
-- Preview and production resources are isolated. The Maestro deployment uses
-  configuration and Worker secrets rather than hardcoded core behavior.
+- Preview uses isolated resources while production reuses the existing
+  authoritative D1 with additive migrations. Convex business state remains in
+  its existing deployments and is never copied into D1 as a second authority.
+  The Maestro deployment uses configuration and Worker secrets rather than
+  hardcoded core behavior.
 - A future customer can deploy an isolated stack with different hostname,
   cookie scope, dataset, token, privacy policy, and sender set without changing
   the four event or identity contracts, but no shared SaaS control plane is
