@@ -239,7 +239,7 @@ assert.ok(rows.every((row) => ['pages', 'app_idea', 'blueprint'].includes(row.pa
 ```bash
 rtk host-test-slot --class focused node --import tsx --test tests/quality/first-party-authority-inventory.test.mts
 rtk git diff --check
-rtk git add docs/launch/first-party-event-pipeline-evidence.md tests/quality/first-party-authority-inventory.test.mts
+rtk git add docs/launch/first-party-event-pipeline-evidence.md config/trusted-hosts.json config/privacy-policy.json config/tracking-field-policy.json config/source-runtime-manifest.json tests/quality/first-party-authority-inventory.test.mts
 rtk git commit -m "docs: map first-party funnel authorities"
 ```
 
@@ -1190,7 +1190,7 @@ tombstones override retention and prevent replay resurrection.
 ```bash
 rtk host-test-slot --class focused node --import tsx --test workers/events/tests/destinations.test.mts workers/events/tests/privacy-requests.test.mts
 rtk git diff --check
-rtk git add workers/events/src/meta.ts workers/events/src/tinybird.ts workers/events/tests/destinations.test.mts workers/events/tests/privacy-requests.test.mts workers/events/src/queue.ts workers/events/src/cleanup.ts workers/events/src/privacy-requests.ts
+rtk git add config/destination-retry-policy.json workers/events/src/meta.ts workers/events/src/tinybird.ts workers/events/tests/destinations.test.mts workers/events/tests/privacy-requests.test.mts workers/events/src/queue.ts workers/events/src/cleanup.ts workers/events/src/privacy-requests.ts
 rtk git commit -m "feat: deliver Meta and Tinybird events"
 ```
 
@@ -1525,7 +1525,7 @@ rtk pnpm validate:config
 rtk pnpm check:functions
 rtk pnpm exec wrangler deploy --config workers/events/wrangler.jsonc --dry-run
 rtk git diff --check
-rtk git add config/dodo-funnel-ownership.json config/cloudflare-event-abuse-limits.json tests/quality/dodo-funnel-ownership.test.mts tests/quality/tracking-d1-binding.test.mts wrangler.jsonc workers/events/wrangler.jsonc scripts/publish-cloudflare.mjs scripts/publish-events-worker.mjs scripts/provision-preview-events.mjs package.json .woodpecker.yml docs/launch/first-party-event-pipeline-evidence.md
+rtk git add config/dodo-funnel-ownership.json config/cloudflare-event-abuse-limits.json config/source-runtime-manifest.json config/trusted-hosts.json config/privacy-policy.json config/tracking-field-policy.json tests/quality/dodo-funnel-ownership.test.mts tests/quality/tracking-d1-binding.test.mts wrangler.jsonc workers/events/wrangler.jsonc scripts/publish-cloudflare.mjs scripts/publish-events-worker.mjs scripts/provision-preview-events.mjs package.json .woodpecker.yml docs/launch/first-party-event-pipeline-evidence.md
 rtk git commit -m "ci: add first-party deployment contracts"
 ```
 
