@@ -1,4 +1,4 @@
-const ALLOW_METHODS = 'GET, POST, OPTIONS';
+const ALLOW_METHODS = 'POST, OPTIONS';
 const ALLOW_HEADERS = ['content-type', 'x-csrf-nonce'];
 
 export type CorsRequest = {

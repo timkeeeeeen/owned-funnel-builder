@@ -147,6 +147,9 @@ type AliasRow = {
   person_id: string | null;
   verification_class: IdentityClaim['verificationClass'];
   revoked_at: string | null;
+  identifier_type: string;
+  issuer_namespace: string;
+  normalization_version: string;
 };
 
 type D1IdentityOptions = {
@@ -154,14 +157,15 @@ type D1IdentityOptions = {
   now?: () => string;
 };
 
+const aliasLocks = new WeakMap<object, Map<string, Promise<void>>>();
+
 function identityConflictId(): string {
   return crypto.randomUUID();
 }
 
 /**
- * D1-backed claim resolver. Every read and write carries tenant_id; batches are
- * D1's atomic transaction boundary, and a unique-race retry makes concurrent
- * first claims converge on the same row.
+ * D1-backed claim resolver. The per-alias mutex covers one isolate only; D1
+ * affected-row CAS remains the correctness boundary across isolates.
  */
 export class D1IdentityClaimStore implements IdentityClaimStore {
   private readonly now: () => string;
@@ -181,7 +185,14 @@ export class D1IdentityClaimStore implements IdentityClaimStore {
   }
 
   async resolve(input: IdentityClaim): Promise<IdentityClaimResult> {
+    return this.withAliasLock(input, () => this.resolveLocked(input));
+  }
+
+  private async resolveLocked(input: IdentityClaim): Promise<IdentityClaimResult> {
     for (let attempt = 0; attempt < 3; attempt += 1) {
+      if (await this.tombstoned(input.tenantId, input.aliasKey)) {
+        return this.quarantine(input, null, input.personId);
+      }
       const alias = await this.alias(input.tenantId, input.aliasKey);
       if (!alias) {
         try {
@@ -249,14 +260,22 @@ export class D1IdentityClaimStore implements IdentityClaimStore {
             alias.verification_class,
           ]
         ),
-        this.statement(
-          'INSERT INTO tracking_person_redirects (tenant_id, from_person_id, to_person_id, reason, created_at) VALUES (?, ?, ?, ?, ?) ON CONFLICT(tenant_id, from_person_id) DO UPDATE SET to_person_id = excluded.to_person_id',
-          [input.tenantId, loser, winner, 'identity_alias_stable_winner', this.now()]
-        ),
       ]);
-      if (changed(updated)) return { personId: winner, state: 'linked' };
+      if (changed(updated)) {
+        await this.redirect(input.tenantId, input.aliasKey, loser, winner);
+        const current = await this.alias(input.tenantId, input.aliasKey);
+        if (current?.person_id) return { personId: current.person_id, state: 'linked' };
+      }
     }
-    return this.quarantine(input, null, input.personId);
+    const current = await this.alias(input.tenantId, input.aliasKey);
+    if (
+      current?.person_id &&
+      !current.revoked_at &&
+      !(await this.tombstoned(input.tenantId, input.aliasKey))
+    ) {
+      return { personId: current.person_id, state: 'linked' };
+    }
+    return this.quarantine(input, current?.person_id ?? null, input.personId);
   }
 
   async resolveWithRotation(
@@ -265,7 +284,8 @@ export class D1IdentityClaimStore implements IdentityClaimStore {
   ): Promise<IdentityClaimResult> {
     const current = aliases[0];
     for (const candidate of aliases) {
-      if (await this.alias(input.tenantId, candidate.aliasKey)) {
+      const candidateRow = await this.alias(input.tenantId, candidate.aliasKey);
+      if (candidateRow) {
         const result = await this.resolve({
           ...input,
           aliasKey: candidate.aliasKey,
@@ -277,6 +297,9 @@ export class D1IdentityClaimStore implements IdentityClaimStore {
           aliasKey: current.aliasKey,
           hmacKeyId: current.hmacKeyId,
           personId: result.personId,
+          identifierType: candidateRow.identifier_type,
+          issuerNamespace: candidateRow.issuer_namespace,
+          normalizationVersion: candidateRow.normalization_version,
         });
         return currentResult.state === 'conflict' ? currentResult : result;
       }
@@ -287,7 +310,8 @@ export class D1IdentityClaimStore implements IdentityClaimStore {
   private async alias(tenantId: string, aliasKey: string): Promise<AliasRow | null> {
     return this.database
       .prepare(
-        `SELECT alias_key, tenant_id, hmac_key_id, person_id, verification_class, revoked_at
+        `SELECT alias_key, tenant_id, hmac_key_id, person_id, verification_class, revoked_at,
+                identifier_type, issuer_namespace, normalization_version
          FROM tracking_aliases WHERE tenant_id = ? AND alias_key = ? LIMIT 1`
       )
       .bind(tenantId, aliasKey)
@@ -341,6 +365,38 @@ export class D1IdentityClaimStore implements IdentityClaimStore {
     return (rows.results ?? []).some((row) => row.tenant_id !== tenantId);
   }
 
+  private async tombstoned(tenantId: string, aliasKey: string): Promise<boolean> {
+    return !!(await this.database
+      .prepare(
+        'SELECT suppression_key FROM tracking_suppression_tombstones WHERE tenant_id = ? AND alias_key = ? LIMIT 1'
+      )
+      .bind(tenantId, aliasKey)
+      .first());
+  }
+
+  private async redirect(
+    tenantId: string,
+    aliasKey: string,
+    loser: string,
+    winner: string
+  ): Promise<void> {
+    await this.database.batch([
+      this.statement(
+        `UPDATE tracking_person_redirects SET to_person_id = ?
+         WHERE tenant_id = ? AND to_person_id = ?
+           AND EXISTS (SELECT 1 FROM tracking_aliases WHERE tenant_id = ? AND alias_key = ? AND person_id = ?)`,
+        [winner, tenantId, loser, tenantId, aliasKey, winner]
+      ),
+      this.statement(
+        `INSERT INTO tracking_person_redirects (tenant_id, from_person_id, to_person_id, reason, created_at)
+         SELECT ?, ?, ?, ?, CURRENT_TIMESTAMP
+         WHERE EXISTS (SELECT 1 FROM tracking_aliases WHERE tenant_id = ? AND alias_key = ? AND person_id = ?)
+         ON CONFLICT(tenant_id, from_person_id) DO UPDATE SET to_person_id = excluded.to_person_id`,
+        [tenantId, loser, winner, 'identity_alias_stable_winner', tenantId, aliasKey, winner]
+      ),
+    ]);
+  }
+
   private async quarantine(
     input: IdentityClaim,
     leftPersonId: string | null,
@@ -355,8 +411,8 @@ export class D1IdentityClaimStore implements IdentityClaimStore {
           identityConflictId(),
           input.tenantId,
           input.aliasKey,
-          leftPersonId,
-          rightPersonId,
+          leftPersonId ?? null,
+          rightPersonId ?? null,
           JSON.stringify({ verificationClass: input.verificationClass }),
           this.now(),
         ]
@@ -376,11 +432,17 @@ export class D1IdentityClaimStore implements IdentityClaimStore {
     reason: string
   ): Promise<number> {
     const aliases = await this.database
-      .prepare('SELECT alias_key FROM tracking_aliases WHERE tenant_id = ? AND hmac_key_id = ?')
+      .prepare(
+        `SELECT alias_key, person_id, identifier_type, issuer_namespace, normalization_version
+         FROM tracking_aliases WHERE tenant_id = ? AND hmac_key_id = ?`
+      )
       .bind(tenantId, hmacKeyId)
-      .all<{ alias_key: string }>();
+      .all<AliasRow>();
     const rows = aliases.results ?? [];
     if (!rows.length) return 0;
+    for (const row of rows) {
+      if (!row.person_id || !(await this.backfilled(tenantId, row))) return 0;
+    }
     const now = this.now();
     const results = await this.database.batch(
       rows.flatMap(({ alias_key }) => [
@@ -397,6 +459,43 @@ export class D1IdentityClaimStore implements IdentityClaimStore {
       ])
     );
     return results.filter((_, index) => index % 2 === 1).filter(changed).length;
+  }
+
+  private async backfilled(tenantId: string, old: AliasRow): Promise<boolean> {
+    return !!(await this.database
+      .prepare(
+        `SELECT alias_key FROM tracking_aliases
+         WHERE tenant_id = ? AND hmac_key_id = ? AND person_id = ?
+           AND identifier_type = ? AND issuer_namespace = ? AND normalization_version = ?
+         LIMIT 1`
+      )
+      .bind(
+        tenantId,
+        this.currentHmacKeyId,
+        old.person_id,
+        old.identifier_type,
+        old.issuer_namespace,
+        old.normalization_version
+      )
+      .first());
+  }
+
+  private async withAliasLock<T>(input: IdentityClaim, fn: () => Promise<T>): Promise<T> {
+    let locks = aliasLocks.get(this.database);
+    if (!locks) aliasLocks.set(this.database, (locks = new Map()));
+    const key = `${input.tenantId}\u0000${input.aliasKey}`;
+    const prior = locks.get(key) ?? Promise.resolve();
+    let release!: () => void;
+    const current = new Promise<void>((resolve) => (release = resolve));
+    const queued = prior.then(() => current);
+    locks.set(key, queued);
+    await prior;
+    try {
+      return await fn();
+    } finally {
+      release();
+      if (locks.get(key) === queued) locks.delete(key);
+    }
   }
 }
 

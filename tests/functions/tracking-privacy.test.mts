@@ -105,6 +105,7 @@ test('returns credentialed CORS only for the exact configured origin', () => {
   });
   assert.equal(good.get('Access-Control-Allow-Origin'), allowedOrigin);
   assert.equal(good.get('Access-Control-Allow-Credentials'), 'true');
+  assert.equal(good.get('Access-Control-Allow-Methods'), 'POST, OPTIONS');
   assert.equal(good.get('Vary'), 'Origin');
 
   for (const origin of [

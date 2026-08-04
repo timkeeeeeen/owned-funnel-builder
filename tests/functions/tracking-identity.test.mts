@@ -216,6 +216,9 @@ test('D1 claims persist tenant-scoped aliases, conflicts, redirects, and key rot
       aliasKey: 'alias-current',
       personId: 'person-a',
       verificationClass: 'verified',
+      identifierType: 'email',
+      issuerNamespace: 'unknown',
+      normalizationVersion: 'v1',
     },
     [
       { aliasKey: 'alias-current', hmacKeyId: 'current' },
@@ -294,20 +297,41 @@ test('D1 claims persist tenant-scoped aliases, conflicts, redirects, and key rot
       .get('tenant-a', 'alias-a').hmac_key_id,
     'previous'
   );
+  assert.deepEqual(
+    await store.resolve({
+      tenantId: 'tenant-a',
+      aliasKey: 'alias-a',
+      verificationClass: 'verified',
+    }),
+    { personId: null, state: 'conflict' }
+  );
+  assert.equal(
+    database.database
+      .prepare(
+        'SELECT count(*) AS count FROM tracking_aliases WHERE tenant_id = ? AND alias_key = ?'
+      )
+      .get('tenant-a', 'alias-a').count,
+    0
+  );
 });
 
-test('concurrent D1 verified claims converge after a lost alias insert', async () => {
+test('D1 serializes contenders and rewrites redirects to the stable canonical person', async () => {
   const database = new SqliteD1();
-  const left = new D1IdentityClaimStore(database, { currentHmacKeyId: 'current' });
-  const right = new D1IdentityClaimStore(database, { currentHmacKeyId: 'current' });
-  const [first, second] = await Promise.all([
-    left.resolve({
+  const store = new D1IdentityClaimStore(database, { currentHmacKeyId: 'current' });
+  const [first, second, third] = await Promise.all([
+    store.resolve({
       tenantId: 'tenant-a',
       aliasKey: 'racing-alias',
       personId: 'person-b',
       verificationClass: 'verified',
     }),
-    right.resolve({
+    store.resolve({
+      tenantId: 'tenant-a',
+      aliasKey: 'racing-alias',
+      personId: 'person-c',
+      verificationClass: 'verified',
+    }),
+    store.resolve({
       tenantId: 'tenant-a',
       aliasKey: 'racing-alias',
       personId: 'person-a',
@@ -315,7 +339,8 @@ test('concurrent D1 verified claims converge after a lost alias insert', async (
     }),
   ]);
   assert.equal(first.personId, 'person-b');
-  assert.equal(second.personId, 'person-a');
+  assert.equal(second.personId, 'person-b');
+  assert.equal(third.personId, 'person-a');
   assert.equal(
     database.database
       .prepare('SELECT person_id FROM tracking_aliases WHERE tenant_id = ? AND alias_key = ?')
@@ -329,5 +354,50 @@ test('concurrent D1 verified claims converge after a lost alias insert', async (
       )
       .get('tenant-a', 'person-b').to_person_id,
     'person-a'
+  );
+  assert.equal(
+    database.database
+      .prepare(
+        'SELECT to_person_id FROM tracking_person_redirects WHERE tenant_id = ? AND from_person_id = ?'
+      )
+      .get('tenant-a', 'person-c').to_person_id,
+    'person-a'
+  );
+  assert.equal(
+    database.database
+      .prepare('SELECT count(*) AS count FROM tracking_person_redirects WHERE to_person_id = ?')
+      .get('person-b').count,
+    0
+  );
+});
+
+test('D1 leaves every old-key alias intact until current-key backfill is complete', async () => {
+  const database = new SqliteD1();
+  const store = new D1IdentityClaimStore(database, { currentHmacKeyId: 'current' });
+  await store.resolve({
+    tenantId: 'tenant-a',
+    aliasKey: 'previous-only',
+    hmacKeyId: 'previous',
+    personId: 'person-a',
+    verificationClass: 'verified',
+    identifierType: 'email',
+    issuerNamespace: 'checkout',
+    normalizationVersion: 'v1',
+  });
+
+  assert.equal(await store.retireAliasesForKey('tenant-a', 'shop', 'previous', 'rotation'), 0);
+  assert.equal(
+    database.database
+      .prepare(
+        'SELECT count(*) AS count FROM tracking_aliases WHERE tenant_id = ? AND alias_key = ?'
+      )
+      .get('tenant-a', 'previous-only').count,
+    1
+  );
+  assert.equal(
+    database.database
+      .prepare('SELECT count(*) AS count FROM tracking_suppression_tombstones WHERE tenant_id = ?')
+      .get('tenant-a').count,
+    0
   );
 });

@@ -12,6 +12,9 @@ export const PAGES_TRACKING_SECURITY_BINDINGS = {
   TRACKING_COOKIE_VERIFY_KEYS: 'verify-only',
 } as const;
 
+/** Task 6 mounts public Worker routes; this Task 3 module only supplies their D1 adapter. */
+export const TASK_6_ROUTE_INTEGRATION_BOUNDARY = 'Task 6 owns public route wiring';
+
 export function createWorkerIdentityClaimStore(
   bindings: WorkerTrackingSecurityBindings
 ): D1IdentityClaimStore {
