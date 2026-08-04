@@ -57,6 +57,10 @@ class UnsubscribeDatabase implements D1Database {
       return null;
     });
   }
+
+  async batch(_statements: D1PreparedStatement[]): Promise<D1RunResult[]> {
+    return [];
+  }
 }
 
 test('unsubscribe tokens reject tampering and expiry', async () => {

@@ -1,0 +1,19 @@
+{
+  "schema": "maestro.tracking.field-policy",
+  "version": "1",
+  "owner": "maestro-privacy",
+  "policy_version": "2026-08-04",
+  "rules": [
+    {"field":"page.path","purposes":["necessary","analytics"],"sources":["pages","app_idea","blueprint","event_worker"],"destinations":["tinybird"],"ttl_seconds":2160000,"redaction":"omit","provenance":"browser"},
+    {"field":"page.title","purposes":["analytics"],"sources":["pages","app_idea","blueprint","event_worker"],"destinations":["tinybird"],"ttl_seconds":2160000,"redaction":"omit","provenance":"browser"},
+    {"field":"geo.country","purposes":["analytics"],"sources":["pages","app_idea","blueprint","event_worker"],"destinations":["tinybird"],"ttl_seconds":2160000,"redaction":"bucket","provenance":"server"},
+    {"field":"attribution.utm_source","purposes":["analytics"],"sources":["pages","app_idea","blueprint","event_worker"],"destinations":["tinybird"],"ttl_seconds":2160000,"redaction":"omit","provenance":"browser"},
+    {"field":"attribution.utm_medium","purposes":["analytics"],"sources":["pages","app_idea","blueprint","event_worker"],"destinations":["tinybird"],"ttl_seconds":2160000,"redaction":"omit","provenance":"browser"},
+    {"field":"attribution.utm_campaign","purposes":["analytics","advertising"],"sources":["pages","app_idea","blueprint","event_worker"],"destinations":["tinybird","meta"],"ttl_seconds":2160000,"redaction":"omit","provenance":"browser"},
+    {"field":"attribution.fbclid","purposes":["advertising"],"sources":["pages","app_idea","blueprint","event_worker"],"destinations":["meta"],"ttl_seconds":604800,"redaction":"omit","provenance":"browser"},
+    {"field":"attribution.fbp","purposes":["advertising"],"sources":["pages","app_idea","blueprint","event_worker"],"destinations":["meta"],"ttl_seconds":604800,"redaction":"omit","provenance":"browser"},
+    {"field":"attribution.fbc","purposes":["advertising"],"sources":["pages","app_idea","blueprint","event_worker"],"destinations":["meta"],"ttl_seconds":604800,"redaction":"omit","provenance":"browser"},
+    {"field":"device.ip","purposes":["advertising"],"sources":["event_worker"],"destinations":["meta"],"ttl_seconds":604800,"redaction":"omit","provenance":"server"},
+    {"field":"device.user_agent","purposes":["advertising"],"sources":["event_worker"],"destinations":["meta"],"ttl_seconds":604800,"redaction":"omit","provenance":"server"}
+  ]
+}

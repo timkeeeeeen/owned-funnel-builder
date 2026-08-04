@@ -1,0 +1,16 @@
+DESCRIPTION > First-party canonical event projection v1; physical rows may duplicate canonical_key.
+SCHEMA >
+  canonical_key String,
+  privacy_subject_key String,
+  event_name LowCardinality(String),
+  event_id String,
+  occurred_at DateTime,
+  tenant_id String,
+  site_id String,
+  source_system LowCardinality(String),
+  page_path String,
+  currency FixedString(3),
+  value Nullable(Float64),
+  quantity Nullable(Int64)
+ENGINE "MergeTree"
+ENGINE_SORTING_KEY "(tenant_id, site_id, canonical_key, occurred_at)"

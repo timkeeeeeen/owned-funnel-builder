@@ -1,6 +1,12 @@
 # Five-Funnel Launch Ledger
 
 Revision: 2026-08-03-r2
+Canonical artifact: this ledger owns funnel/canary state. The first-party event
+pipeline spec owns tracking, consent, identity, and destination behavior;
+Admaxxer/legacy-sender rows below are historical evidence only and cannot be
+used to enable forwarding. `five-funnel-canary-matrix.json` is its machine
+readback, and any future campaign ledger is a paused sub-ledger linked here,
+not a second launch authority.
 Rule: blank evidence is **unverified**, never green. `intentionally uncharged`
 is permitted only for a final real-price Purchase after live configuration and
 the separate $1 canary are proven.
@@ -51,6 +57,15 @@ live `$1` canary/card entry. A row cannot become green because a script tag,
 checkout return, or environment variable merely exists.
 
 The consolidated owner handoff is [`owner-launch-inputs.md`](./owner-launch-inputs.md).
+
+## Campaign readiness gate
+
+[`meta-campaign-ledger.md`](./meta-campaign-ledger.md) is a paused,
+evidence-only sub-ledger. Campaign gate: not created / paused for every funnel.
+Draft copy remains in [`five-funnel-copy-deck.md`](./five-funnel-copy-deck.md)
+until owner approval. `campaign_enabled` is not recorded: every funnel lacks
+the exact-SHA, canary/refund, privacy/DSAR, threshold, rollback, and fresh
+enablement-approval evidence required to advance.
 
 ## Live `$1` canary matrix
 

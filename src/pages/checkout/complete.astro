@@ -90,6 +90,49 @@ import OfferLayout from '@/layouts/OfferLayout.astro';
       '[data-complete-support-link]'
     );
     const back = completePage.querySelector<HTMLAnchorElement>('[data-complete-back]');
+    let claimStarted = false;
+
+    const claimPurchases = async () => {
+      const tracker = (
+        window as Window & {
+          maestroTracking?: {
+            canTrack(purpose?: 'analytics' | 'advertising'): boolean;
+            track(name: 'Purchase', customData: Record<string, unknown>, eventId: string): void;
+          };
+        }
+      ).maestroTracking;
+      if (claimStarted || !/^[A-Za-z0-9_-]{43}$/.test(flow) || !tracker?.canTrack('advertising'))
+        return;
+      claimStarted = true;
+      for (const wait of [0, 250, 750, 1_500]) {
+        if (wait) await new Promise((resolve) => window.setTimeout(resolve, wait));
+        try {
+          const response = await fetch('/api/funnel/browser-events', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            credentials: 'same-origin',
+            body: JSON.stringify({ flow }),
+          });
+          if (!response.ok) return;
+          const payload = (await response.json()) as {
+            purchases?: Array<{ event_id?: string; custom_data?: Record<string, unknown> }>;
+          };
+          const purchases = Array.isArray(payload.purchases) ? payload.purchases : [];
+          if (!purchases.length) continue;
+          for (const purchase of purchases) {
+            if (purchase.event_id) {
+              tracker.track('Purchase', purchase.custom_data ?? {}, purchase.event_id);
+            }
+          }
+          return;
+        } catch {
+          return;
+        }
+      }
+    };
+    const maybeClaimPurchases = () => void claimPurchases();
+    window.addEventListener('maestro:consent', maybeClaimPurchases);
+    queueMicrotask(maybeClaimPurchases);
 
     const addOrderItem = (name: string) => {
       if (!items) return;

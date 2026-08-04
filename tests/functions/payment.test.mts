@@ -42,7 +42,7 @@ class FakeStatement implements D1PreparedStatement {
   private values: Array<string | number | null> = [];
 
   constructor(
-    private readonly query: string,
+    readonly query: string,
     private readonly handler: Handler
   ) {}
 
@@ -78,14 +78,36 @@ class FakeStatement implements D1PreparedStatement {
 class FakeDatabase implements D1Database {
   readonly calls: Array<{ query: string; values: Array<string | number | null>; method: Method }> =
     [];
+  readonly batches: string[][] = [];
 
   constructor(private readonly handler: Handler) {}
 
   prepare(query: string): D1PreparedStatement {
     return new FakeStatement(query, async (statement, values, method) => {
       this.calls.push({ query: statement, values, method });
+      if (method === 'first' && statement.includes('SELECT context_hash, context_expires_at')) {
+        return {
+          context_hash: 'a'.repeat(64),
+          context_expires_at: new Date(Date.now() + 600_000).toISOString(),
+          flow_binding: 'a'.repeat(64),
+          privacy_snapshot_json: JSON.stringify({
+            schema_version: '1', server_subject_ref: 'privacy_test', subject_ref_version: 'v1',
+            snapshot_issued_at: new Date().toISOString(), snapshot_expires_at: new Date(Date.now() + 600_000).toISOString(),
+            snapshot_key_id: 'test', snapshot_signature: 'test-signature-123456',
+            purposes: { necessary: 'granted', analytics: 'unknown', advertising: 'unknown', identity_enrichment: 'unknown', sale_share: 'unknown' },
+            policy_version: '2026-08-04', choice_id: 'test', decision_source: 'policy', notice_locale: 'en-US', region: 'US', region_source: 'test', gpc: false, observed_at: new Date().toISOString(),
+          }),
+        };
+      }
       return this.handler(statement, values, method);
     });
+  }
+
+  async batch(statements: D1PreparedStatement[]): Promise<D1RunResult[]> {
+    this.batches.push(
+      statements.map((statement) => (statement as FakeStatement).query)
+    );
+    return Promise.all(statements.map((statement) => statement.run()));
   }
 }
 
@@ -266,6 +288,7 @@ test('checkout creates the configured cart, bump, steps, and first upsell return
     database.calls.filter((call) => call.query.includes('INSERT INTO funnel_step_runs')).length,
     2
   );
+  assert.equal(database.batches.at(-1)?.join('\n').includes('source_tracking_outbox'), true);
 });
 
 test('checkout validates the canonical consent version and sanitizes source placement', async () => {

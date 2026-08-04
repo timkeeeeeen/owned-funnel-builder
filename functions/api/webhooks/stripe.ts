@@ -1,5 +1,5 @@
 import { getProductDefinition } from '../../_generated/funnels';
-import { recordAdmaxxerPayment } from '../../_lib/admaxxer';
+import { recordAdmaxxerPayment, minorUnitsToMajor } from '../../_lib/admaxxer';
 import { deliverPurchase } from '../../_lib/fulfillment';
 import {
   cleanString,
@@ -17,6 +17,7 @@ import {
   type StripeCheckoutSession,
   type StripePaymentIntent,
 } from '../../_lib/stripe';
+import { drainSourceEvent, sourceOutboxStatement, sourcePayloadHash } from '../../_lib/source-outbox';
 
 interface StripeEvent {
   id?: unknown;
@@ -130,6 +131,29 @@ async function markStripePaymentSucceeded(
     visitorId: metadata.admx_visitor_id,
     email: cleanString(payment.receipt_email, 320) || (await leadEmail(database, leadId)),
   });
+
+  const flow = await database.prepare('SELECT context_hash, context_expires_at, privacy_snapshot_json FROM funnel_runs WHERE id = ?').bind(funnelId).first<{ context_hash: string; context_expires_at: string; privacy_snapshot_json: string }>();
+  const contextHash = cleanString(flow?.context_hash, 64);
+  if (!/^[a-f0-9]{64}$/i.test(contextHash) || !flow?.context_expires_at || Date.parse(flow.context_expires_at) <= Date.now()) throw new Error('Payment context is unavailable.');
+  const sourceEventId = `purchase:${paymentId}`;
+  const payload = {
+    schema_version: '1', source_system: 'pages', source_event_id: sourceEventId,
+    event_name: 'Purchase', occurred_at: now, context_hash: contextHash,
+    context_expires_at: new Date(Date.now() + 10 * 60_000).toISOString(),
+    funnel_slug: metadata.offer_slug || funnelId, product_id: productKey, payment_id: paymentId,
+    value: minorUnitsToMajor(typeof payment.amount_received === 'number' ? payment.amount_received : payment.amount, cleanString(payment.currency, 3).toUpperCase()),
+    currency: cleanString(payment.currency, 3).toUpperCase(), num_items: metadata.bump_product_key ? 2 : 1,
+    content_ids: [productKey, ...(metadata.bump_product_key ? [metadata.bump_product_key] : [])],
+    contents: [
+      { id: productKey, quantity: 1 },
+      ...(metadata.bump_product_key ? [{ id: metadata.bump_product_key, quantity: 1 }] : []),
+    ],
+    privacy_snapshot: JSON.parse(flow.privacy_snapshot_json || '{}'),
+  };
+  const event = { tenantId: cleanString(env.TRACKING_TENANT_ID, 128) || 'owned-funnel-builder', siteId: cleanString(env.TRACKING_SITE_ID, 128) || 'default', sourceEventId, eventName: 'Purchase' as const, occurredAt: now, payload, payloadHash: await sourcePayloadHash(payload) };
+  const result = await database.batch([sourceOutboxStatement(database, event)]);
+  if (result.some((item) => !item.success)) throw new Error('Purchase capture failed.');
+  if (env.TRACKING_SOURCE_BRIDGE) await drainSourceEvent(database, env, event);
 }
 
 async function paymentIntentFromSession(

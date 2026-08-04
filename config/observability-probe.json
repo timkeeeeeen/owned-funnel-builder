@@ -1,0 +1,8 @@
+{
+  "schema": "maestro.tracking.observability-probe",
+  "version": "1",
+  "owner": "maestro-platform",
+  "policy_version": "2026-08-04",
+  "collector": { "status": "unverified", "custom_domain": "events.shop.maestrogtm.com", "parent_domain_cookie_readback": "unverified" },
+  "senders": { "status": "disabled" }
+}

@@ -2,7 +2,14 @@
 
 Date: 2026-08-02
 
-Status: approved design; implementation plans reviewed
+Status: superseded for tracking/identity/destination behavior by
+`docs/superpowers/specs/2026-08-03-first-party-event-pipeline-design.md`.
+Retained as the product, copy, payment, and campaign scope record only.
+
+The first-party pipeline spec is authoritative for Pixel/CAPI, Admaxxer
+forwarding, consent, identity, event delivery, retention, and launch evidence.
+Any instruction here that enables Admaxxer or a legacy Meta sender conflicts
+with that spec and must not be executed.
 
 ## Summary
 

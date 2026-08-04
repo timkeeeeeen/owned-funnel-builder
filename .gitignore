@@ -9,6 +9,7 @@ dist/
 
 # Cloudflare local state
 .wrangler/
+.worktrees/
 
 # Environment variables
 .env
