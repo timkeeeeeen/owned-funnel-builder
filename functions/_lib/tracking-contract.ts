@@ -54,6 +54,7 @@ type EventEnvelope<Name extends EventName> = {
   event_name: Name;
   source: 'browser' | 'server';
   source_system: SourceSystem;
+  context_hash?: string;
   occurred_at: string;
   visitor: Record<string, string>;
   session: Record<string, string>;

@@ -719,6 +719,7 @@ export function sourceEnvelopeToCanonical(
     event_name: envelope.event_name,
     source: 'server',
     source_system: source,
+    context_hash: envelope.context_hash,
     occurred_at: envelope.occurred_at,
     visitor: {},
     session: {},
@@ -831,7 +832,7 @@ async function contextExchange(request: Request, env: CollectorEnv): Promise<Res
     return jsonError('invalid_request', 400, request, env);
   }
   const token = input.tracking_context_token;
-  if (typeof token !== 'string' || !/^v1\.[A-Za-z0-9_-]{16,2048}\.[A-Za-z0-9_-]{32,512}$/.test(token))
+  if (typeof token !== 'string' || !/^v1\.[A-Za-z0-9_-]{1,64}\.[A-Za-z0-9_-]{16,512}\.[A-Za-z0-9_-]{43}$/.test(token))
     return jsonError('invalid_context', 403, request, env);
   if (new URL(request.url).search) return jsonError('invalid_context', 403, request, env);
   const verifier = env.TRACKING_CONTEXT_TOKEN_VERIFY;

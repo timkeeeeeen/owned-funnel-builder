@@ -163,7 +163,7 @@ function sourceScope(
   };
 }
 
-const CONTEXT_TOKEN_PATTERN = /^v1\.[A-Za-z0-9_-]{16,2048}\.[A-Za-z0-9_-]{32,512}$/;
+const CONTEXT_TOKEN_PATTERN = /^v1\.[A-Za-z0-9_-]{1,64}\.[A-Za-z0-9_-]{16,512}\.[A-Za-z0-9_-]{43}$/;
 
 async function exchangeTrackingContext(
   env: PagesContext['env'],
