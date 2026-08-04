@@ -1,0 +1,1361 @@
+---
+import OfferLayout from '@/layouts/OfferLayout.astro';
+
+const navItems = [
+  ['#recommendation', 'Recommendation'],
+  ['#demand', 'Market demand'],
+  ['#portfolio', 'Portfolio gaps'],
+  ['#tests', 'Tests'],
+  ['#products', 'Products'],
+  ['#evidence', 'Live funnels'],
+  ['#sequence', '30-day sequence'],
+];
+
+const researchStats = [
+  { value: '3,275', label: 'US active ads collected' },
+  { value: '411', label: 'curated offer combinations' },
+  { value: '159', label: 'high-signal funnels shortlisted' },
+  { value: '150', label: 'landing pages reachable' },
+  { value: '138', label: 'live-page advertisers' },
+];
+
+const funnelSignals = [
+  {
+    funnel: 'Low-ticket / checkout',
+    count: '90',
+    median: '50 days',
+    read: 'A paid diagnostic or compact implementation pack can qualify buyers before a service call.',
+  },
+  {
+    funnel: 'Call booking / application',
+    count: '28',
+    median: '70 days',
+    read: 'Services sell a named result, then qualify for fit before the calendar.',
+  },
+  {
+    funnel: 'Lead magnet',
+    count: '18',
+    median: '76 days',
+    read: 'Audits, scorecards, training, and guides make the invisible problem visible.',
+  },
+  {
+    funnel: 'Trial / demo',
+    count: '14',
+    median: '40 days',
+    read: 'Software lets prospects experience a narrow output before asking for a bigger commitment.',
+  },
+];
+
+const marketSignals = [
+  {
+    capability: 'App and web development',
+    signal:
+      '33 app, MVP, SaaS, or vibe-coding ads in the live-page sample; 23 had run at least 30 days.',
+    wants:
+      'A correct version one, a finished half-built app, or a launchable MVP in a named time window.',
+    sell: '“Finish and launch the product” — not generic web development or open-ended engineering hours.',
+  },
+  {
+    capability: 'Funnel building',
+    signal: '31 funnel, conversion, lead-gen, or booked-call ads; 21 had run at least 30 days.',
+    wants:
+      'A complete path from click to qualified lead, checkout, or call — including message match and follow-up.',
+    sell: 'A Launch Funnel Sprint or Funnel Leak Fix tied to one offer and one conversion event.',
+  },
+  {
+    capability: 'Ads management',
+    signal:
+      'Only 8 ads explicitly sold Meta ads or media buying; 7 persistent examples bundled a larger outcome.',
+    wants:
+      'Qualified calls, useful demand, creative, and a funnel that converts — not activity inside Ads Manager.',
+    sell: 'Acquisition as the final layer of a proven offer/funnel system. Avoid standalone “we manage your ads.”',
+  },
+  {
+    capability: 'AI-brain implementation',
+    signal:
+      '10 ads used AI-brain, AI-agent, autonomous-agent, or AI-employee language; 7 had run 30+ days.',
+    wants:
+      'Status reports, follow-up, content, research, intake, or another concrete workflow completed reliably.',
+    sell: 'A source-backed operating system with two named workflows. “AI brain” describes the mechanism, not the offer.',
+  },
+  {
+    capability: 'LinkedIn and content',
+    signal:
+      '46 LinkedIn, profile, personal-brand, or thought-leadership ads; 30 had run at least 30 days.',
+    wants:
+      'Visibility, authority, more replies, stronger profiles, and consistent content without generic AI output.',
+    sell: 'A diagnostic or sample artifact first, then a source-backed growth system powered by Maestro.',
+  },
+];
+
+const currentFunnels = [
+  {
+    offer: 'Owned Funnel Builder',
+    mode: 'Checkout',
+    entry: '$49 + $19 bump + configured upsells',
+    truth:
+      'Published, owned-code funnel system. Full live purchase/canary evidence remains incomplete.',
+    gap: 'Needs new creative tests and a service bridge for buyers who want the funnel built for them.',
+  },
+  {
+    offer: 'Talking-Head Ad Machine',
+    mode: 'Checkout',
+    entry: '$27 + $9 bump + $37 upsell',
+    truth: 'Published local-first production tool with clear platform constraints.',
+    gap: 'Can lead into an ad creative sprint, but should not imply performance or automatic publishing.',
+  },
+  {
+    offer: 'Vibe Code Anything',
+    mode: 'Checkout',
+    entry: '$29 + $19 bump + configured upsells',
+    truth: 'Published serious app shell for repo-aware coding-agent users.',
+    gap: 'Missing a diagnostic and done-for-you rescue path for buyers whose app already exists but is stuck.',
+  },
+  {
+    offer: 'Authority Snapshot → CMO Game Plan',
+    mode: 'Lead magnet → low-ticket',
+    entry: 'Free → $5',
+    truth: 'Strong acquisition concept; submission, checkout, and paid-traffic proof remain gated.',
+    gap: 'Finish product-quality and live-evidence gates before traffic. Then bridge qualified buyers into Maestro.',
+  },
+  {
+    offer: 'App Idea Evaluator → Build Pack',
+    mode: 'Lead magnet → low-ticket',
+    entry: 'Free → $29',
+    truth:
+      'Buildability report and guided pack concept; production deployment and proof remain blocked.',
+    gap: 'A later feeder for Launch Rescue. Do not advertise until the actual report and delivery path are live.',
+  },
+];
+
+const offerLadders = [
+  {
+    lane: 'Lane 1 — Launch Rescue',
+    buyer: 'SaaS founders and people with a half-built, vibe-coded, or under-converting product',
+    promise:
+      'Finish the critical product path and install the funnel that can get it to real buyers.',
+    headline: 'Your app works. Now make it launchable.',
+    cta: 'Get my launch diagnosis',
+    steps: [
+      [
+        'Free diagnostic',
+        'Launch Readiness Scorecard',
+        'Scores product, onboarding, payments, reliability, positioning, and acquisition readiness.',
+      ],
+      [
+        'Low-ticket',
+        '$49 App Rescue Audit',
+        'Recorded teardown and prioritized launch plan; credit the $49 toward implementation.',
+      ],
+      [
+        'Direct-to-call',
+        '20-minute Launch Triage',
+        'Only show the calendar after the audit reveals a valuable, deliverable gap.',
+      ],
+      [
+        'Implementation',
+        '$3.5k Launch Rescue Sprint test',
+        'Fixed critical path: hardening, conversion page, checkout/booking, tracking, and release. Scope before price is finalized.',
+      ],
+      [
+        'Expansion',
+        'First-Customer Pilot',
+        'Creative, landing-page iteration, tracking, and a bounded paid-acquisition test after the offer converts.',
+      ],
+    ],
+  },
+  {
+    lane: 'Lane 2 — Source-Backed Growth System',
+    buyer:
+      'Agencies, consultants, expert businesses, and founder-led SaaS teams with useful calls and scattered knowledge',
+    promise:
+      'Turn the conversations and evidence you already have into a cited company brain and reviewable growth assets.',
+    headline: 'Stop asking blank AI chats to remember your business.',
+    cta: 'Map the system for my business',
+    steps: [
+      [
+        'Trial / demo',
+        'One Call → Three Cited Signals',
+        'Use a sample or approved transcript to show claims, objections, and one draft direction.',
+      ],
+      [
+        'Low-ticket',
+        '$29 AI Workflow Map',
+        'Inventory sources, permissions, freshness, and the first two workflows worth implementing.',
+      ],
+      [
+        'Direct-to-call',
+        '30-minute System Design Call',
+        'Review the map and decide whether the data and workflows support an implementation.',
+      ],
+      [
+        'Implementation',
+        '$3k–$8k installation hypothesis',
+        'Ingest approved sources, create the cited Brain, install two workflows, and train the team.',
+      ],
+      [
+        'Recurring',
+        'Content / signal operations',
+        'Human-reviewed call-to-content, Brain upkeep, funnel research, and reporting with a bounded monthly scope.',
+      ],
+    ],
+  },
+];
+
+const experiments = [
+  {
+    priority: '1',
+    offer: 'Launch Rescue Sprint',
+    audience: 'SaaS and vibe-coded founders with a working demo but no reliable launch path',
+    funnel: 'Direct-to-call',
+    build: 'Promise page → eight-question launch diagnosis → qualified calendar',
+    angle:
+      '“Your prototype is not one more feature away. It is missing the production and customer path.”',
+    pass: 'After 300 landing-page views: ≥3% diagnosis starts, ≥1.5% booked calls, ≥65% show rate, and ≥40% of held calls qualified.',
+  },
+  {
+    priority: '2',
+    offer: '$49 App Rescue Audit',
+    audience: 'Founders not ready to book a development project',
+    funnel: 'Low-ticket / checkout',
+    build:
+      'Short sales page → checkout → repo/app intake → recorded teardown → credited service offer',
+    angle: '“Before you pay for more code, find the five things actually blocking launch.”',
+    pass: 'After 300 views: ≥5% checkout starts, ≥1.5% purchases, <10% refunds, and ≥15% of buyers request triage.',
+  },
+  {
+    priority: '3',
+    offer: 'Source-Backed Growth System',
+    audience:
+      'Agencies, consultants, and founder-led teams with calls, documents, and inconsistent content',
+    funnel: 'Direct-to-call',
+    build: 'Mechanism page → source/workflow diagnostic → qualified calendar',
+    angle: '“Install AI that can cite your company before asking it to speak for your company.”',
+    pass: 'After 300 views: ≥4% diagnostic starts, ≥1.5% booked calls, and ≥40% of held calls have usable sources plus two repeatable workflows.',
+  },
+  {
+    priority: '4',
+    offer: 'One Call → Three Cited Signals',
+    audience: 'LinkedIn-first consultants, agencies, and founders',
+    funnel: 'Trial / demo + lead magnet',
+    build:
+      'Use an approved sample call first; return three cited claims and one reviewable draft direction before asking for email/call.',
+    angle:
+      '“See the useful content hiding in the call you already had — with the source attached.”',
+    pass: '≥8% sample starts, ≥30% reach the output, and ≥10% of completed outputs request the next step. Keep human review and export-only language.',
+  },
+  {
+    priority: '5',
+    offer: 'Funnel Leak Map',
+    audience: 'Consultants and agencies already buying traffic but unhappy with lead quality',
+    funnel: 'Lead magnet → call',
+    build: 'URL + offer intake → five-part click-to-close score → prioritized leak → calendar',
+    angle: '“More traffic cannot fix the leak between click and close.”',
+    pass: 'After 300 views: ≥10% completed reports, ≥10% of reports book, and ≥50% of held calls have a fix worth at least $2.5k.',
+  },
+  {
+    priority: '6',
+    offer: '$27 Vertical AI Employee Pack',
+    audience: 'One narrow agency vertical with an existing GoHighLevel or operations workflow',
+    funnel: 'Low-ticket / checkout → implementation call',
+    build:
+      'One workflow, install guide, templates, validation checklist, and optional done-for-you installation',
+    angle: '“Install the intake and follow-up employee for one job — not eight vague agents.”',
+    pass: 'After 300 views: ≥2% purchases, ≥30% activation, and ≥10% request installation. Pick the vertical through interviews before building.',
+  },
+  {
+    priority: '7',
+    offer: 'Owned Funnel Builder creative refresh',
+    audience: 'Creators, consultants, and small agencies replacing recurring funnel software',
+    funnel: 'Checkout',
+    build:
+      'Keep the current $49 product; test ownership, agent-built launch, and monthly-software-replacement angles separately.',
+    angle:
+      '“Own the page, checkout workflow, and customer data instead of renting another builder.”',
+    pass: 'After 300 views per clean angle: ≥5% checkout starts and ≥1.5% purchases. Do not change the product while testing the message.',
+  },
+];
+
+const serviceDecisions = [
+  {
+    service: 'Web development',
+    verdict: 'Sell the rescue, not the craft.',
+    offer: 'Production-hardening and launch completion for a specific existing app or MVP.',
+    avoid: '“We build websites and apps” — it creates comparison shopping and unlimited scope.',
+  },
+  {
+    service: 'Funnel building',
+    verdict: 'Strong front-end service when attached to a conversion event.',
+    offer:
+      'A fixed Launch Funnel Sprint or Funnel Leak Fix covering page, qualification, checkout/booking, tracking, and follow-up.',
+    avoid: 'A page-design deliverable with no offer, traffic, or conversion responsibility.',
+  },
+  {
+    service: 'Ads management',
+    verdict: 'Make it an expansion, not the first promise.',
+    offer:
+      'A bounded first-customer pilot after message, page, tracking, and unit economics are credible.',
+    avoid:
+      'Generic monthly management. It inherits every problem in the offer and funnel while making you accountable for revenue.',
+  },
+  {
+    service: 'AI-brain building',
+    verdict: 'Productize the workflow and evidence boundary.',
+    offer:
+      'A cited company Brain plus two named workflows: call-to-content, sales-signal extraction, onboarding, reporting, or follow-up.',
+    avoid: 'A “second brain” or chatbot that stores documents but owns no recurring job.',
+  },
+];
+
+const productCandidates = [
+  {
+    rank: '1',
+    name: 'Vibe Launch Doctor',
+    type: 'Diagnostic SaaS → Launch Rescue',
+    why: 'Direct match to app-rescue ads and the existing Vibe Code Anything/App Idea assets.',
+    firstTest:
+      'Deliver the first 10 audits manually from URL + repo access; turn repeated checks into software only after buyers pay.',
+    decision: 'Validate now',
+  },
+  {
+    rank: '2',
+    name: 'Call-to-Content Sampler',
+    type: 'Maestro trial wedge',
+    why: 'The market buys LinkedIn outcomes; Maestro can differentiate with quotes, speakers, timestamps, and human review.',
+    firstTest:
+      'Use an approved sample call and return three cited claims plus one draft direction. Gate private transcript upload until the consent path is ready.',
+    decision: 'Validate now',
+  },
+  {
+    rank: '3',
+    name: 'Sales Call Signal Miner',
+    type: 'Maestro workflow / SaaS module',
+    why: 'Extracted objections, customer language, claims, and proof can improve ads, funnels, sales follow-up, and content.',
+    firstTest:
+      'Manually produce one five-call signal report for three companies; test whether it changes a live page or campaign decision.',
+    decision: 'Validate now',
+  },
+  {
+    rank: '4',
+    name: 'AI Brain Readiness Auditor',
+    type: 'Diagnostic → implementation',
+    why: 'Turns vague AI-brain curiosity into source, permission, freshness, and workflow requirements.',
+    firstTest:
+      'Sell a $29 map before building automation. Score source coverage and recommend only two workflows.',
+    decision: 'Validate next',
+  },
+  {
+    rank: '5',
+    name: 'Vertical AI Employee Kits',
+    type: 'Digital product → installation',
+    why: 'Observed offers make a specific workflow installable for one vertical instead of selling generic agent education.',
+    firstTest:
+      'Interview one vertical and presell one $27 workflow pack. Do not build a multi-agent marketplace.',
+    decision: 'Validate next',
+  },
+  {
+    rank: '6',
+    name: 'Offer-to-Funnel Launch Kit',
+    type: 'Owned Funnel Builder extension',
+    why: 'Existing assets already handle page, checkout, and publishing; the useful gap is offer diagnosis and message match.',
+    firstTest:
+      'Bundle an offer brief, page plan, ad angles, and release checklist as an upsell before adding generator UI.',
+    decision: 'Package first',
+  },
+  {
+    rank: '7',
+    name: 'First-Customer Launch OS',
+    type: 'Service-backed SaaS',
+    why: 'Vibiz and adjacent offers point at the post-build distribution gap, but the full product spans too many jobs for a first build.',
+    firstTest:
+      'Run the workflow as a service across three Launch Rescue clients; software should capture only the repeated handoffs.',
+    decision: 'Later',
+  },
+];
+
+const avoidProducts = [
+  [
+    'Generic GoHighLevel replacement',
+    'Crowded, integration-heavy, and far larger than the specific ownership wedge already covered by Owned Funnel Builder.',
+  ],
+  [
+    'Generic AI second brain',
+    'The label is interesting, but buyers respond to completed workflows and evidence, not storage plus chat.',
+  ],
+  [
+    'Prompt vault',
+    'Fast to copy, low defensibility, and weak fit with Maestro’s source-backed advantage.',
+  ],
+  [
+    'All-in-one CRM',
+    'High support and migration burden; the research shows the promise, not evidence that another broad platform is the best build.',
+  ],
+  ['Generic social scheduler', 'Crowded and outside Maestro’s launch-safe export-only boundary.'],
+  [
+    'Another general app builder',
+    'Building is commoditizing; launch correctness, rescue, distribution, and grounded operations are the better wedges.',
+  ],
+];
+
+const evidence = [
+  {
+    advertiser: 'Wonderment Apps',
+    meta: '221 page likes · 39 days active',
+    funnel: 'Free webinar / app rescue',
+    signal:
+      '“Refine Your Vibe-Coded MVP Without Overbuilding” makes launch readiness the problem, not code generation.',
+    landing: 'https://go.vibecodesherpa.ai/landers',
+    ad: 'https://www.facebook.com/ads/library/?id=1755843278920686',
+  },
+  {
+    advertiser: 'Ekofi',
+    meta: '349 likes · 29 days',
+    funnel: 'Fixed-price MVP / call',
+    signal: 'Advertises a SaaS MVP in 30 days from $2,300 with a 15-minute fit call.',
+    landing: 'https://nova.ekofi.capital/',
+    ad: 'https://www.facebook.com/ads/library/?id=857752917092798',
+  },
+  {
+    advertiser: 'Vibiz',
+    meta: '798 likes · 54 days',
+    funnel: 'Trial / product-led',
+    signal:
+      'Frames distribution as the new bottleneck after vibe coding and promises a revenue-ready business path.',
+    landing: 'https://www.vibiz.ai/',
+    ad: 'https://www.facebook.com/ads/library/?id=1542678144174874',
+  },
+  {
+    advertiser: 'Creme Digital',
+    meta: '260 likes · 67 days',
+    funnel: 'MVP service / offer page',
+    signal: 'Sells a working MVP in two weeks rather than development capacity.',
+    landing: 'https://www.creme.digital/mvp-offer-no-vsl',
+    ad: 'https://www.facebook.com/ads/library/?id=1864624957553919',
+  },
+  {
+    advertiser: 'Legit Design Studio',
+    meta: '22 likes · 16 days',
+    funnel: 'Validation / service',
+    signal: '“Stop building the wrong version one” leads with validation and scope reduction.',
+    landing: 'https://legitdesign.studio/ai-saas-mvp-founders',
+    ad: 'https://www.facebook.com/ads/library/?id=1787080002663695',
+  },
+  {
+    advertiser: 'Rocket.new',
+    meta: '2,433 likes · 10 days',
+    funnel: 'Fixed-price build / call',
+    signal:
+      'Uses an extremely bounded “$500, 5 days, working app” promise to make the service tangible.',
+    landing: 'https://www.rocket.new/talk-to-an-expert',
+    ad: 'https://www.facebook.com/ads/library/?id=1064655096129052',
+  },
+  {
+    advertiser: 'Alister Shirazi',
+    meta: '1,215 likes · 55 days',
+    funnel: 'Productized service / checkout',
+    signal: 'Bundles website, Meta ads, creative, funnel, and appointment setting at $297/month.',
+    landing: 'https://ad-launch.io/',
+    ad: 'https://www.facebook.com/ads/library/?id=859668196699566',
+  },
+  {
+    advertiser: 'AudienceLab.io',
+    meta: '1,259 likes · 211 days',
+    funnel: 'Agency application',
+    signal:
+      'Sells a white-label data-service moat and zero-fulfillment economics, then qualifies applicants.',
+    landing: 'https://agency.audiencelab.io/survey-2026-335088',
+    ad: 'https://www.facebook.com/ads/library/?id=33154482720865561',
+  },
+  {
+    advertiser: 'DesignElite',
+    meta: '276 likes · 47 days',
+    funnel: 'Flat-rate service / call',
+    signal:
+      'Replaces a senior designer with unlimited requests, 48-hour delivery, and one monthly fee for SaaS founders.',
+    landing: 'https://www.designelite.co/demo-calendly',
+    ad: 'https://www.facebook.com/ads/library/?id=1018790097532500',
+  },
+  {
+    advertiser: 'Scaling With Systems',
+    meta: '1,104 likes · 15 days',
+    funnel: 'Free VSL → call',
+    signal:
+      'Diagnoses the leak between click and close instead of asking buyers to purchase more traffic.',
+    landing: 'https://www.scalingwsystems.com/dfyf-free-training-vsl-1',
+    ad: 'https://www.facebook.com/ads/library/?id=2040505376831580',
+  },
+  {
+    advertiser: 'Outbound Pilot',
+    meta: '15 likes · 50 days',
+    funnel: 'Done-for-you system',
+    signal: 'Sells a complete cold-email system and booked calls, not access to sending software.',
+    landing: 'https://start.outboundpilot.com/offer',
+    ad: 'https://www.facebook.com/ads/library/?id=2123213181871465',
+  },
+  {
+    advertiser: 'Austin Schneider',
+    meta: '548 likes · 37 days',
+    funnel: 'Application / AI installation',
+    signal: 'Promises installation of eight AI employees inside a video agency in seven days.',
+    landing: 'https://offer.agencyu.co/1-application-890694-342368-575478-801675?lf=on',
+    ad: 'https://www.facebook.com/ads/library/?id=2550601715413169',
+  },
+  {
+    advertiser: 'Mina Elias',
+    meta: '1,809 likes · 43 days',
+    funnel: 'AI implementation / call',
+    signal: 'Uses a workflow-mapping case story, then sends prospects to a booked-call page.',
+    landing: 'https://info.triviumco.com/book-a-call',
+    ad: 'https://www.facebook.com/ads/library/?id=1018642280657032',
+  },
+  {
+    advertiser: 'Scale Certified',
+    meta: '2,222 likes · 69 days',
+    funnel: '$27 checkout',
+    signal:
+      'Packages one vertical AI employee and automation system as an installable agency offer.',
+    landing: 'https://scale-certified.com/hvacautomationpack-363030',
+    ad: 'https://www.facebook.com/ads/library/?id=1901736903872440',
+  },
+  {
+    advertiser: 'Viktor',
+    meta: '2,938 likes · 19 days',
+    funnel: 'Business application',
+    signal:
+      '“An AI employee inside your chat” is anchored to status reports, follow-up, and recurring manager work.',
+    landing: 'https://viktor.com/business',
+    ad: 'https://www.facebook.com/ads/library/?id=1596621571891856',
+  },
+  {
+    advertiser: 'Alwize',
+    meta: '1 like · 14 days',
+    funnel: '$19–$29 checkout',
+    signal:
+      'A tiny advertiser sells a prompt vault and “AI employees” as instant-download low-ticket products.',
+    landing: 'https://payhip.com/alwize',
+    ad: 'https://www.facebook.com/ads/library/?id=1065905446106045',
+  },
+  {
+    advertiser: 'Darius Lukas',
+    meta: '2,560 likes · 7 days',
+    funnel: 'Digital product / checkout',
+    signal:
+      'Turns Claude into a named ad production team rather than selling generic AI education.',
+    landing: 'https://hyperentrepreneur.ai/ad-generators-for-claude/',
+    ad: 'https://www.facebook.com/ads/library/?id=1673754477215533',
+  },
+  {
+    advertiser: 'Icon Audit',
+    meta: '25 likes · 43 days',
+    funnel: 'Profile diagnostic',
+    signal:
+      'A clear LinkedIn profile score makes an invisible credibility problem concrete before a bigger engagement.',
+    landing: 'https://iconaudit.com/',
+    ad: 'https://www.facebook.com/ads/library/?id=1923413535036743',
+  },
+  {
+    advertiser: 'Adrienne Weimer',
+    meta: '1,277 likes · 99 days',
+    funnel: 'Free training',
+    signal:
+      'Teaches a LinkedIn client-generation system built around profile, content, and conversations.',
+    landing: 'https://www.adrienneweimer.com/secrets-to-consistent-clients',
+    ad: 'https://www.facebook.com/ads/library/?id=2009670446428299',
+  },
+  {
+    advertiser: 'Broda Coaching',
+    meta: '247 likes · 246 days',
+    funnel: 'Lead magnet',
+    signal:
+      'A long-running small-page ad sends buyers to a narrowly named LinkedIn profile SEO resource.',
+    landing: 'https://get.brodacoaching.com/profile-seo',
+    ad: 'https://www.facebook.com/ads/library/?id=846034444687185',
+  },
+  {
+    advertiser: 'Gojiberry AI',
+    meta: '345 likes · 47 days',
+    funnel: '7-day trial',
+    signal: 'Lets buyers experience a specific LinkedIn lead/reply workflow before paying.',
+    landing: 'https://gojiberry.ai/',
+    ad: 'https://www.facebook.com/ads/library/?id=1058674239822906',
+  },
+  {
+    advertiser: 'Pressmaster.ai',
+    meta: '3,270 likes · 20 days',
+    funnel: 'Trial',
+    signal: 'Sells consistent thought leadership “in your exact voice” through a product trial.',
+    landing: 'https://www.pressmaster.ai/trial-3',
+    ad: 'https://www.facebook.com/ads/library/?id=2081888672750900',
+  },
+  {
+    advertiser: 'Automated Marketer',
+    meta: '656 likes · 52 days',
+    funnel: 'Free GPT lead magnet',
+    signal: 'Five free GPTs each own one funnel job, turning a broad system into concrete tools.',
+    landing:
+      'https://www.udemy.com/course/gohighlevel-masterclass-from-beginner-to-expert/?referralCode=E3A40ED198DDE8D508EF',
+    ad: 'https://www.facebook.com/ads/library/?id=1555188686201837',
+  },
+  {
+    advertiser: 'Content360',
+    meta: '7,877 likes · 53 days',
+    funnel: '$67 lifetime checkout',
+    signal:
+      'Uses ownership and the removal of monthly software fees as the core low-ticket SaaS angle.',
+    landing: 'https://get.content360.io/lifetime-page-3411',
+    ad: 'https://www.facebook.com/ads/library/?id=990957477123197',
+  },
+];
+
+const thresholds = [
+  [
+    'Lead magnet',
+    '≥10% completed lead',
+    '5–9.9%: revise promise or friction',
+    '<5% after 300 views',
+  ],
+  [
+    'Direct-to-call',
+    '≥1.5% booked; ≥65% show',
+    '0.75–1.49%: tighten diagnosis and qualification',
+    '<0.75% after 300 views',
+  ],
+  [
+    'Low-ticket checkout',
+    '≥1.5% purchase; <10% refund',
+    '0.75–1.49%: improve proof, price, or checkout continuity',
+    '<0.75% after 300 views',
+  ],
+  [
+    'Trial / demo',
+    '≥8% start; ≥30% activate',
+    'Starts pass but activation misses: fix product moment',
+    '<4% starts or <15% activation',
+  ],
+  [
+    'Service economics',
+    'Cost per qualified held call ≤ (close rate × project gross profit) ÷ 3',
+    'Pause traffic and repair sales/offer if calls qualify but do not close',
+    'No credible 3× contribution path',
+  ],
+];
+
+const sequence = [
+  {
+    window: 'Days 1–5',
+    title: 'Sell Launch Rescue before building software',
+    actions: [
+      'Publish one direct-to-call page and one eight-question diagnosis.',
+      'Interview five stuck founders; use their exact failure language in the page.',
+      'Offer a manually delivered $49 audit to anyone not ready for a sprint.',
+    ],
+  },
+  {
+    window: 'Days 6–12',
+    title: 'Run the first clean traffic test',
+    actions: [
+      'Test three creatives: half-built app, launch-readiness gap, and first-customer gap.',
+      'Keep one audience and one page so creative is the main variable.',
+      'Do not decide before 300 landing-page views unless there is zero meaningful action after 150.',
+    ],
+  },
+  {
+    window: 'Days 13–20',
+    title: 'Validate the Maestro-led lane manually',
+    actions: [
+      'Create three source-backed sample packets from approved calls or supplied sample data.',
+      'Sell the outcome as a cited growth system, not as generic AI-brain consulting.',
+      'Record which two workflows buyers actually request before expanding Maestro’s promise.',
+    ],
+  },
+  {
+    window: 'Days 21–30',
+    title: 'Choose the business, then automate the repetition',
+    actions: [
+      'Scale only the offer with qualified demand and a credible delivery margin.',
+      'Turn repeated audit steps into Vibe Launch Doctor or AI Brain Auditor features.',
+      'Add ads management only after one offer/funnel pair converts and tracking is trusted.',
+    ],
+  },
+];
+
+const linkClass =
+  'inline-flex min-h-11 items-center rounded-lg bg-secondary px-3 py-2 font-semibold text-secondary-foreground underline decoration-border underline-offset-4 transition-colors hover:bg-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring';
+---
+
+<OfferLayout
+  title="Market Opportunity Plan — Maestro"
+  description="A private, evidence-led offer and funnel test plan for Maestro, owned funnels, services, and adjacent products."
+  noindex={true}
+>
+  <div class="offer-grid min-h-screen">
+    <header class="px-4 pb-16 pt-6 sm:px-6 md:px-12 md:pb-24">
+      <div class="mx-auto max-w-7xl">
+        <nav aria-label="Plan sections" class="flex flex-wrap items-center gap-2">
+          <a
+            href="#main-plan"
+            class="mr-2 inline-flex min-h-11 items-center rounded-lg bg-foreground px-4 py-2 font-mono text-sm font-bold uppercase tracking-[0.14em] text-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+          >
+            Maestro / market plan
+          </a>
+          {
+            navItems.map(([href, label]) => (
+              <a href={href} class={linkClass}>
+                {label}
+              </a>
+            ))
+          }
+        </nav>
+
+        <div id="main-plan" class="pt-20 md:pt-28">
+          <p class="font-mono text-sm font-bold uppercase tracking-[0.18em] text-brand">
+            US Meta research · decision page · August 4, 2026
+          </p>
+          <h1
+            class="mt-5 max-w-6xl text-balance text-5xl font-bold leading-[0.95] tracking-[-0.05em] md:text-7xl"
+          >
+            The market is buying bounded outcomes—<mark class="offer-mark"
+              >not generic services.</mark
+            >
+          </h1>
+          <p class="mt-8 max-w-3xl text-xl leading-relaxed text-muted-foreground md:text-2xl">
+            Lead with a productized <strong class="text-foreground">Launch Rescue</strong> for stuck app
+            founders. Build a second, Maestro-powered <strong class="text-foreground"
+              >Source-Backed Growth System</strong
+            > for agencies, consultants, and founder-led teams. Web development, funnels, ads, and AI-brain
+            work become the delivery stack—not four vague offers.
+          </p>
+          <div class="mt-10 flex flex-wrap gap-3">
+            <a
+              href="#tests"
+              class="offer-cta inline-flex min-h-14 items-center rounded-xl bg-brand px-6 py-4 font-bold text-brand-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+            >
+              See the test order →
+            </a>
+            <a href="#evidence" class={linkClass}>Open the live-funnel evidence</a>
+          </div>
+        </div>
+      </div>
+    </header>
+
+    <main>
+      <section
+        id="recommendation"
+        class="bg-foreground px-4 py-20 text-background sm:px-6 md:px-12"
+        aria-labelledby="recommendation-title"
+      >
+        <div class="mx-auto max-w-7xl">
+          <p class="font-mono text-sm font-bold uppercase tracking-[0.18em] text-brand-soft">
+            Executive recommendation
+          </p>
+          <h2
+            id="recommendation-title"
+            class="mt-4 max-w-5xl text-balance text-4xl font-bold tracking-[-0.035em] md:text-6xl"
+          >
+            Be the team that gets an unfinished asset to revenue—not another agency with a long
+            menu.
+          </h2>
+          <div class="mt-12 grid gap-6 lg:grid-cols-2">
+            {
+              offerLadders.map((ladder, index) => (
+                <article class="rounded-2xl bg-background p-6 text-foreground shadow-sm sm:p-8">
+                  <p class="font-mono text-sm font-bold uppercase tracking-[0.16em] text-brand">
+                    {index === 0 ? 'Lead offer' : 'Maestro-led offer'}
+                  </p>
+                  <h3 class="mt-3 text-3xl font-semibold tracking-tight">{ladder.lane}</h3>
+                  <p class="mt-4 leading-relaxed text-muted-foreground">{ladder.promise}</p>
+                  <div class="mt-6 rounded-xl bg-muted p-5">
+                    <p class="text-lg font-bold">{ladder.headline}</p>
+                    <p class="mt-2 text-sm text-muted-foreground">Primary action: {ladder.cta}</p>
+                  </div>
+                </article>
+              ))
+            }
+          </div>
+          <div
+            class="mt-8 rounded-2xl border border-brand-soft bg-background p-6 text-foreground sm:p-8"
+          >
+            <h3 class="text-2xl font-semibold">Dev agent or ads/funnel agency?</h3>
+            <p class="mt-3 max-w-5xl text-lg leading-relaxed text-muted-foreground">
+              Start as the <strong class="text-foreground"
+                >productized development and launch-rescue studio</strong
+              >. It is more differentiated, easier to scope around an existing artifact, and
+              naturally creates the funnel and acquisition work. Add funnel implementation inside
+              the sprint. Offer a bounded paid-acquisition pilot only after the message and
+              conversion path are credible. A generic ads-management agency would make you
+              accountable for broken offers you did not control.
+            </p>
+          </div>
+        </div>
+      </section>
+
+      <section id="demand" class="px-4 py-20 sm:px-6 md:px-12" aria-labelledby="demand-title">
+        <div class="mx-auto max-w-7xl">
+          <p class="font-mono text-sm font-bold uppercase tracking-[0.18em] text-brand">
+            Observed demand
+          </p>
+          <h2
+            id="demand-title"
+            class="mt-4 max-w-4xl text-4xl font-bold tracking-[-0.035em] md:text-5xl"
+          >
+            What the market appears to want
+          </h2>
+          <p class="mt-5 max-w-3xl text-lg leading-relaxed text-muted-foreground">
+            The repeated pattern is speed plus a boundary: five days, two weeks, 30 days, one
+            workflow, one score, one fixed outcome. Buyers are offered implementation, a tangible
+            sample, or a diagnostic—not “access to expertise.”
+          </p>
+
+          <div class="mt-10 grid grid-cols-2 gap-4 md:grid-cols-5">
+            {
+              researchStats.map((stat) => (
+                <div class="rounded-xl border border-border bg-card p-5 shadow-sm">
+                  <p class="text-3xl font-bold tabular-nums md:text-4xl">{stat.value}</p>
+                  <p class="mt-2 text-sm leading-snug text-muted-foreground">{stat.label}</p>
+                </div>
+              ))
+            }
+          </div>
+
+          <aside
+            class="mt-6 rounded-xl border border-guarantee-border bg-guarantee p-5 text-guarantee-foreground"
+          >
+            <p class="font-bold">Evidence boundary</p>
+            <p class="mt-2 leading-relaxed">
+              Active status, days running, multiple ads, and reachable pages are <strong
+                >persistence signals, not verified profitability</strong
+              >. Meta's public library does not expose spend, purchases, profit, or ROAS. Counts
+              below come from a deliberately targeted sample and are not market-share estimates.
+            </p>
+          </aside>
+
+          <div
+            class="mt-12 overflow-x-auto rounded-xl border border-border bg-card shadow-sm"
+            data-scroll-region
+            tabindex="0"
+            role="region"
+            aria-label="Funnel pattern comparison"
+          >
+            <table class="w-full min-w-[760px] border-collapse text-left">
+              <caption class="sr-only">Funnel patterns in the 150-live-page research sample</caption
+              >
+              <thead class="bg-muted">
+                <tr>
+                  <th scope="col" class="p-4 font-semibold">Funnel pattern</th>
+                  <th scope="col" class="p-4 font-semibold">Live rows</th>
+                  <th scope="col" class="p-4 font-semibold">Median active</th>
+                  <th scope="col" class="p-4 font-semibold">Strategic read</th>
+                </tr>
+              </thead>
+              <tbody>
+                {
+                  funnelSignals.map((row) => (
+                    <tr class="border-t border-border align-top">
+                      <td class="p-4 font-semibold">{row.funnel}</td>
+                      <td class="p-4 font-mono tabular-nums">{row.count}</td>
+                      <td class="p-4">{row.median}</td>
+                      <td class="p-4 leading-relaxed text-muted-foreground">{row.read}</td>
+                    </tr>
+                  ))
+                }
+              </tbody>
+            </table>
+          </div>
+
+          <div class="mt-12 grid gap-6 md:grid-cols-2">
+            {
+              marketSignals.map((item) => (
+                <article class="rounded-xl border border-border bg-card p-6 shadow-sm">
+                  <h3 class="text-2xl font-semibold">{item.capability}</h3>
+                  <p class="mt-4 text-sm font-bold uppercase tracking-[0.1em] text-brand">
+                    Observed signal
+                  </p>
+                  <p class="mt-2 leading-relaxed text-muted-foreground">{item.signal}</p>
+                  <p class="mt-5 text-sm font-bold uppercase tracking-[0.1em] text-brand">
+                    What buyers are asking for
+                  </p>
+                  <p class="mt-2 leading-relaxed text-muted-foreground">{item.wants}</p>
+                  <p class="mt-5 text-sm font-bold uppercase tracking-[0.1em] text-brand">
+                    Recommendation
+                  </p>
+                  <p class="mt-2 leading-relaxed">{item.sell}</p>
+                </article>
+              ))
+            }
+          </div>
+
+          <div class="mt-10 grid gap-6 lg:grid-cols-2">
+            <article class="rounded-xl border border-border bg-card p-6 shadow-sm">
+              <h3 class="text-2xl font-semibold">Curious Coder / Apify</h3>
+              <p class="mt-3 leading-relaxed text-muted-foreground">
+                Best for inexpensive bulk discovery, exact ad IDs, creative URLs, landing URLs, and
+                raw copy. The deep plus pilot runs produced 3,275 rows for about $2.46. Weaknesses:
+                dynamic-creative placeholders, noisy price extraction, duplicates, and the need to
+                validate redirects and relevance yourself.
+              </p>
+            </article>
+            <article class="rounded-xl border border-border bg-card p-6 shadow-sm">
+              <h3 class="text-2xl font-semibold">AdKit</h3>
+              <p class="mt-3 leading-relaxed text-muted-foreground">
+                Best for keeping selected advertisers attached to Maestro and handing them into an
+                ongoing scan/research workflow. Twenty-six new advertisers were queued and three
+                matched existing records; scans were still pending. It is less useful than the raw
+                scraper for fast, exhaustive first-pass discovery.
+              </p>
+            </article>
+          </div>
+        </div>
+      </section>
+
+      <section
+        id="portfolio"
+        class="section-muted px-4 py-20 sm:px-6 md:px-12"
+        aria-labelledby="portfolio-title"
+      >
+        <div class="mx-auto max-w-7xl">
+          <p class="font-mono text-sm font-bold uppercase tracking-[0.18em] text-brand">
+            Current portfolio
+          </p>
+          <h2
+            id="portfolio-title"
+            class="mt-4 max-w-4xl text-4xl font-bold tracking-[-0.035em] md:text-5xl"
+          >
+            The checkout products exist. The service bridges do not.
+          </h2>
+          <div
+            class="mt-10 overflow-x-auto rounded-xl border border-border bg-card shadow-sm"
+            data-scroll-region
+            tabindex="0"
+            role="region"
+            aria-label="Existing funnel portfolio"
+          >
+            <table class="w-full min-w-[980px] border-collapse text-left">
+              <caption class="sr-only"
+                >Existing funnel portfolio and missing acquisition bridges</caption
+              >
+              <thead class="bg-background">
+                <tr>
+                  <th scope="col" class="p-4 font-semibold">Offer</th>
+                  <th scope="col" class="p-4 font-semibold">Funnel</th>
+                  <th scope="col" class="p-4 font-semibold">Entry</th>
+                  <th scope="col" class="p-4 font-semibold">Current truth</th>
+                  <th scope="col" class="p-4 font-semibold">Next gap</th>
+                </tr>
+              </thead>
+              <tbody>
+                {
+                  currentFunnels.map((row) => (
+                    <tr class="border-t border-border align-top">
+                      <td class="p-4 font-semibold">{row.offer}</td>
+                      <td class="p-4">{row.mode}</td>
+                      <td class="p-4">{row.entry}</td>
+                      <td class="p-4 leading-relaxed text-muted-foreground">{row.truth}</td>
+                      <td class="p-4 leading-relaxed">{row.gap}</td>
+                    </tr>
+                  ))
+                }
+              </tbody>
+            </table>
+          </div>
+
+          <div class="mt-12 grid gap-8 lg:grid-cols-2">
+            {
+              offerLadders.map((ladder) => (
+                <article class="rounded-2xl border border-border bg-card p-6 shadow-sm sm:p-8">
+                  <p class="font-mono text-sm font-bold uppercase tracking-[0.16em] text-brand">
+                    Offer ladder
+                  </p>
+                  <h3 class="mt-3 text-3xl font-semibold">{ladder.lane}</h3>
+                  <p class="mt-3 leading-relaxed text-muted-foreground">{ladder.buyer}</p>
+                  <ol class="mt-8 space-y-5">
+                    {ladder.steps.map(([stage, offer, description], index) => (
+                      <li class="grid grid-cols-[2.5rem_1fr] gap-3">
+                        <span
+                          class="grid size-10 place-items-center rounded-full bg-foreground font-mono font-bold text-background"
+                          aria-hidden="true"
+                        >
+                          {index + 1}
+                        </span>
+                        <div>
+                          <p class="font-mono text-xs font-bold uppercase tracking-[0.12em] text-brand">
+                            {stage}
+                          </p>
+                          <p class="mt-1 text-lg font-semibold">{offer}</p>
+                          <p class="mt-1 leading-relaxed text-muted-foreground">{description}</p>
+                        </div>
+                      </li>
+                    ))}
+                  </ol>
+                </article>
+              ))
+            }
+          </div>
+        </div>
+      </section>
+
+      <section id="tests" class="px-4 py-20 sm:px-6 md:px-12" aria-labelledby="tests-title">
+        <div class="mx-auto max-w-7xl">
+          <p class="font-mono text-sm font-bold uppercase tracking-[0.18em] text-brand">
+            Prioritized experiments
+          </p>
+          <h2
+            id="tests-title"
+            class="mt-4 max-w-5xl text-4xl font-bold tracking-[-0.035em] md:text-5xl"
+          >
+            Test service demand first. Build software from paid repetition.
+          </h2>
+          <p class="mt-5 max-w-3xl text-lg leading-relaxed text-muted-foreground">
+            Run priorities 1–4 before expanding the portfolio. Each test has one buyer, one promise,
+            one conversion event, and a decision rule. Prices are hypotheses until scope, margin,
+            and delivery capacity are confirmed.
+          </p>
+
+          <div class="mt-10 space-y-6">
+            {
+              experiments.map((test) => (
+                <article class="rounded-2xl border border-border bg-card p-6 shadow-sm sm:p-8">
+                  <div class="flex flex-col gap-4 md:flex-row md:items-start md:justify-between">
+                    <div>
+                      <p class="font-mono text-sm font-bold uppercase tracking-[0.16em] text-brand">
+                        Priority {test.priority} · {test.funnel}
+                      </p>
+                      <h3 class="mt-2 text-3xl font-semibold tracking-tight">{test.offer}</h3>
+                      <p class="mt-2 max-w-3xl leading-relaxed text-muted-foreground">
+                        {test.audience}
+                      </p>
+                    </div>
+                    <span class="inline-flex min-h-11 items-center self-start rounded-full bg-highlight px-4 py-2 font-semibold text-highlight-foreground">
+                      Test {test.priority}
+                    </span>
+                  </div>
+                  <div class="mt-6 grid gap-4 lg:grid-cols-3">
+                    <div class="rounded-xl bg-muted p-5">
+                      <p class="text-sm font-bold uppercase tracking-[0.1em] text-brand">Build</p>
+                      <p class="mt-2 leading-relaxed">{test.build}</p>
+                    </div>
+                    <div class="rounded-xl bg-muted p-5">
+                      <p class="text-sm font-bold uppercase tracking-[0.1em] text-brand">
+                        Ad angle
+                      </p>
+                      <p class="mt-2 leading-relaxed">{test.angle}</p>
+                    </div>
+                    <div class="rounded-xl bg-muted p-5">
+                      <p class="text-sm font-bold uppercase tracking-[0.1em] text-brand">
+                        Pass rule
+                      </p>
+                      <p class="mt-2 leading-relaxed">{test.pass}</p>
+                    </div>
+                  </div>
+                </article>
+              ))
+            }
+          </div>
+
+          <div
+            class="mt-12 overflow-x-auto rounded-xl border border-border bg-card shadow-sm"
+            data-scroll-region
+            tabindex="0"
+            role="region"
+            aria-label="Funnel test decision thresholds"
+          >
+            <table class="w-full min-w-[900px] border-collapse text-left">
+              <caption class="sr-only"
+                >Shared pass, iterate, and kill rules for funnel tests</caption
+              >
+              <thead class="bg-muted">
+                <tr>
+                  <th scope="col" class="p-4 font-semibold">Funnel</th>
+                  <th scope="col" class="p-4 font-semibold">Pass</th>
+                  <th scope="col" class="p-4 font-semibold">Iterate</th>
+                  <th scope="col" class="p-4 font-semibold">Kill / pause</th>
+                </tr>
+              </thead>
+              <tbody>
+                {
+                  thresholds.map(([funnel, pass, iterate, kill]) => (
+                    <tr class="border-t border-border align-top">
+                      <td class="p-4 font-semibold">{funnel}</td>
+                      <td class="p-4 text-success">{pass}</td>
+                      <td class="p-4">{iterate}</td>
+                      <td class="p-4 text-destructive">{kill}</td>
+                    </tr>
+                  ))
+                }
+              </tbody>
+            </table>
+          </div>
+          <p class="mt-4 text-sm leading-relaxed text-muted-foreground">
+            These are initial decision thresholds, not universal benchmarks. Track landing-page
+            views—not link clicks—and diagnose creative separately from page conversion. A cheap
+            lead that never qualifies is a failed test.
+          </p>
+        </div>
+      </section>
+
+      <section
+        class="bg-foreground px-4 py-20 text-background sm:px-6 md:px-12"
+        aria-labelledby="services-title"
+      >
+        <div class="mx-auto max-w-7xl">
+          <p class="font-mono text-sm font-bold uppercase tracking-[0.18em] text-brand-soft">
+            Service decisions
+          </p>
+          <h2
+            id="services-title"
+            class="mt-4 max-w-5xl text-4xl font-bold tracking-[-0.035em] md:text-5xl"
+          >
+            Keep all four capabilities. Change what the customer thinks they are buying.
+          </h2>
+          <div class="mt-10 grid gap-6 md:grid-cols-2">
+            {
+              serviceDecisions.map((item) => (
+                <article class="rounded-2xl bg-background p-6 text-foreground shadow-sm sm:p-8">
+                  <p class="font-mono text-sm font-bold uppercase tracking-[0.14em] text-brand">
+                    {item.service}
+                  </p>
+                  <h3 class="mt-3 text-2xl font-semibold">{item.verdict}</h3>
+                  <p class="mt-5 font-semibold">Package</p>
+                  <p class="mt-2 leading-relaxed text-muted-foreground">{item.offer}</p>
+                  <p class="mt-5 font-semibold">Avoid</p>
+                  <p class="mt-2 leading-relaxed text-muted-foreground">{item.avoid}</p>
+                </article>
+              ))
+            }
+          </div>
+        </div>
+      </section>
+
+      <section id="products" class="px-4 py-20 sm:px-6 md:px-12" aria-labelledby="products-title">
+        <div class="mx-auto max-w-7xl">
+          <p class="font-mono text-sm font-bold uppercase tracking-[0.18em] text-brand">
+            Build candidates
+          </p>
+          <h2
+            id="products-title"
+            class="mt-4 max-w-4xl text-4xl font-bold tracking-[-0.035em] md:text-5xl"
+          >
+            Digital and SaaS candidates
+          </h2>
+          <p class="mt-5 max-w-3xl text-lg leading-relaxed text-muted-foreground">
+            The best builds are diagnostics and sample outputs that expose a problem, use assets
+            already in Maestro or the funnel repos, and create a natural implementation path.
+            Deliver them manually before turning the repeated work into software.
+          </p>
+          <div
+            class="mt-10 overflow-x-auto rounded-xl border border-border bg-card shadow-sm"
+            data-scroll-region
+            tabindex="0"
+            role="region"
+            aria-label="Digital and SaaS candidate comparison"
+          >
+            <table class="w-full min-w-[1000px] border-collapse text-left">
+              <caption class="sr-only"
+                >Ranked adjacent digital and SaaS product opportunities</caption
+              >
+              <thead class="bg-muted">
+                <tr>
+                  <th scope="col" class="p-4 font-semibold">Rank</th>
+                  <th scope="col" class="p-4 font-semibold">Candidate</th>
+                  <th scope="col" class="p-4 font-semibold">Role</th>
+                  <th scope="col" class="p-4 font-semibold">Why it fits</th>
+                  <th scope="col" class="p-4 font-semibold">First validation</th>
+                  <th scope="col" class="p-4 font-semibold">Decision</th>
+                </tr>
+              </thead>
+              <tbody>
+                {
+                  productCandidates.map((item) => (
+                    <tr class="border-t border-border align-top">
+                      <td class="p-4 font-mono text-2xl font-bold">{item.rank}</td>
+                      <td class="p-4 font-semibold">{item.name}</td>
+                      <td class="p-4">{item.type}</td>
+                      <td class="p-4 leading-relaxed text-muted-foreground">{item.why}</td>
+                      <td class="p-4 leading-relaxed">{item.firstTest}</td>
+                      <td class="p-4">
+                        <span class="inline-flex rounded-full bg-highlight px-3 py-1 font-semibold text-highlight-foreground">
+                          {item.decision}
+                        </span>
+                      </td>
+                    </tr>
+                  ))
+                }
+              </tbody>
+            </table>
+          </div>
+
+          <div class="mt-12 rounded-2xl border border-destructive bg-card p-6 sm:p-8">
+            <h3 class="text-3xl font-semibold">Do not build these now</h3>
+            <div class="mt-6 grid gap-4 md:grid-cols-2">
+              {
+                avoidProducts.map(([name, reason]) => (
+                  <article class="rounded-xl bg-muted p-5">
+                    <h4 class="text-lg font-semibold">{name}</h4>
+                    <p class="mt-2 leading-relaxed text-muted-foreground">{reason}</p>
+                  </article>
+                ))
+              }
+            </div>
+          </div>
+
+          <aside class="mt-10 rounded-2xl border border-brand bg-card p-6 sm:p-8">
+            <h3 class="text-2xl font-semibold">The strongest Maestro offer</h3>
+            <p class="mt-3 max-w-5xl text-lg leading-relaxed text-muted-foreground">
+              Start with <strong class="text-foreground"
+                >one call → source-backed claims → one reviewable LinkedIn draft</strong
+              >. Then expand the service into a cited company Brain, sales-call signals, funnel
+              messaging, and a recurring human-reviewed content operation. Do not advertise native
+              LinkedIn publishing, autonomous content operations, public self-serve pricing, or a
+              done-for-you Maestro tier until those product and delivery gates are actually ready.
+            </p>
+          </aside>
+        </div>
+      </section>
+
+      <section
+        id="evidence"
+        class="section-muted px-4 py-20 sm:px-6 md:px-12"
+        aria-labelledby="evidence-title"
+      >
+        <div class="mx-auto max-w-7xl">
+          <p class="font-mono text-sm font-bold uppercase tracking-[0.18em] text-brand">
+            Competitive funnel library
+          </p>
+          <h2
+            id="evidence-title"
+            class="mt-4 max-w-5xl text-4xl font-bold tracking-[-0.035em] md:text-5xl"
+          >
+            24 live funnels worth opening
+          </h2>
+          <p class="mt-5 max-w-4xl text-lg leading-relaxed text-muted-foreground">
+            These are the smaller, stranger, or especially relevant examples—not a list of proven
+            winners. Each row preserves the exact captured landing page and direct Meta Ad Library
+            record. The full 159-row sheet is at <code
+              class="rounded bg-background px-2 py-1 font-mono text-sm"
+              >/Users/headless/ad-research/meta-ads-live-shortlist.csv</code
+            >.
+          </p>
+
+          <div
+            class="mt-10 overflow-x-auto rounded-xl border border-border bg-card shadow-sm"
+            data-scroll-region
+            tabindex="0"
+            role="region"
+            aria-label="Competitive funnel library"
+          >
+            <table class="w-full min-w-[1080px] border-collapse text-left">
+              <caption class="sr-only"
+                >Representative active Meta advertisers and their exact funnel links</caption
+              >
+              <thead class="bg-background">
+                <tr>
+                  <th scope="col" class="p-4 font-semibold">Advertiser</th>
+                  <th scope="col" class="p-4 font-semibold">Funnel</th>
+                  <th scope="col" class="p-4 font-semibold">Observed signal</th>
+                  <th scope="col" class="p-4 font-semibold">Open</th>
+                </tr>
+              </thead>
+              <tbody>
+                {
+                  evidence.map((item) => (
+                    <tr class="border-t border-border align-top">
+                      <td class="p-4">
+                        <p class="font-semibold">{item.advertiser}</p>
+                        <p class="mt-1 text-sm text-muted-foreground">{item.meta}</p>
+                      </td>
+                      <td class="p-4">{item.funnel}</td>
+                      <td class="p-4 leading-relaxed text-muted-foreground">{item.signal}</td>
+                      <td class="p-4">
+                        <div class="flex min-w-[11rem] flex-col gap-2">
+                          <a href={item.landing} target="_blank" rel="noreferrer" class={linkClass}>
+                            Open landing page ↗
+                          </a>
+                          <a href={item.ad} target="_blank" rel="noreferrer" class={linkClass}>
+                            Open Meta ad ↗
+                          </a>
+                        </div>
+                      </td>
+                    </tr>
+                  ))
+                }
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </section>
+
+      <section id="sequence" class="px-4 py-20 sm:px-6 md:px-12" aria-labelledby="sequence-title">
+        <div class="mx-auto max-w-7xl">
+          <p class="font-mono text-sm font-bold uppercase tracking-[0.18em] text-brand">
+            Execution order
+          </p>
+          <h2
+            id="sequence-title"
+            class="mt-4 max-w-4xl text-4xl font-bold tracking-[-0.035em] md:text-5xl"
+          >
+            The next 30 days
+          </h2>
+          <div class="mt-10 grid gap-6 md:grid-cols-2">
+            {
+              sequence.map((phase) => (
+                <article class="rounded-2xl border border-border bg-card p-6 shadow-sm sm:p-8">
+                  <p class="font-mono text-sm font-bold uppercase tracking-[0.16em] text-brand">
+                    {phase.window}
+                  </p>
+                  <h3 class="mt-3 text-2xl font-semibold">{phase.title}</h3>
+                  <ul class="mt-5 space-y-3 text-muted-foreground">
+                    {phase.actions.map((action) => (
+                      <li class="flex gap-3 leading-relaxed">
+                        <span
+                          class="mt-2 size-2 shrink-0 rounded-full bg-brand"
+                          aria-hidden="true"
+                        />
+                        <span>{action}</span>
+                      </li>
+                    ))}
+                  </ul>
+                </article>
+              ))
+            }
+          </div>
+
+          <div class="mt-12 rounded-2xl bg-foreground p-8 text-background md:p-12">
+            <p class="font-mono text-sm font-bold uppercase tracking-[0.16em] text-brand-soft">
+              Bottom line
+            </p>
+            <h3 class="mt-4 max-w-5xl text-3xl font-semibold tracking-tight md:text-5xl">
+              Sell the rescue. Prove the system. Let paid delivery tell you what software to build.
+            </h3>
+            <p class="mt-5 max-w-3xl text-lg leading-relaxed text-brand-soft">
+              The first offer should get a stuck product to launch. The second should turn real
+              company evidence into a cited growth system through Maestro. Funnel builds and ads
+              become expansions after those wedges earn demand.
+            </p>
+            <div class="mt-8 flex flex-wrap gap-3">
+              <a
+                href="#tests"
+                class="offer-cta inline-flex min-h-14 items-center rounded-xl bg-brand px-6 py-4 font-bold text-brand-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                >Return to the test order ↑</a
+              >
+              <a
+                href="#main-plan"
+                class="inline-flex min-h-14 items-center rounded-xl bg-background px-6 py-4 font-bold text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                >Back to the recommendation</a
+              >
+            </div>
+          </div>
+        </div>
+      </section>
+    </main>
+
+    <footer class="border-t border-border bg-card px-4 py-10 sm:px-6 md:px-12">
+      <div
+        class="mx-auto flex max-w-7xl flex-col gap-2 text-sm text-muted-foreground md:flex-row md:items-center md:justify-between"
+      >
+        <p>
+          Prepared from US active Meta ads and current repository product truth on August 4, 2026.
+        </p>
+        <p>Internal strategy · noindex · links may change after capture.</p>
+      </div>
+    </footer>
+  </div>
+</OfferLayout>
