@@ -882,7 +882,7 @@ async function contextExchange(request: Request, env: CollectorEnv): Promise<Res
     !validatePrivacySnapshot(exchange.privacy_snapshot)
   )
     return jsonError('invalid_context', 403, request, env);
-  const expiresAt = new Date(Date.now() + 10 * 60_000).toISOString();
+  const expiresAt = new Date(Date.now() + 7 * 24 * 60 * 60_000).toISOString();
   const digest = await crypto.subtle.digest('SHA-256', crypto.getRandomValues(new Uint8Array(32)));
   const contextHash = Array.from(new Uint8Array(digest), (byte) => byte.toString(16).padStart(2, '0')).join('');
   const now = new Date().toISOString();
