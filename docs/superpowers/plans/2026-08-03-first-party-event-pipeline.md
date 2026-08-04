@@ -49,6 +49,12 @@ Wrangler, and Woodpecker.
 - Queue and remote delivery are at-least-once and unordered. Never claim
   exactly-once remote delivery; every retry preserves the same event and
   destination key.
+- `POST /v1/source-events` accepts the versioned `SourceEventEnvelope`, not a
+  full `CanonicalEvent` or browser event body. The Worker validates the scoped
+  source envelope, resolves its context, and constructs exactly one canonical
+  event before persistence. Reduced Pages/Convex outbox rows are valid only
+  when they satisfy this bridge contract, with an end-to-end producer-to-Worker
+  acceptance fixture.
 - Events are exactly `PageView`, `Lead`, `InitiateCheckout`, and
 `Purchase`. No open-ended browser `properties` bag is permitted.
 - Canonical and destination schemas are discriminated by `event_name`: each
@@ -996,6 +1002,12 @@ non-preselected banner with `Accept all`, `Reject all`, and `Customize`, equal
 reject/accept affordances, keyboard focus order, reopen/withdrawal, stale-policy
 reset, and no tracking request while unresolved. Assert GPC wins over stored
 opt-in and that Pixel/bootstrap cannot race ahead of the privacy gate.
+Assert `/v1/bootstrap` is the first collector call after an allowed choice, that
+it issues signed visitor/session context only when permitted, and that the
+returned context binds the subsequent PageView. Assert every
+Accept/Reject/Customize/Withdraw action POSTs a versioned choice to the Worker
+privacy ledger; localStorage is only a UI cache, never the server-side consent
+authority.
 
 If an existing consent banner cannot be identified in Task 1, this task owns
 one accessible banner plus preferences/withdrawal control wired to the
@@ -1004,7 +1016,8 @@ necessary checkout and must honor GPC.
 
 - [ ] **Step 2: Replace the legacy Pixel boundary with one shared tracker**
 
-The new component loads only the configured Pixel and exposes one
+The new component calls the consent-gated `/v1/bootstrap` before loading the
+configured Pixel and exposes one
 `eventID`-keyed PageView call. Only `collectPageView` sends the same event ID to
 `https://events.shop.maestrogtm.com/v1/events` with `credentials: 'include'`.
 Navigation PageViews use beacon-compatible collection. It never sends Tinybird
