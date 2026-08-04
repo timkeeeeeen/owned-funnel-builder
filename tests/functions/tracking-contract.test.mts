@@ -77,6 +77,14 @@ test('rejects unknown, sensitive, and oversized event fields', () => {
   assert.throws(() => validateCanonicalEvent({ ...event, commerce: { properties: {} } }));
 });
 
+test('accepts the date-shaped privacy policy version', () => {
+  const canonical = validateCanonicalEvent({
+    ...event,
+    privacy: { policy_version: '2026-08-04' },
+  });
+  assert.equal(canonical.privacy.policy_version, '2026-08-04');
+});
+
 test('accepts only closed destination projections', () => {
   assert.equal(
     validateDestinationProjection({

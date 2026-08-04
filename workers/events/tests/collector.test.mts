@@ -3,6 +3,7 @@ import { DatabaseSync } from 'node:sqlite';
 import { test } from 'node:test';
 
 import { default as worker } from '../src/index.ts';
+import { sourceEnvelopeToCanonical, sourceRuntimeReady } from '../src/collector.ts';
 import { issueSignedCookie } from '../../../functions/_lib/tracking-cookie.ts';
 
 type Bind = string | number | null;
@@ -57,7 +58,16 @@ async function env() {
     TRACKING_POLICY_VERSION: '2026-08',
     TRACKING_REGION: 'US',
     TRACKING_FAIL_CLOSED: false,
-    TRACKING_CONTEXT_VERIFY: (context: { context_hash: string }) => context.context_hash === 'a'.repeat(64),
+    TRACKING_CONTEXT_VERIFY: (hash: string) => hash === 'a'.repeat(64)
+      ? {
+          tenant_id: 'tenant_demo',
+          site_id: 'site_demo',
+          funnel_id: 'owned-funnel-builder',
+          subject_id: 'worker-subject',
+          subject_deleted: false,
+          policy_version: '2026-08-04',
+        }
+      : null,
     __database: database,
   } as const;
 }
@@ -80,12 +90,6 @@ function request(path: string, init: RequestInit = {}) {
       origin: 'https://shop.example.test',
       'content-type': 'application/json',
       'x-tracking-context-hash': 'a'.repeat(64),
-      'x-tracking-context-tenant': 'tenant_demo',
-      'x-tracking-context-site': 'site_demo',
-      'x-tracking-context-funnel': 'owned-funnel-builder',
-      'x-tracking-context-subject': 'visitor_1',
-      'x-tracking-context-subject-deleted': 'false',
-      'x-tracking-context-policy-version': '2026-08',
       ...init.headers,
     },
   });
@@ -104,9 +108,9 @@ const pageView = (overrides: Record<string, unknown> = {}) => ({
   session: { id: 'session_1' },
   page: { path: '/owned-funnel-builder', type: 'offer' },
   attribution: { fbclid: 'fbclid_1', fbp: 'fb.1.1', fbc: 'fb.1.2' },
-  identity: { visitor_id: 'visitor_1', funnel_id: 'owned-funnel-builder', external_id: 'external_1' },
+  identity: {},
   commerce: {},
-  privacy: { policy_version: '2026-08', region: 'US', gpc: false, opted_out: false },
+  privacy: { policy_version: '2026-08-04', region: 'US', gpc: false, opted_out: false },
   ...overrides,
 });
 
@@ -196,6 +200,65 @@ test('collector rejects a context binding that does not verify', async () => {
   assert.equal(response.status, 403);
 });
 
+test('collector rejects stale, deleted, and cross-funnel context snapshots', async () => {
+  const bindings = await env();
+  for (const context of [
+    { policy_version: 'old' },
+    { subject_deleted: true },
+    { funnel_id: 'other-funnel' },
+  ]) {
+    const response = await worker.fetch(
+      request('/v1/events', { method: 'POST', body: JSON.stringify(pageView()) }),
+      {
+        ...bindings,
+        TRACKING_CONTEXT_VERIFY: () => ({
+          tenant_id: 'tenant_demo',
+          site_id: 'site_demo',
+          funnel_id: 'owned-funnel-builder',
+          subject_id: 'worker-subject',
+          subject_deleted: false,
+          policy_version: '2026-08-04',
+          ...context,
+        }),
+      },
+      {} as never
+    );
+    assert.equal(response.status, 403);
+  }
+});
+
+test('source runtime readiness requires the launch dependencies', () => {
+  assert.equal(sourceRuntimeReady('pages', [{
+    source: 'pages',
+    source_sha: 'a'.repeat(40),
+    status: 'enabled',
+    context_verifier: 'signed',
+    outbox_reconciliation_owner: 'maestro-platform',
+    dodo_ownership_readback: 'verified',
+  }]), true);
+});
+
+test('source bridge rejects raw buyer context', () => {
+  assert.throws(() => sourceEnvelopeToCanonical(
+    {
+      schema_version: '1',
+      event_id: 'initiate_checkout:session_1',
+      event_name: 'InitiateCheckout',
+      occurred_at: '2026-08-04T12:00:00.000Z',
+      context_hash: 'a'.repeat(64),
+      identity: { lead_id: 'lead_1', funnel_id: 'owned-funnel-builder' },
+      commerce: { content_ids: ['owned-funnel-builder'], content_type: 'product' },
+      privacy: { policy_version: '2026-08-04', region: 'US', gpc: false, opted_out: false },
+      buyer_context: {
+        attribution: { fbclid: 'browser-controlled' },
+        event_source_url: 'https://evil.example.test/controlled-path',
+      },
+    },
+    'pages',
+    { TRACKING_TENANT_ID: 'tenant_demo', TRACKING_SITE_ID: 'site_demo' } as never
+  ));
+});
+
 test('health output is probe-safe and never echoes secrets or raw identity', async () => {
   const bindings = await env();
   const response = await worker.fetch(
@@ -217,7 +280,7 @@ test('GPC suppresses advertising browser events without turning the signal into 
       headers: { 'sec-gpc': '1' },
       body: JSON.stringify(
         pageView({
-          privacy: { policy_version: '2026-08', region: 'US', gpc: true, opted_out: false },
+          privacy: { policy_version: '2026-08-04', region: 'US', gpc: true, opted_out: false },
         })
       ),
     }),

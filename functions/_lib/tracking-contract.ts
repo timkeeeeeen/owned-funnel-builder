@@ -240,7 +240,11 @@ function allowedObject(
     if (!allowed.has(key) || /(?:email|phone|token|properties)/i.test(key))
       invalid(`${name}.${key} is not allowed`);
     const type = types[key] ?? 'string';
-    if (type === 'string')
+    if (key === 'policy_version') {
+      if (typeof field !== 'string' || !/^\d{4}-\d{2}-\d{2}$/.test(field))
+        invalid(`${name}.${key} must be a date-shaped policy version`);
+      output[key] = field;
+    } else if (type === 'string')
       output[key] =
         key === 'user_agent'
           ? safeString(field, `${name}.${key}`, 512, true)
