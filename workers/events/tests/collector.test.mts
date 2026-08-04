@@ -779,7 +779,7 @@ test('privacy request returns only a request id and state', async () => {
   const response = await worker.fetch(
     request('/v1/privacy/requests', {
       method: 'POST',
-      headers: { cookie: visitorCookie },
+      headers: { cookie: visitorCookie, origin: 'https://shop.example.test' },
       body: JSON.stringify({ request_type: 'deletion', subject_key: 'self' }),
     }),
     bindings as never,
