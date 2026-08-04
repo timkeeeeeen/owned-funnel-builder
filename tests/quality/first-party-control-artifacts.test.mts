@@ -6,6 +6,7 @@ import test from 'node:test';
 import {
   projectPermittedFields,
   validateTrackingArtifacts,
+  validateTrackingLaunchReadiness,
   type TrackingFieldRule,
 } from '../../functions/_lib/tracking-policy.ts';
 import type { CanonicalEvent } from '../../functions/_lib/tracking-contract.ts';
@@ -50,6 +51,7 @@ test('checked-in tracking controls have accountable versioned schemas', async ()
       'config/trusted-hosts.json',
       'config/source-runtime-manifest.json',
       'config/rollout-state.json',
+      'config/provider-capabilities.json',
     ].map(artifact)
   );
   for (const control of controls) {
@@ -64,20 +66,12 @@ test('checked-in tracking controls have accountable versioned schemas', async ()
     ['trustedHosts', controls[2]],
     ['sourceRuntimeManifest', controls[3]],
     ['rolloutState', controls[4]],
+    ['providerCapabilities', controls[5]],
   ]));
 });
 
-test('field policy removes advertising context before canonical persistence', () => {
+test('field policy fails closed for unknown and identity-authority fields', () => {
   const policy: TrackingFieldRule[] = [
-    {
-      field: 'page.path',
-      purposes: ['analytics'],
-      sources: ['pages'],
-      destinations: ['tinybird'],
-      ttl_seconds: 2_160_000,
-      redaction: 'omit',
-      provenance: 'browser',
-    },
     {
       field: 'geo.country',
       purposes: ['analytics'],
@@ -99,33 +93,72 @@ test('field policy removes advertising context before canonical persistence', ()
       })
     ),
   ];
-  const unsafe = event() as CanonicalEvent & { device: Record<string, string | number> };
+  const unsafe = event() as CanonicalEvent & {
+    device: Record<string, string | number>;
+    visitor: Record<string, string>;
+    session: Record<string, string>;
+    attribution: Record<string, string>;
+  };
   unsafe.device.ip = '192.0.2.1';
+  unsafe.visitor.authority = 'browser-visitor';
+  unsafe.session.authority = 'browser-session';
+  unsafe.attribution.unknown = 'unlisted';
 
   const projected = projectPermittedFields(unsafe, decisions(['necessary', 'analytics']), policy);
 
   assert.deepEqual(projected.attribution, {});
   assert.deepEqual(projected.device, {});
-  assert.deepEqual(projected.geo, { country: 'US' });
-  assert.deepEqual(projected.page, { path: '/offer' });
+  assert.deepEqual(projected.geo, { country: 'North America' });
+  assert.deepEqual(projected.page, {});
+  assert.deepEqual(projected.visitor, {});
+  assert.deepEqual(projected.session, {});
 });
 
-test('control validation fails closed for unsafe launch inputs', async () => {
-  const [privacyPolicy, fieldPolicy, trustedHosts, sourceRuntimeManifest, rolloutState] = await Promise.all(
+test('field redaction omits raw values and only retains approved hmac or buckets', () => {
+  const base = {
+    purposes: ['analytics'] as PrivacyDecision['purpose'][],
+    sources: ['pages'] as const,
+    destinations: ['tinybird'] as const,
+    ttl_seconds: 60,
+    provenance: 'browser' as const,
+  };
+  const policy: TrackingFieldRule[] = [
+    { ...base, field: 'page.path', redaction: 'omit' },
+    { ...base, field: 'attribution.utm_source', redaction: 'hmac' },
+    { ...base, field: 'geo.country', redaction: 'bucket', provenance: 'server' },
+  ];
+  const input = event() as CanonicalEvent & { attribution: Record<string, string> };
+  input.attribution = { utm_source: 'newsletter' };
+  const projected = projectPermittedFields(input, decisions(['analytics']), policy, {
+    hmac: () => 'a'.repeat(64),
+  });
+
+  assert.deepEqual(projected.page, {});
+  assert.deepEqual(projected.attribution, { utm_source: 'a'.repeat(64) });
+  assert.deepEqual(projected.geo, { country: 'North America' });
+  assert.deepEqual(
+    projectPermittedFields(input, decisions(['analytics']), policy).attribution,
+    {}
+  );
+});
+
+test('control validation rejects incomplete safety fields and empty field scopes', async () => {
+  const [privacyPolicy, fieldPolicy, trustedHosts, sourceRuntimeManifest, rolloutState, providerCapabilities] = await Promise.all(
     [
       'config/privacy-policy.json',
       'config/tracking-field-policy.json',
       'config/trusted-hosts.json',
       'config/source-runtime-manifest.json',
       'config/rollout-state.json',
+      'config/provider-capabilities.json',
     ].map(artifact)
   );
-  const controls = { privacyPolicy, fieldPolicy, trustedHosts, sourceRuntimeManifest, rolloutState };
+  const controls = { privacyPolicy, fieldPolicy, trustedHosts, sourceRuntimeManifest, rolloutState, providerCapabilities };
 
   for (const unsafe of [
     { ...controls, fieldPolicy: { ...fieldPolicy, rules: [{ field: 'source.unlisted' }] } },
+    { ...controls, fieldPolicy: { ...fieldPolicy, rules: [{ ...((fieldPolicy.rules as unknown[])[0] as object), purposes: [] }] } },
     { ...controls, trustedHosts: { ...trustedHosts, hosts: [{ host: 'events.workers.dev' }] } },
-    { ...controls, sourceRuntimeManifest: { ...sourceRuntimeManifest, runtimes: [{ source_sha: 'UNPINNED' }] } },
     {
       ...controls,
       rolloutState: {
@@ -136,4 +169,56 @@ test('control validation fails closed for unsafe launch inputs', async () => {
   ]) {
     assert.throws(() => validateTrackingArtifacts(unsafe));
   }
+});
+
+test('launch readiness requires exact source SHAs and verified provider readback', async () => {
+  const [privacyPolicy, fieldPolicy, trustedHosts, sourceRuntimeManifest, rolloutState, providerCapabilities] = await Promise.all(
+    [
+      'config/privacy-policy.json',
+      'config/tracking-field-policy.json',
+      'config/trusted-hosts.json',
+      'config/source-runtime-manifest.json',
+      'config/rollout-state.json',
+      'config/provider-capabilities.json',
+    ].map(artifact)
+  );
+  const controls = { privacyPolicy, fieldPolicy, trustedHosts, sourceRuntimeManifest, rolloutState, providerCapabilities };
+  validateTrackingArtifacts(controls);
+  assert.throws(() => validateTrackingLaunchReadiness(controls));
+  assert.throws(() => validateTrackingArtifacts({
+    ...controls,
+    providerCapabilities: {
+      ...providerCapabilities,
+      providers: [{ destination: 'tinybird', enabled: true, readback: { status: 'unverified' } }],
+    },
+  }));
+  assert.throws(() => validateTrackingArtifacts({
+    ...controls,
+    sourceRuntimeManifest: {
+      ...sourceRuntimeManifest,
+      runtimes: [{ source: 'pages', source_sha: 'UNVERIFIED', status: 'pilot' }],
+    },
+  }));
+});
+
+test('rollout blocks Pages advancement without its selected pilot and source dependencies', async () => {
+  const [privacyPolicy, fieldPolicy, trustedHosts, sourceRuntimeManifest, rolloutState, providerCapabilities] = await Promise.all(
+    [
+      'config/privacy-policy.json',
+      'config/tracking-field-policy.json',
+      'config/trusted-hosts.json',
+      'config/source-runtime-manifest.json',
+      'config/rollout-state.json',
+      'config/provider-capabilities.json',
+    ].map(artifact)
+  );
+  const controls = { privacyPolicy, fieldPolicy, trustedHosts, sourceRuntimeManifest, rolloutState, providerCapabilities };
+  assert.throws(() => validateTrackingArtifacts({
+    ...controls,
+    rolloutState: { ...rolloutState, funnels: { ...(rolloutState.funnels as object), 'vibe-code-anything': 'pilot' } },
+  }));
+  assert.throws(() => validateTrackingArtifacts({
+    ...controls,
+    rolloutState: { ...rolloutState, funnels: { ...(rolloutState.funnels as object), 'app-idea-evaluator': 'pilot' } },
+  }));
 });

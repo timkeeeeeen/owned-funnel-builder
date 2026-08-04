@@ -12,5 +12,12 @@
     "app-idea-evaluator":"shadow",
     "blueprint":"shadow"
   },
+  "funnel_sources": {
+    "owned-funnel-builder":"pages",
+    "talking-head-video-vbuilder":"pages",
+    "vibe-code-anything":"pages",
+    "app-idea-evaluator":"app_idea",
+    "blueprint":"blueprint"
+  },
   "campaign_enablement_owner": "task-11"
 }

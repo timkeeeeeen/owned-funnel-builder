@@ -4,6 +4,17 @@ import type {
   SourceSystem,
 } from '../../../functions/_lib/tracking-contract.ts';
 import { validateCanonicalEvent } from '../../../functions/_lib/tracking-contract.ts';
+import {
+  projectPermittedFields,
+  validateTrackingArtifacts,
+  type TrackingFieldRule,
+} from '../../../functions/_lib/tracking-policy.ts';
+import privacyPolicy from '../../../config/privacy-policy.json';
+import fieldPolicy from '../../../config/tracking-field-policy.json';
+import trustedHosts from '../../../config/trusted-hosts.json';
+import sourceRuntimeManifest from '../../../config/source-runtime-manifest.json';
+import rolloutState from '../../../config/rollout-state.json';
+import providerCapabilities from '../../../config/provider-capabilities.json';
 import type { D1Database } from '../../../functions/_lib/runtime.ts';
 import {
   corsHeaders,
@@ -36,6 +47,20 @@ export type ExecutionContextLike = { waitUntil?(promise: Promise<unknown>): void
 const EVENT_MAX_BYTES = 64 * 1024;
 const BODY_MAX_DEPTH = 8;
 const BODY_MAX_ITEMS = 100;
+const trackingControls = {
+  privacyPolicy,
+  fieldPolicy,
+  trustedHosts,
+  sourceRuntimeManifest,
+  rolloutState,
+  providerCapabilities,
+};
+const trackingFieldPolicy = fieldPolicy.rules as TrackingFieldRule[];
+
+function projectedEvent(event: CanonicalEvent, state: { decisions: Parameters<typeof projectPermittedFields>[1] }): CanonicalEvent {
+  validateTrackingArtifacts(trackingControls);
+  return projectPermittedFields(event, state.decisions, trackingFieldPolicy);
+}
 const PUBLIC_BROWSER_EVENTS = new Set<EventName>(['PageView']);
 const AUTHORITATIVE_EVENTS = new Set<EventName>(['Lead', 'InitiateCheckout', 'Purchase']);
 const SOURCE_SYSTEMS = new Set<SourceSystem>(['pages', 'app_idea', 'blueprint']);
@@ -298,10 +323,10 @@ async function browserEvents(
     else await observation;
   }
   if (state.gpc && !allows(state, 'advertising')) {
-    await persistCanonicalEvent(env, candidate, state);
+    await persistCanonicalEvent(env, projectedEvent(candidate, state), state);
     return jsonResponse({ accepted: true, suppressed: true }, 202, cors(request, env));
   }
-  await persistCanonicalEvent(env, candidate, state);
+  await persistCanonicalEvent(env, projectedEvent(candidate, state), state);
   return jsonResponse({ accepted: true, suppressed: false }, 202, cors(request, env));
 }
 

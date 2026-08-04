@@ -161,6 +161,23 @@ test('browser collector accepts PageView, is idempotent, and blocks authoritativ
   );
 });
 
+test('collector applies the shared field policy before persistence', async () => {
+  const bindings = await env();
+  const response = await worker.fetch(
+    request('/v1/events', { method: 'POST', body: JSON.stringify(pageView()) }),
+    bindings as never,
+    {} as never
+  );
+  assert.equal(response.status, 202);
+  const row = bindings.__database
+    .prepare('SELECT envelope_json FROM tracking_events LIMIT 1')
+    .get() as { envelope_json: string };
+  const stored = JSON.parse(row.envelope_json) as Record<string, Record<string, unknown>>;
+  assert.deepEqual(stored.attribution, {});
+  assert.deepEqual(stored.visitor, {});
+  assert.deepEqual(stored.session, {});
+});
+
 test('health output is probe-safe and never echoes secrets or raw identity', async () => {
   const bindings = await env();
   const response = await worker.fetch(
