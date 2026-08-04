@@ -3,6 +3,7 @@
   "version": "1",
   "owner": "maestro-platform",
   "policy_version": "2026-08-04",
+  "ci_authority": "unknown",
   "runtimes": [
     {"source":"pages","repository":"owned-funnel-builder","source_sha":"UNVERIFIED","bridge_contract":"v1","status":"shadow"},
     {"source":"app_idea","repository":"UNVERIFIED","source_sha":"UNVERIFIED","bridge_contract":"v1","status":"shadow"},

@@ -1,8 +1,5 @@
-# Provider Capability Readback
+# Provider capability readback
 
-Status: `unverified` until protected preview/live readback is recorded.
-
-Required fields are provider, environment, exact API/token scope, deletion or
-TTL behavior, replica/backup/log retention, DPA/subprocessor owner, readback
-timestamp, reviewed SHA, and accountable operator. This artifact is a gate,
-not proof by assertion; `unverified` blocks destination enablement.
+No provider readback has been performed. Meta and Tinybird remain disabled and
+unverified. This document must only record redacted, read-only provider results
+with the exact reviewed SHA, operator, token scope, and retention details.

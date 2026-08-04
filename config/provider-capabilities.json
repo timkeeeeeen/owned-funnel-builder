@@ -3,6 +3,7 @@
   "version": "1",
   "owner": "maestro-platform",
   "policy_version": "2026-08-04",
+  "readback_status": "unverified",
   "providers": [
     {"destination":"tinybird","enabled":false,"readback":{"status":"unverified"}},
     {"destination":"meta","enabled":false,"readback":{"status":"unverified"}}

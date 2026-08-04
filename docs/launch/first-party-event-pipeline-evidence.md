@@ -73,3 +73,11 @@ raw `buyer_context`, bearer tokens, and legacy `x-tracking-*` headers are
 rejected. Context exchanges are stored in tracking D1 and resolved within
 tenant/site/funnel scope. App-Idea and Blueprint remain shadow-only until
 their exact owners, products, SHAs, and token-verifier bindings are recorded.
+
+## Task 9 deployment controls
+
+Product ownership, provider capability, resource, and CI-authority readbacks
+remain unverified. No repository-local Woodpecker pipeline is created while
+`ci_authority` is unknown. Pages/Worker publishing, preview provisioning, and
+migration commands are dry-run by default and reject mutation without both
+`--execute` and `--approval-id`.

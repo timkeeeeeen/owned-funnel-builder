@@ -1,6 +1,9 @@
 {
-  // Secret bindings are provisioned by Task 6 with `wrangler secret put`; values are never committed:
-  // TRACKING_CONTEXT_SIGNING_KEY_CURRENT and TRACKING_CONTEXT_SIGNING_KEY_PREVIOUS.
+  // Secret names only; values are never committed: META_ACCESS_TOKEN, TINYBIRD_APPEND_TOKEN,
+  // TRACKING_COOKIE_SIGNING_KEY_CURRENT/PREVIOUS, TRACKING_IDENTITY_HMAC_KEY_CURRENT/PREVIOUS,
+  // TRACKING_{PAGES,APP_IDEA,BLUEPRINT}_BRIDGE_KEY_CURRENT/PREVIOUS, and
+  // TRACKING_CONTEXT_SIGNING_KEY_CURRENT/PREVIOUS, plus per-source key IDs and
+  // the Meta pixel/dataset IDs after read-only provider capability verification.
   "name": "maestro-first-party-events",
   "main": "src/index.ts",
   "compatibility_date": "2026-08-01",

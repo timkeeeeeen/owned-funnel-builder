@@ -32,6 +32,8 @@
     "validate:config": "node scripts/validate-funnel-config.mjs",
     "check:functions": "wrangler pages functions build functions --outdir .wrangler/functions-build --project-directory . --build-output-directory dist/client",
     "publish": "node scripts/run-friendly.mjs publish-cloudflare.mjs",
+    "deploy:pages": "node scripts/run-friendly.mjs publish-cloudflare.mjs",
+    "deploy:events:dry": "node scripts/publish-events-worker.mjs --dry-run",
     "offer:new": "node scripts/new-offer.mjs",
     "check:kpis": "node .claude/scripts/check-kpis.mjs",
     "quality:discover": "tsx tooling/quality/cli.mts discover",
