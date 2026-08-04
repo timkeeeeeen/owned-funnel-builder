@@ -4,6 +4,7 @@ import {
   type PrivacyDecision,
   type PrivacyPurpose,
 } from '../../../functions/_lib/tracking-privacy.ts';
+import privacyPolicy from '../../../config/privacy-policy.json';
 import { redactError } from './observability.ts';
 
 export type PrivacyState = {
@@ -44,7 +45,7 @@ export async function loadPrivacyState(
   const database = env.TRACKING_DB as D1Database | undefined;
   const tenantId = envString(env, 'TRACKING_TENANT_ID', 'default');
   const siteId = envString(env, 'TRACKING_SITE_ID', 'default');
-  const policyVersion = envString(env, 'TRACKING_POLICY_VERSION', '1');
+  const policyVersion = envString(env, 'TRACKING_POLICY_VERSION', String(privacyPolicy.policy_version));
   const region = envString(env, 'TRACKING_REGION', 'US');
   let rows: PrivacyRow[] = [];
   let storageFailure = false;

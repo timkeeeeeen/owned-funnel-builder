@@ -200,6 +200,41 @@ test('collector rejects a context binding that does not verify', async () => {
   assert.equal(response.status, 403);
 });
 
+test('bootstrap policy version is accepted while a stale version is rejected', async () => {
+  const { TRACKING_POLICY_VERSION: _legacyPolicyVersion, ...bindings } = await env();
+  const bootstrap = await worker.fetch(
+    request('/v1/bootstrap'),
+    bindings as never,
+    {} as never
+  );
+  const { policy_version: policyVersion } = (await bootstrap.json()) as { policy_version: string };
+  assert.equal(policyVersion, '2026-08-04');
+
+  const accepted = await worker.fetch(
+    request('/v1/events', {
+      method: 'POST',
+      body: JSON.stringify(pageView({
+        privacy: { policy_version: policyVersion, region: 'US', gpc: false, opted_out: false },
+      })),
+    }),
+    bindings as never,
+    {} as never
+  );
+  assert.equal(accepted.status, 202);
+
+  const stale = await worker.fetch(
+    request('/v1/events', {
+      method: 'POST',
+      body: JSON.stringify(pageView({
+        privacy: { policy_version: '2026-08-03', region: 'US', gpc: false, opted_out: false },
+      })),
+    }),
+    bindings as never,
+    {} as never
+  );
+  assert.equal(stale.status, 403);
+});
+
 test('collector rejects stale, deleted, and cross-funnel context snapshots', async () => {
   const bindings = await env();
   for (const context of [

@@ -448,8 +448,10 @@ export function sourceEnvelopeToCanonical(
     gpc: rawPrivacy.gpc === true,
     opted_out: rawPrivacy.opted_out === true,
   };
-  if (typeof rawPrivacy.policy_version === 'string')
-    privacy.policy_version = rawPrivacy.policy_version.slice(0, 128);
+  privacy.policy_version =
+    typeof rawPrivacy.policy_version === 'string'
+      ? rawPrivacy.policy_version.slice(0, 128)
+      : String(privacyPolicy.policy_version);
   if (typeof rawPrivacy.region === 'string') privacy.region = rawPrivacy.region.slice(0, 32);
   const rawCommerce =
     input.commerce && typeof input.commerce === 'object' && !Array.isArray(input.commerce)
