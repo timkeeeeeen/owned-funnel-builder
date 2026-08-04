@@ -117,7 +117,18 @@ export async function claimUnseenPurchases(
 }
 
 export async function sourcePayloadHash(payload: Record<string, unknown>): Promise<string> {
-  const bytes = new TextEncoder().encode(JSON.stringify(payload));
+  const canonicalize = (value: unknown): unknown => {
+    if (Array.isArray(value)) return value.map(canonicalize);
+    if (value && typeof value === 'object') {
+      return Object.fromEntries(
+        Object.entries(value as Record<string, unknown>)
+          .sort(([left], [right]) => left.localeCompare(right))
+          .map(([key, entry]) => [key, canonicalize(entry)])
+      );
+    }
+    return value;
+  };
+  const bytes = new TextEncoder().encode(JSON.stringify(canonicalize(payload)));
   const digest = await crypto.subtle.digest('SHA-256', bytes);
   return Array.from(new Uint8Array(digest), (byte) => byte.toString(16).padStart(2, '0')).join('');
 }
@@ -159,13 +170,16 @@ export function providerMappingStatement(
   database: D1Database,
   event: SourceOutboxEvent,
   provider: string,
-  providerObjectId: string
+  providerObjectId: string,
+  claimOwner: string,
+  claimUntil: string
 ): D1PreparedStatement {
   return database
     .prepare(
       `INSERT OR IGNORE INTO source_tracking_provider_mappings (
-        tenant_id, site_id, provider, provider_object_id, event_name, source_event_id, created_at
-      ) VALUES (?, ?, ?, ?, ?, ?, ?)`
+        tenant_id, site_id, provider, provider_object_id, event_name, source_event_id,
+        claim_owner, claim_until, claim_state, created_at
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'claimed', ?)`
     )
     .bind(
       event.tenantId,
@@ -174,7 +188,35 @@ export function providerMappingStatement(
       providerObjectId,
       event.eventName,
       event.sourceEventId,
+      claimOwner,
+      claimUntil,
       new Date().toISOString()
+    );
+}
+
+export function commitProviderMappingStatement(
+  database: D1Database,
+  event: SourceOutboxEvent,
+  provider: string,
+  providerObjectId: string,
+  claimOwner: string
+): D1PreparedStatement {
+  return database
+    .prepare(
+      `UPDATE source_tracking_provider_mappings
+       SET claim_owner = NULL, claim_until = NULL, claim_state = 'committed'
+       WHERE tenant_id = ? AND site_id = ? AND provider = ?
+         AND provider_object_id = ? AND event_name = ? AND source_event_id = ?
+         AND claim_owner = ?`
+    )
+    .bind(
+      event.tenantId,
+      event.siteId,
+      provider,
+      providerObjectId,
+      event.eventName,
+      event.sourceEventId,
+      claimOwner
     );
 }
 

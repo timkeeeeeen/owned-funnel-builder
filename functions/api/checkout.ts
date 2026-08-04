@@ -302,7 +302,6 @@ export async function onRequestPost(context: PagesContext): Promise<Response> {
       identity: { lead_id: leadId, funnel_id: funnelId },
       buyer_context: buyerContext,
     };
-    leadEvent = { event_id: leadSourceEventId, event_name: 'Lead' };
     const leadStatement = env.LEADS.prepare(
       `INSERT INTO checkout_leads (
         id, email, offer_slug, placement, marketing_consent, consent_version,
@@ -385,6 +384,7 @@ export async function onRequestPost(context: PagesContext): Promise<Response> {
     );
     const businessResult = await env.LEADS.batch(businessStatements);
     if (businessResult.some((result) => !result.success)) throw new Error('Lead capture failed.');
+    leadEvent = { event_id: leadSourceEventId, event_name: 'Lead' };
     if (env.TRACKING_SOURCE_BRIDGE)
       await drainSourceEvent(env.LEADS, env, { ...scope, sourceEventId: leadSourceEventId });
 
@@ -442,7 +442,7 @@ export async function onRequestPost(context: PagesContext): Promise<Response> {
         schema_version: '1', event_id: initiateEventId, event_name: 'InitiateCheckout', occurred_at: new Date().toISOString(),
         flow_token_hash: flowTokenHash, identity: { lead_id: leadId, funnel_id: funnelId }, buyer_context: buyerContext,
       };
-      await env.LEADS.batch([
+      const initiateResult = await env.LEADS.batch([
         env.LEADS.prepare(
         `UPDATE checkout_leads
          SET status = 'session_created', stripe_session_id = ?, updated_at = ?
@@ -455,6 +455,9 @@ export async function onRequestPost(context: PagesContext): Promise<Response> {
           payloadHash: await sourcePayloadHash(initiatePayload),
         }),
       ]);
+      if (initiateResult.some((result) => !result.success)) {
+        throw new Error('InitiateCheckout capture failed.');
+      }
       if (env.TRACKING_SOURCE_BRIDGE)
         await drainSourceEvent(env.LEADS, env, { ...scope, sourceEventId: initiateEventId });
 
@@ -549,7 +552,7 @@ export async function onRequestPost(context: PagesContext): Promise<Response> {
       schema_version: '1', event_id: initiateEventId, event_name: 'InitiateCheckout', occurred_at: new Date().toISOString(),
       flow_token_hash: flowTokenHash, identity: { lead_id: leadId, funnel_id: funnelId }, buyer_context: buyerContext,
     };
-    await env.LEADS.batch([
+    const initiateResult = await env.LEADS.batch([
       env.LEADS.prepare(
       `UPDATE checkout_leads
        SET status = 'session_created', dodo_session_id = ?, updated_at = ?
@@ -562,6 +565,9 @@ export async function onRequestPost(context: PagesContext): Promise<Response> {
         payloadHash: await sourcePayloadHash(initiatePayload),
       }),
     ]);
+    if (initiateResult.some((result) => !result.success)) {
+      throw new Error('InitiateCheckout capture failed.');
+    }
     if (env.TRACKING_SOURCE_BRIDGE)
       await drainSourceEvent(env.LEADS, env, { ...scope, sourceEventId: initiateEventId });
 

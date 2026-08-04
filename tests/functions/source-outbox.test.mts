@@ -5,9 +5,18 @@ import {
   toSafeBrowserPurchase,
   drainSourceEvent,
   recoverSourceOutbox,
+  sourcePayloadHash,
   type BrowserPurchaseClaim,
   type VerifiedPurchase,
 } from '../../functions/_lib/source-outbox.ts';
+import { onRequestPost as recoverRoute } from '../../functions/api/internal/source-outbox-recovery.ts';
+
+test('source payload hashing is stable across object key order', async () => {
+  assert.equal(
+    await sourcePayloadHash({ b: 2, nested: { z: true, a: 1 }, a: 1 }),
+    await sourcePayloadHash({ a: 1, nested: { a: 1, z: true }, b: 2 })
+  );
+});
 
 test('safe browser purchase projection removes buyer context and preserves commerce', () => {
   const purchase: VerifiedPurchase = {
@@ -150,4 +159,30 @@ test('scheduled recovery reclaims stale sending leases and expires/redacts overd
   assert.equal(calls[0]?.query.includes("state = 'expired'"), true);
   assert.equal(calls[0]?.query.includes("payload_json = '{}'"), true);
   assert.equal(calls[1]?.query.includes("state = 'sending' AND lease_until < ?"), true);
+});
+
+test('protected recovery route invokes source outbox recovery', async () => {
+  const calls: string[] = [];
+  const database = {
+    prepare(query: string) {
+      calls.push(query);
+      const statement = {
+        bind() { return statement; },
+        async first() { return null; },
+        async run() { return { success: true, meta: { changes: 0 } }; },
+        async all() { return { results: [] }; },
+      };
+      return statement;
+    },
+  };
+  const response = await recoverRoute({
+    request: new Request('https://funnels.example/api/internal/source-outbox-recovery', {
+      method: 'POST',
+      headers: { authorization: 'Bearer recovery-secret' },
+    }),
+    env: { LEADS: database as never, TRACKING_SOURCE_RECOVERY_TOKEN: 'recovery-secret' },
+  });
+  assert.equal(response.status, 200);
+  assert.deepEqual(await response.json(), { delivered: 0 });
+  assert.ok(calls.some((query) => query.includes('source_tracking_outbox')));
 });

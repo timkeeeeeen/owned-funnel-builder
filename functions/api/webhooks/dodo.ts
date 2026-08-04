@@ -13,6 +13,7 @@ import {
   type PagesContext,
 } from '../../_lib/runtime';
 import {
+  commitProviderMappingStatement,
   drainSourceEvent,
   providerMappingStatement,
   sourceOutboxStatement,
@@ -188,25 +189,6 @@ async function markPaymentSucceeded(
   const now = new Date().toISOString();
   const tenantId = cleanString(env.TRACKING_TENANT_ID, 128) || 'owned-funnel-builder';
   const siteId = cleanString(env.TRACKING_SITE_ID, 128) || 'shop.maestrogtm.com';
-  const existingMapping = await database
-    .prepare(
-      `SELECT source_event_id FROM source_tracking_provider_mappings
-       WHERE tenant_id = ? AND site_id = ? AND provider = 'dodo'
-         AND provider_object_id = ? AND event_name = 'Purchase'`
-    )
-    .bind(tenantId, siteId, paymentId)
-    .first<{ source_event_id: string }>();
-  if (existingMapping) {
-    await database
-      .prepare(
-        `INSERT INTO source_tracking_delivery_audit (
-          tenant_id, site_id, source_event_id, owner, result, created_at
-        ) VALUES (?, ?, ?, ?, 'ignored_not_owner', ?)`
-      )
-      .bind(tenantId, siteId, existingMapping.source_event_id, webhookId, now)
-      .run();
-    return;
-  }
   const businessStatements = [];
   if (metadata.step_key) {
     businessStatements.push(
@@ -276,8 +258,59 @@ async function markPaymentSucceeded(
     payload: purchasePayload,
     payloadHash: await sourcePayloadHash(purchasePayload),
   };
-  const ownership = await providerMappingStatement(database, purchaseEvent, 'dodo', paymentId).run();
-  if ((ownership.meta?.changes ?? 0) !== 1) {
+  const claimOwner = crypto.randomUUID();
+  const claimUntil = new Date(Date.now() + 60_000).toISOString();
+  const existingMapping = await database
+    .prepare(
+      `SELECT source_event_id, claim_state, claim_until FROM source_tracking_provider_mappings
+       WHERE tenant_id = ? AND site_id = ? AND provider = 'dodo'
+         AND provider_object_id = ? AND event_name = 'Purchase'`
+    )
+    .bind(tenantId, siteId, paymentId)
+    .first<{ source_event_id: string; claim_state?: string; claim_until?: string | null }>();
+  let ownershipClaimed = false;
+  if (existingMapping) {
+    const existingOutbox = await database
+      .prepare(
+        `SELECT state FROM source_tracking_outbox
+         WHERE tenant_id = ? AND site_id = ? AND source_event_id = ?`
+      )
+      .bind(tenantId, siteId, existingMapping.source_event_id)
+      .first<{ state: string }>();
+    if (existingOutbox) {
+      await database
+        .prepare(
+          `INSERT INTO source_tracking_delivery_audit (
+            tenant_id, site_id, source_event_id, owner, result, created_at
+          ) VALUES (?, ?, ?, ?, 'ignored_not_owner', ?)`
+        )
+        .bind(tenantId, siteId, existingMapping.source_event_id, webhookId, now)
+        .run();
+      return;
+    }
+    const reclaimed = await database
+      .prepare(
+        `UPDATE source_tracking_provider_mappings
+         SET claim_owner = ?, claim_until = ?, claim_state = 'claimed'
+         WHERE tenant_id = ? AND site_id = ? AND provider = 'dodo'
+           AND provider_object_id = ? AND event_name = 'Purchase'
+           AND (claim_state = 'pending' OR claim_until IS NULL OR claim_until < ?)`
+      )
+      .bind(claimOwner, claimUntil, tenantId, siteId, paymentId, now)
+      .run();
+    ownershipClaimed = (reclaimed.meta?.changes ?? 0) === 1;
+  } else {
+    const ownership = await providerMappingStatement(
+      database,
+      purchaseEvent,
+      'dodo',
+      paymentId,
+      claimOwner,
+      claimUntil
+    ).run();
+    ownershipClaimed = (ownership.meta?.changes ?? 0) === 1;
+  }
+  if (!ownershipClaimed) {
     await database
       .prepare(
         `INSERT INTO source_tracking_delivery_audit (
@@ -288,6 +321,9 @@ async function markPaymentSucceeded(
       .run();
     return;
   }
+  businessStatements.push(
+    commitProviderMappingStatement(database, purchaseEvent, 'dodo', paymentId, claimOwner)
+  );
   businessStatements.push(sourceOutboxStatement(database, purchaseEvent));
   const businessResult = await database.batch(businessStatements);
   if (businessResult.some((result) => !result.success)) throw new Error('Payment capture failed.');
