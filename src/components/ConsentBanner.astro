@@ -1,7 +1,14 @@
 ---
-const collectorUrl =
-  import.meta.env.PUBLIC_TRACKING_COLLECTOR_URL?.trim() ||
-  'https://events.shop.maestrogtm.com/v1/events';
+const defaultCollectorUrl = 'https://events.shop.maestrogtm.com/v1/events';
+const configuredCollectorUrl = import.meta.env.PUBLIC_TRACKING_COLLECTOR_URL?.trim() ?? '';
+let collectorUrl = defaultCollectorUrl;
+try {
+  const candidate = new URL(configuredCollectorUrl);
+  if (candidate.protocol === 'https:' && candidate.pathname.replace(/\/$/, '') === '/v1/events')
+    collectorUrl = candidate.toString().replace(/\/$/, '');
+} catch {
+  // Misconfiguration fails closed to the owned collector.
+}
 const privacyUrl = collectorUrl.replace(/\/v1\/events\/?$/, '/v1/privacy');
 ---
 
@@ -90,9 +97,10 @@ const privacyUrl = collectorUrl.replace(/\/v1\/events\/?$/, '/v1/privacy');
     const banner = document.querySelector('[data-consent-banner]');
     const preferences = document.querySelector('[data-consent-preferences]');
     if (!banner || !preferences) return;
-    const policyVersion = '2026-08-04';
-    const storageKey = `maestro:consent:${policyVersion}`;
+    let policyVersion = '2026-08-04';
+    let storageKey = `maestro:consent:${policyVersion}`;
     const gpc = navigator.globalPrivacyControl === true;
+    let gpcSubmitted = false;
     // The server separately enforces Sec-GPC; this browser gate prevents a race.
     const readStored = () => {
       try {
@@ -101,10 +109,6 @@ const privacyUrl = collectorUrl.replace(/\/v1\/events\/?$/, '/v1/privacy');
       } catch {
         return null;
       }
-    };
-    const emit = (state) => {
-      window.__maestroConsent = state;
-      window.dispatchEvent(new CustomEvent('maestro:consent', { detail: state }));
     };
     const hide = () => {
       banner.hidden = true;
@@ -115,62 +119,66 @@ const privacyUrl = collectorUrl.replace(/\/v1\/events\/?$/, '/v1/privacy');
       preferences.hidden = true;
       banner.querySelector('[data-consent-accept]')?.focus();
     };
-    const persist = async (purpose, allowed, choiceId) => {
+    const persist = async (action, analytics, advertising) => {
       const bootstrap = window.__maestroBootstrapReady;
       if (bootstrap && typeof bootstrap.then === 'function') await bootstrap;
       const nonce = window.__maestroCsrfNonce;
       if (typeof nonce !== 'string' || !nonce) return false;
+      const choiceId = `choice:${crypto.randomUUID()}`;
       const response = await fetch(banner.dataset.privacyUrl || '', {
         method: 'POST',
         credentials: 'include',
         headers: { 'Content-Type': 'application/json', 'x-csrf-nonce': nonce },
-        body: JSON.stringify({ purpose, allowed, choice_id: choiceId }),
+        body: JSON.stringify({
+          schema_version: '1',
+          choice_id: choiceId,
+          policy_version: policyVersion,
+          action,
+          purposes: { analytics, advertising },
+        }),
       });
       if (!response.ok) return false;
       const body = await response.json().catch(() => null);
-      return typeof body?.choice_id === 'string';
+      if (body?.choice_id !== choiceId) return false;
+      const refresh = window.__maestroRefreshBootstrap;
+      return typeof refresh === 'function' && Boolean(await refresh());
     };
-    const save = async (analytics, advertising, source = 'ui') => {
-      const state = {
-        resolved: true,
-        analytics: Boolean(analytics) && !gpc,
-        advertising: Boolean(advertising) && !gpc,
-        policyVersion,
-        source: gpc ? 'gpc' : source,
-        effectiveAt: new Date().toISOString(),
-      };
-      const purposes = [
-        ['analytics', state.analytics],
-        ['advertising', state.advertising],
-      ];
-      const persisted = await Promise.all(
-        purposes.map(([purpose, allowed]) => persist(purpose, allowed, state.policyVersion))
-      );
-      if (persisted.some((value) => !value)) return;
-      try {
-        localStorage.setItem(storageKey, JSON.stringify(state));
-      } catch {
-        /* memory state still gates this page */
-      }
-      emit(state);
-      hide();
-    };
+    const save = async (action, analytics, advertising) =>
+      persist(action, Boolean(analytics) && !gpc, Boolean(advertising) && !gpc);
     const stored = readStored();
-    if (gpc) {
-      save(false, false, 'gpc');
-    } else if (stored) {
-      emit(stored);
-      hide();
-    } else {
-      emit({ resolved: false, analytics: false, advertising: false, policyVersion });
-      show();
+    if (stored) {
+      banner.querySelector('[data-consent-analytics]').checked = stored.analytics === true;
+      banner.querySelector('[data-consent-advertising]').checked = stored.advertising === true;
     }
+    const onServerState = (event) => {
+      const state = event.detail;
+      if (!state?.serverAuthoritative) return;
+      if (typeof state.policyVersion === 'string') {
+        policyVersion = state.policyVersion;
+        storageKey = `maestro:consent:${policyVersion}`;
+      }
+      if (state.resolved) {
+        try {
+          localStorage.setItem(storageKey, JSON.stringify(state));
+        } catch {
+          /* local cache is never consent authority */
+        }
+        hide();
+      } else if (gpc && !gpcSubmitted) {
+        gpcSubmitted = true;
+        void save('gpc', false, false);
+      } else {
+        show();
+      }
+    };
+    window.addEventListener('maestro:consent', onServerState);
+    if (window.__maestroConsent) onServerState({ detail: window.__maestroConsent });
     banner
       .querySelector('[data-consent-accept]')
-      ?.addEventListener('click', () => void save(true, true));
+      ?.addEventListener('click', () => void save('accept', true, true));
     banner
       .querySelector('[data-consent-reject]')
-      ?.addEventListener('click', () => void save(false, false));
+      ?.addEventListener('click', () => void save('reject', false, false));
     banner.querySelector('[data-consent-customize]')?.addEventListener('click', () => {
       const panel = banner.querySelector('[data-consent-customize-panel]');
       const saveButton = banner.querySelector('[data-consent-save]');
@@ -180,11 +188,14 @@ const privacyUrl = collectorUrl.replace(/\/v1\/events\/?$/, '/v1/privacy');
     });
     banner.querySelector('[data-consent-save]')?.addEventListener('click', () => {
       void save(
+        'customize',
         banner.querySelector('[data-consent-analytics]')?.checked,
         banner.querySelector('[data-consent-advertising]')?.checked
       );
     });
     preferences.addEventListener('click', show);
-    window.addEventListener('maestro:consent-withdraw', () => void save(false, false));
+    window.addEventListener('maestro:consent-withdraw', () =>
+      void save('withdraw', false, false)
+    );
   })();
 </script>

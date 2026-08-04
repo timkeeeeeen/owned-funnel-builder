@@ -23,6 +23,11 @@ test('the browser has one consent-gated tracker and no legacy Admaxxer pixel bou
   assert.match(tracker, /x-csrf-nonce/);
   assert.match(tracker, /x-tracking-context-hash/);
   assert.match(tracker, /policy_version/);
+  assert.match(tracker, /effectivePurposes/);
+  assert.match(tracker, /sent\.add\(id\)[\s\S]*trackPixel\(['"]PageView['"][\s\S]*collect\(safe, id/);
+  assert.doesNotMatch(tracker, /sent\.add\(id\)[\s\S]{0,250}ensureBootstrap/);
+  assert.match(tracker, /new URL\(configuredCollectorUrl\)/);
+  assert.match(tracker, /events\.shop\.maestrogtm\.com/);
   assert.match(tracker, /pathname\}/);
   assert.doesNotMatch(tracker, /location\.hash/);
   assert.match(tracker, /credentials:\s*['"]include['"]/);
@@ -44,6 +49,12 @@ test('the browser has one consent-gated tracker and no legacy Admaxxer pixel bou
   assert.match(consent, /withdraw|reopen|preferences/i);
   assert.match(consent, /v1\/privacy/);
   assert.match(consent, /x-csrf-nonce/);
+  assert.match(consent, /const choiceId = `choice:\$\{crypto\.randomUUID\(\)\}`/);
+  assert.match(consent, /choice_id:\s*choiceId/);
+  assert.match(consent, /policy_version:\s*policyVersion/);
+  assert.match(consent, /purposes:\s*\{\s*analytics/);
+  assert.doesNotMatch(consent, /emit\(stored\)/);
+  assert.doesNotMatch(consent, /Promise\.all\([\s\S]{0,300}persist/);
 });
 
 test('checkout emits non-PII Lead and InitiateCheckout payloads from the server response', async () => {

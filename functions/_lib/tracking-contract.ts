@@ -223,7 +223,7 @@ function safeString(value: unknown, name: string, maximum = 256, allowPhoneLike 
 
 function opaqueId(value: unknown, name: string, maximum = 256): string {
   const candidate = safeString(value, name, maximum, true);
-  if (!/^[A-Za-z0-9][A-Za-z0-9_-]*$/.test(candidate))
+  if (!/^[A-Za-z0-9][A-Za-z0-9:_-]*$/.test(candidate))
     invalid(`${name} must be an opaque identifier`);
   return candidate;
 }

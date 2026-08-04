@@ -37,3 +37,22 @@ Status: DONE_WITH_CONCERNS
 - The required `pnpm` wrapper command is not reliable on this host in this worktree: one acquired run exhausted the Node heap before tests launched, while the exact underlying test command passed. This is tooling/environment evidence, not a failing Task 5 assertion.
 - Task 6 owns atomic nonce consumption and the authoritative privacy/bootstrap Worker behavior. Its dirty files were preserved and intentionally excluded from this Task 5 commit.
 - Task 8 still owns the source-runtime bridge/outbox completion behind the Blueprint proxy shells; Task 5 does not claim that end-to-end source path is live.
+
+## Review remediation
+
+Status: DONE
+
+- Replaced two concurrent per-purpose consent writes with one versioned action carrying both decisions and a unique `choice_id`.
+- Made nonce consumption, policy/context/action binding, and both immutable purpose-ledger inserts one atomic SQLite statement via the nonce update trigger. Reuse returns 409.
+- Made bootstrap effective purposes the browser's only consent authority. Local storage now only prefills UI; stale policy and GPC remain fail closed.
+- Deferred PageView dedupe until signed bootstrap context validation and retained one candidate event ID for consent replay, Pixel, and collector parity.
+- Invalid collector configuration falls back to the owned HTTPS `/v1/events` endpoint.
+- Blueprint proxy shells/tests remain in Task 5; Task 8 owns their authoritative source-runtime bridge/outbox implementation.
+
+### Review verification
+
+- RED: browser contract 3/4; collector 15/17 with the expected authority/action failures.
+- GREEN: browser contract 4/4 (605.955667 ms); collector 17/17 (final 731.400708 ms).
+- GREEN: tracking privacy 6/6 (543.514 ms); Blueprint direct equivalent 14/14 (308.244333 ms); browser events 3/3 (313.040541 ms); Blueprint proxy 3/3 (308.662375 ms).
+- GREEN: focused Prettier check; Pages Functions compiled; Events Worker dry-run bundled successfully (one expected warning because no deploy environment was selected).
+- The earlier exact `pnpm test:blueprint` 4 GB package-manager OOM remains environmental evidence; its exact underlying Node suite passed 14/14 through `host-test-slot`.

@@ -32,7 +32,6 @@ import {
   loadPrivacyState,
   allows,
   privacyBody,
-  recordPrivacyChoice,
 } from './privacy.ts';
 import { persistCanonicalEvent, type QueueLike } from './outbox.ts';
 import { healthResponse, jsonResponse, redactError } from './observability.ts';
@@ -67,6 +66,7 @@ type EventContext = {
   policy_version: string;
 };
 type TrackingContextVerifier = (contextHash: string) => EventContext | null | Promise<EventContext | null>;
+type TrackingContextSigner = (context: EventContext) => string | Promise<string>;
 
 function projectedEvent(event: CanonicalEvent, state: { decisions: Parameters<typeof projectPermittedFields>[1] }): CanonicalEvent {
   validateTrackingArtifacts(trackingControls);
@@ -279,6 +279,15 @@ async function visitorId(request: Request, env: Record<string, unknown>): Promis
   return verifySignedCookie(request.headers.get('cookie'), 'ma_vid', keys, cookieContext(env));
 }
 
+async function privacySubjectId(
+  request: Request,
+  env: Record<string, unknown>
+): Promise<string | null> {
+  const keys = cookieKeys(env);
+  if (!Object.keys(keys).length) return null;
+  return verifySignedCookie(request.headers.get('cookie'), 'ma_privacy', keys, cookieContext(env));
+}
+
 function jsonError(
   code: string,
   status: number,
@@ -317,32 +326,82 @@ async function recordScopeAudit(
 async function bootstrap(request: Request, env: CollectorEnv): Promise<Response> {
   if (!exactHost(request, env) || !exactOrigin(request, env))
     return jsonError('not_allowed', 403, request, env);
-  const visitor = (await visitorId(request, env)) ?? `visitor_${crypto.randomUUID()}`;
-  const state = await loadPrivacyState(request, env, visitor);
+  const visitor = await visitorId(request, env);
+  const privacySubject = await privacySubjectId(request, env);
+  const state = await loadPrivacyState(request, env, visitor ?? undefined, privacySubject ?? undefined);
   const nonce = createCsrfNonce();
+  const nextPrivacySubject = privacySubject ?? `privacy_${crypto.randomUUID()}`;
+  await env.TRACKING_DB.prepare(
+    `INSERT INTO tracking_csrf_nonces
+       (nonce, tenant_id, site_id, visitor_id, privacy_subject_id, policy_version, region_source,
+        expires_at, created_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`
+  )
+    .bind(
+      nonce,
+      textEnv(env, 'TRACKING_TENANT_ID', 'default'),
+      textEnv(env, 'TRACKING_SITE_ID', 'default'),
+      visitor,
+      nextPrivacySubject,
+      state.policyVersion,
+      state.region,
+      new Date(Date.now() + 600_000).toISOString(),
+      new Date().toISOString()
+    )
+    .run();
+  const trackingAllowed = state.decisions.some(
+    (decision) =>
+      (decision.purpose === 'analytics' || decision.purpose === 'advertising') && decision.allowed
+  );
+  const context = state.resolved && trackingAllowed
+    ? await env.TRACKING_DB.prepare(
+        `SELECT context_hash FROM tracking_csrf_nonces
+         WHERE tenant_id = ? AND site_id = ? AND privacy_subject_id = ?
+           AND policy_version = ? AND consumed_at IS NOT NULL AND context_hash IS NOT NULL
+         ORDER BY consumed_at DESC LIMIT 1`
+      )
+        .bind(
+          textEnv(env, 'TRACKING_TENANT_ID', 'default'),
+          textEnv(env, 'TRACKING_SITE_ID', 'default'),
+          nextPrivacySubject,
+          state.policyVersion
+        )
+        .first<{ context_hash: string }>()
+    : null;
   const response = jsonResponse(
     {
       schema_version: '1',
-      visitor_id: visitor,
-      privacy: state.decisions,
       policy_version: state.policyVersion,
-      purposes: state.decisions
-        .filter((decision) => decision.allowed)
-        .map((decision) => decision.purpose),
+      resolved: state.resolved,
+      ...(state.resolved
+        ? {
+            privacy: state.decisions,
+            visitor_ready: Boolean(visitor || trackingAllowed),
+            purposes: state.decisions
+              .filter((decision) => decision.allowed)
+              .map((decision) => decision.purpose),
+            ...(context?.context_hash ? { tracking_context_hash: context.context_hash } : {}),
+          }
+        : {}),
     },
     200,
     cors(request, env)
   );
   response.headers.set('x-csrf-nonce', nonce);
-  if (!(await visitorId(request, env))) {
-    response.headers.append('Set-Cookie', await signedCookie(env, 'ma_vid', visitor, 34_560_000));
+  if (!privacySubject) {
     response.headers.append(
       'Set-Cookie',
-      await signedCookie(env, 'ma_sid', `session_${crypto.randomUUID()}`, 1_800)
+      await signedCookie(env, 'ma_privacy', nextPrivacySubject, 34_560_000)
+    );
+  }
+  if (!visitor && trackingAllowed) {
+    response.headers.append(
+      'Set-Cookie',
+      await signedCookie(env, 'ma_vid', `visitor_${crypto.randomUUID()}`, 34_560_000)
     );
     response.headers.append(
       'Set-Cookie',
-      await signedCookie(env, 'ma_privacy', `policy_${state.policyVersion}`, 34_560_000)
+      await signedCookie(env, 'ma_sid', `session_${crypto.randomUUID()}`, 1_800)
     );
   }
   return response;
@@ -375,9 +434,15 @@ async function browserEvents(
   if (!(await verifyEventContext(env, candidate, request.headers.get('x-tracking-context-hash'))))
     return jsonError('invalid_context', 403, request, env);
   const visitor = await visitorId(request, env);
-  const state = await loadPrivacyState(request, env, visitor ?? candidate.visitor.visitor_id);
+  const privacySubject = await privacySubjectId(request, env);
+  const state = await loadPrivacyState(
+    request,
+    env,
+    visitor ?? privacySubject ?? undefined,
+    privacySubject ?? undefined
+  );
   if (state.gpc) {
-    const observation = recordGpcObservation(env, visitor ?? candidate.visitor.visitor_id);
+    const observation = recordGpcObservation(env, visitor ?? privacySubject ?? undefined);
     if (ctx.waitUntil) ctx.waitUntil(observation);
     else await observation;
   }
@@ -553,24 +618,68 @@ async function privacyMutation(request: Request, env: CollectorEnv): Promise<Res
   if (!nonce || !/^[A-Za-z0-9_-]{43}$/.test(nonce))
     return jsonError('csrf_required', 403, request, env);
   const body = privacyBody(await readBody(request));
-  if (
-    request.headers.get('sec-gpc') === '1' &&
-    body.allowed &&
-    ['advertising', 'identity_enrichment', 'sale_share'].includes(body.purpose)
-  )
+  if (request.headers.get('sec-gpc') === '1' && body.purposes.advertising)
     return jsonError('gpc_blocks_grant', 409, request, env);
   const visitor = await visitorId(request, env);
-  if (!visitor && body.visitor_id) return jsonError('verification_required', 403, request, env);
-  const choiceId = await recordPrivacyChoice(env, {
-    visitorId: visitor ?? body.visitor_id,
-    purpose: body.purpose,
-    allowed: body.allowed,
-    source: 'ui',
-    region: textEnv(env, 'TRACKING_REGION', 'US'),
-    policyVersion: textEnv(env, 'TRACKING_POLICY_VERSION', '1'),
-    supersedesChoiceKey: body.choice_id,
-  });
-  return jsonResponse({ accepted: true, choice_id: choiceId }, 202, cors(request, env));
+  const privacySubject = await privacySubjectId(request, env);
+  if (!visitor && !privacySubject) return jsonError('verification_required', 403, request, env);
+  const policyVersion = String(privacyPolicy.policy_version);
+  if (body.policyVersion !== policyVersion) return jsonError('stale_policy', 409, request, env);
+  const signer = env.TRACKING_CONTEXT_SIGN as TrackingContextSigner | undefined;
+  const trackingAllowed = body.purposes.analytics || body.purposes.advertising;
+  if (trackingAllowed && typeof signer !== 'function')
+    return jsonError('context_signer_unavailable', 503, request, env);
+  const contextHash = trackingAllowed
+    ? await signer!({
+        tenant_id: textEnv(env, 'TRACKING_TENANT_ID', 'default'),
+        site_id: textEnv(env, 'TRACKING_SITE_ID', 'default'),
+        funnel_id: rolloutState.context.bound_funnel,
+        subject_id: visitor ?? privacySubject!,
+        subject_deleted: false,
+        policy_version: policyVersion,
+      })
+    : null;
+  if (contextHash && !/^[A-Za-z0-9_-]{16,256}$/.test(contextHash))
+    return jsonError('invalid_signed_context', 503, request, env);
+  const now = new Date().toISOString();
+  const consumed = await env.TRACKING_DB.prepare(
+    `UPDATE tracking_csrf_nonces
+       SET consumed_at = ?, choice_id = ?, context_hash = ?, action = ?,
+           analytics_allowed = ?, advertising_allowed = ?
+       WHERE nonce = ? AND tenant_id = ? AND site_id = ?
+         AND (visitor_id = ? OR privacy_subject_id = ?)
+         AND policy_version = ? AND consumed_at IS NULL AND expires_at > ?`
+  )
+    .bind(
+      now,
+      body.choiceId,
+      contextHash,
+      body.action,
+      body.purposes.analytics ? 1 : 0,
+      body.purposes.advertising ? 1 : 0,
+      nonce,
+      textEnv(env, 'TRACKING_TENANT_ID', 'default'),
+      textEnv(env, 'TRACKING_SITE_ID', 'default'),
+      visitor,
+      privacySubject,
+      policyVersion,
+      now
+    )
+    .run();
+  if (!consumed.success || Number(consumed.meta?.changes ?? 0) !== 1)
+    return jsonError('nonce_consumed', 409, request, env);
+  const state = await loadPrivacyState(request, env, visitor ?? undefined, privacySubject ?? undefined);
+  return jsonResponse(
+    {
+      accepted: true,
+      choice_id: body.choiceId,
+      resolved: state.resolved,
+      policy_version: state.policyVersion,
+      purposes: state.decisions.filter((decision) => decision.allowed).map((decision) => decision.purpose),
+    },
+    202,
+    cors(request, env)
+  );
 }
 
 async function privacyRequest(request: Request, env: CollectorEnv): Promise<Response> {
@@ -585,12 +694,13 @@ async function privacyRequest(request: Request, env: CollectorEnv): Promise<Resp
   if (
     !['access', 'correction', 'deletion'].includes(String(requestType)) ||
     typeof subject !== 'string' ||
-    !/^[A-Za-z0-9:_-]{1,128}$/.test(subject)
+    (subject !== 'self' && !/^[A-Za-z0-9:_-]{1,128}$/.test(subject))
   )
     return jsonError('invalid_request', 400, request, env);
   const verifiedVisitor = await visitorId(request, env);
-  if (!verifiedVisitor || verifiedVisitor !== subject)
+  if (!verifiedVisitor || (subject !== 'self' && verifiedVisitor !== subject))
     return jsonError('verification_required', 403, request, env);
+  const subjectKey = verifiedVisitor;
   const requestId = crypto.randomUUID();
   await env.TRACKING_DB.prepare(
     `INSERT INTO tracking_deletion_requests (request_id, tenant_id, subject_key, request_type, state, verification_state, created_at, audit_json) VALUES (?, ?, ?, ?, 'received', 'pending', ?, ?)`
@@ -598,7 +708,7 @@ async function privacyRequest(request: Request, env: CollectorEnv): Promise<Resp
     .bind(
       requestId,
       textEnv(env, 'TRACKING_TENANT_ID', 'default'),
-      subject,
+      subjectKey,
       requestType,
       new Date().toISOString(),
       JSON.stringify({ source: 'worker', purpose: 'privacy_request' })

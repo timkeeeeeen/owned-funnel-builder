@@ -18,7 +18,7 @@ const choices = (...values: StoredPrivacyChoice[]) => values;
 const allowed = (decisions: ReturnType<typeof resolvePrivacy>, purpose: string) =>
   decisions.find((decision) => decision.purpose === purpose)?.allowed;
 
-test('GPC and stored opt-outs override stale opt-in while US defaults remain enabled', () => {
+test('GPC and stored opt-outs override stale opt-in', () => {
   const staleOptIn: StoredPrivacyChoice = {
     purpose: 'advertising',
     allowed: true,
@@ -42,6 +42,24 @@ test('GPC and stored opt-outs override stale opt-in while US defaults remain ena
   assert.equal(allowed(state, 'advertising'), false);
   assert.equal(allowed(state, 'identity_enrichment'), false);
   assert.equal(allowed(state, 'sale_share'), false);
+});
+
+test('unresolved non-necessary purposes fail closed in every region', () => {
+  const unresolved = resolvePrivacy(request(), [], policy);
+  assert.equal(allowed(unresolved, 'necessary'), true);
+  assert.equal(allowed(unresolved, 'analytics'), false);
+  assert.equal(allowed(unresolved, 'advertising'), false);
+  assert.equal(allowed(unresolved, 'identity_enrichment'), false);
+  assert.equal(allowed(unresolved, 'sale_share'), false);
+  const granted: StoredPrivacyChoice = {
+    purpose: 'analytics',
+    allowed: true,
+    policyVersion: '2026-08',
+    effectiveAt: '2026-08-01T00:00:00.000Z',
+    source: 'ui',
+    region: 'US',
+  };
+  assert.equal(allowed(resolvePrivacy(request(), [granted], policy), 'analytics'), true);
 });
 
 test('prior-consent, withdrawal, and unknown-region policy fail closed', () => {

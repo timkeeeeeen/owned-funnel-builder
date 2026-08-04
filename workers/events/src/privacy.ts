@@ -9,6 +9,7 @@ import { redactError } from './observability.ts';
 
 export type PrivacyState = {
   decisions: PrivacyDecision[];
+  resolved: boolean;
   gpc: boolean;
   observedAt: string;
   policyVersion: string;
@@ -40,12 +41,13 @@ function envString(env: Record<string, unknown>, key: string, fallback: string):
 export async function loadPrivacyState(
   request: Request,
   env: Record<string, unknown>,
-  visitorId?: string
+  visitorId?: string,
+  privacySubjectId?: string
 ): Promise<PrivacyState> {
   const database = env.TRACKING_DB as D1Database | undefined;
   const tenantId = envString(env, 'TRACKING_TENANT_ID', 'default');
   const siteId = envString(env, 'TRACKING_SITE_ID', 'default');
-  const policyVersion = envString(env, 'TRACKING_POLICY_VERSION', String(privacyPolicy.policy_version));
+  const policyVersion = String(privacyPolicy.policy_version);
   const region = envString(env, 'TRACKING_REGION', 'US');
   let rows: PrivacyRow[] = [];
   let storageFailure = false;
@@ -55,11 +57,17 @@ export async function loadPrivacyState(
         .prepare(
           `SELECT purpose, choice, policy_version, effective_at, source, region_source
            FROM tracking_privacy_choices
-           WHERE tenant_id = ? AND site_id = ? AND (visitor_id = ? OR visitor_id IS NULL)
+           WHERE tenant_id = ? AND site_id = ? AND (visitor_id = ? OR visitor_id = ?)
              AND (expires_at IS NULL OR expires_at > ?)
            ORDER BY effective_at ASC LIMIT 200`
         )
-        .bind(tenantId, siteId, visitorId ?? null, new Date().toISOString())
+        .bind(
+          tenantId,
+          siteId,
+          visitorId ?? null,
+          privacySubjectId ?? null,
+          new Date().toISOString()
+        )
         .all<PrivacyRow>();
       rows = result.results ?? [];
     } catch (error) {
@@ -83,6 +91,14 @@ export async function loadPrivacyState(
   const decisions = resolvePrivacy(request, stored, { region, failClosed, policyVersion });
   return {
     decisions,
+    resolved: ['analytics', 'advertising'].every((purpose) =>
+      stored.some(
+        (choice) =>
+          choice.purpose === purpose &&
+          choice.policyVersion === policyVersion &&
+          choice.region === region
+      )
+    ),
     gpc: request.headers.get('sec-gpc') === '1',
     observedAt: new Date().toISOString(),
     policyVersion,
@@ -184,31 +200,42 @@ export async function recordGpcObservation(
 }
 
 export function privacyBody(value: unknown): {
-  purpose: PrivacyPurpose;
-  allowed: boolean;
-  visitor_id?: string;
-  choice_id?: string;
+  choiceId: string;
+  policyVersion: string;
+  action: 'accept' | 'reject' | 'customize' | 'withdraw' | 'gpc';
+  purposes: { analytics: boolean; advertising: boolean };
 } {
   if (!value || typeof value !== 'object' || Array.isArray(value))
     throw new TypeError('invalid_privacy_body');
   const body = value as Record<string, unknown>;
-  if (typeof body.purpose !== 'string' || !purposeSet.has(body.purpose as PrivacyPurpose))
-    throw new TypeError('invalid_privacy_purpose');
-  if (typeof body.allowed !== 'boolean') throw new TypeError('invalid_privacy_choice');
-  if (
-    body.visitor_id !== undefined &&
-    (typeof body.visitor_id !== 'string' || body.visitor_id.length > 128)
-  )
-    throw new TypeError('invalid_privacy_visitor');
-  if (
-    body.choice_id !== undefined &&
-    (typeof body.choice_id !== 'string' || body.choice_id.length > 128)
-  )
+  const purposes = body.purposes as Record<string, unknown> | undefined;
+  if (body.schema_version !== '1') throw new TypeError('invalid_privacy_schema');
+  if (typeof body.choice_id !== 'string' || !/^choice:[A-Za-z0-9_-]{8,120}$/.test(body.choice_id))
     throw new TypeError('invalid_privacy_choice_id');
+  if (typeof body.policy_version !== 'string' || body.policy_version.length > 128)
+    throw new TypeError('invalid_privacy_policy');
+  if (!['accept', 'reject', 'customize', 'withdraw', 'gpc'].includes(String(body.action)))
+    throw new TypeError('invalid_privacy_action');
+  if (
+    !purposes ||
+    Object.keys(purposes).sort().join(',') !== 'advertising,analytics' ||
+    typeof purposes.analytics !== 'boolean' ||
+    typeof purposes.advertising !== 'boolean'
+  )
+    throw new TypeError('invalid_privacy_purposes');
+  if (
+    (body.action === 'accept' && (!purposes.analytics || !purposes.advertising)) ||
+    (['reject', 'withdraw', 'gpc'].includes(String(body.action)) &&
+      (purposes.analytics || purposes.advertising))
+  )
+    throw new TypeError('privacy_action_mismatch');
   return {
-    purpose: body.purpose as PrivacyPurpose,
-    allowed: body.allowed,
-    ...(typeof body.visitor_id === 'string' ? { visitor_id: body.visitor_id } : {}),
-    ...(typeof body.choice_id === 'string' ? { choice_id: body.choice_id } : {}),
+    choiceId: body.choice_id,
+    policyVersion: body.policy_version,
+    action: body.action as 'accept' | 'reject' | 'customize' | 'withdraw' | 'gpc',
+    purposes: {
+      analytics: purposes.analytics,
+      advertising: purposes.advertising,
+    },
   };
 }

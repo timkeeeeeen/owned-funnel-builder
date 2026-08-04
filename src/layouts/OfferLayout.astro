@@ -52,17 +52,21 @@ const resolvedSourceSystem =
 
 <script is:inline>
   (() => {
-    let sentFor = '';
+    let pageKey = '';
+    let pageViewId = '';
     const sendPageView = () => {
       const tracker = window.maestroTracking;
       const locationKey = `${window.location.pathname}${window.location.search}`;
-      if (!tracker || sentFor === locationKey || !tracker.canTrack('analytics')) return;
-      sentFor = locationKey;
-      tracker.collectPageView({}, `pageview:${crypto.randomUUID()}`);
+      if (!tracker || !tracker.canTrack('analytics')) return;
+      if (pageKey !== locationKey) {
+        pageKey = locationKey;
+        pageViewId = `pageview:${crypto.randomUUID()}`;
+      }
+      tracker.collectPageView({}, pageViewId);
     };
     window.addEventListener('maestro:consent', sendPageView);
     document.addEventListener('astro:page-load', () => {
-      sentFor = '';
+      pageKey = '';
       sendPageView();
     });
     queueMicrotask(sendPageView);

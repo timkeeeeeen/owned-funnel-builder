@@ -50,6 +50,7 @@ export function corsHeaders(
   headers.set('Access-Control-Allow-Credentials', 'true');
   headers.set('Access-Control-Allow-Methods', ALLOW_METHODS);
   headers.set('Access-Control-Allow-Headers', ALLOW_HEADERS.join(', '));
+  headers.set('Access-Control-Expose-Headers', 'x-csrf-nonce');
   return headers;
 }
 

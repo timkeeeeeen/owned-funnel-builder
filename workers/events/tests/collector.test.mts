@@ -68,6 +68,7 @@ async function env() {
           policy_version: '2026-08-04',
         }
       : null,
+    TRACKING_CONTEXT_SIGN: () => 'a'.repeat(64),
     __database: database,
   } as const;
 }
@@ -76,6 +77,7 @@ async function BunlessMigration(): Promise<string> {
   const files = [
     new URL('../migrations/0001_tracking_ledger.sql', import.meta.url),
     new URL('../migrations/0002_tracking_scope_hardening.sql', import.meta.url),
+    new URL('../migrations/0003_csrf_nonce_bindings.sql', import.meta.url),
   ];
   const chunks = [] as string[];
   for (const file of files)
@@ -119,8 +121,22 @@ test('bootstrap requires exact host/origin and returns non-cacheable signed cook
   const response = await worker.fetch(request('/v1/bootstrap'), bindings as never, {} as never);
   assert.equal(response.status, 200);
   assert.equal(response.headers.get('cache-control'), 'no-store');
-  assert.match(response.headers.get('set-cookie') ?? '', /ma_vid=v2\./);
-  assert.match(response.headers.get('set-cookie') ?? '', /HttpOnly/);
+  const setCookie = response.headers.get('set-cookie') ?? '';
+  assert.match(setCookie, /ma_privacy=v2\./);
+  assert.equal(/ma_vid=v2\./.test(setCookie), false);
+  assert.equal(/ma_sid=v2\./.test(setCookie), false);
+  const body = (await response.json()) as Record<string, unknown>;
+  assert.equal('visitor_id' in body, false);
+  assert.equal(body.resolved, false);
+  assert.equal('tracking_context_hash' in body, false);
+  assert.equal('purposes' in body, false);
+  assert.equal('privacy' in body, false);
+  assert.equal('visitor_ready' in body, false);
+  assert.equal(
+    (bindings.__database.prepare('SELECT count(*) AS count FROM tracking_events').get() as { count: number }).count,
+    0
+  );
+  assert.equal(response.headers.get('access-control-expose-headers'), 'x-csrf-nonce');
 
   const wrongOrigin = await worker.fetch(
     new Request('https://events.example.test/v1/bootstrap', {
@@ -138,6 +154,89 @@ test('bootstrap requires exact host/origin and returns non-cacheable signed cook
     {} as never
   );
   assert.equal(wrongHost.status, 403);
+});
+
+test('one privacy action atomically consumes its bound nonce and returns server-effective purposes', async () => {
+  const bindings = await env();
+  const firstBootstrap = await worker.fetch(request('/v1/bootstrap'), bindings as never, {} as never);
+  const privacyCookie = (firstBootstrap.headers.get('set-cookie') ?? '')
+    .split(',')
+    .find((cookie) => cookie.trim().startsWith('ma_privacy='))
+    ?.split(';', 1)[0]
+    ?.trim() ?? '';
+  const nonce = firstBootstrap.headers.get('x-csrf-nonce') ?? '';
+  const choiceId = `choice:${crypto.randomUUID()}`;
+  const action = () => request('/v1/privacy', {
+    method: 'POST',
+    headers: { cookie: privacyCookie, 'x-csrf-nonce': nonce },
+    body: JSON.stringify({
+      schema_version: '1',
+      choice_id: choiceId,
+      policy_version: '2026-08-04',
+      action: 'customize',
+      purposes: { analytics: true, advertising: false },
+    }),
+  });
+
+  const accepted = await worker.fetch(action(), bindings as never, {} as never);
+  assert.equal(accepted.status, 202);
+  assert.deepEqual(await accepted.json(), {
+    accepted: true,
+    choice_id: choiceId,
+    resolved: true,
+    policy_version: '2026-08-04',
+    purposes: ['necessary', 'analytics'],
+  });
+  assert.equal((await worker.fetch(action(), bindings as never, {} as never)).status, 409);
+  const consumed = bindings.__database
+    .prepare('SELECT consumed_at, choice_id, policy_version, action FROM tracking_csrf_nonces WHERE nonce = ?')
+    .get(nonce) as Record<string, unknown>;
+  assert.equal(typeof consumed.consumed_at, 'string');
+  assert.equal(consumed.choice_id, choiceId);
+  assert.equal(consumed.policy_version, '2026-08-04');
+  assert.equal(consumed.action, 'customize');
+  const choices = bindings.__database
+    .prepare('SELECT purpose, choice FROM tracking_privacy_choices WHERE choice_key LIKE ? ORDER BY purpose')
+    .all(`${choiceId}:%`) as Array<{ purpose: string; choice: string }>;
+  assert.deepEqual(choices.map((choice) => ({ ...choice })), [
+    { purpose: 'advertising', choice: 'deny' },
+    { purpose: 'analytics', choice: 'allow' },
+  ]);
+
+  const secondBootstrap = await worker.fetch(
+    request('/v1/bootstrap', { headers: { cookie: privacyCookie } }),
+    bindings as never,
+    {} as never
+  );
+  const withdrawId = `choice:${crypto.randomUUID()}`;
+  const withdrawn = await worker.fetch(
+    request('/v1/privacy', {
+      method: 'POST',
+      headers: {
+        cookie: privacyCookie,
+        'x-csrf-nonce': secondBootstrap.headers.get('x-csrf-nonce') ?? '',
+      },
+      body: JSON.stringify({
+        schema_version: '1',
+        choice_id: withdrawId,
+        policy_version: '2026-08-04',
+        action: 'withdraw',
+        purposes: { analytics: false, advertising: false },
+      }),
+    }),
+    bindings as never,
+    {} as never
+  );
+  assert.equal(withdrawn.status, 202);
+  assert.notEqual(withdrawId, choiceId);
+  assert.deepEqual((await withdrawn.json() as { purposes: string[] }).purposes, ['necessary']);
+  assert.deepEqual(
+    bindings.__database
+      .prepare('SELECT action FROM tracking_csrf_nonces WHERE consumed_at IS NOT NULL ORDER BY consumed_at, action')
+      .all()
+      .map((row) => ({ ...row })),
+    [{ action: 'customize' }, { action: 'withdraw' }]
+  );
 });
 
 test('browser collector accepts PageView, is idempotent, and blocks authoritative events', async () => {
@@ -340,17 +439,66 @@ test('GPC suppresses advertising browser events without turning the signal into 
 
 test('privacy request returns only a request id and state', async () => {
   const bindings = await env();
-  const bootstrap = await worker.fetch(request('/v1/bootstrap'), bindings as never, {} as never);
+  const firstBootstrap = await worker.fetch(request('/v1/bootstrap'), bindings as never, {} as never);
+  const privacyCookie = (firstBootstrap.headers.get('set-cookie') ?? '')
+    .split(',')
+    .find((cookie) => cookie.trim().startsWith('ma_privacy='))
+    ?.split(';', 1)[0]
+    ?.trim() ?? '';
+  const csrf = firstBootstrap.headers.get('x-csrf-nonce') ?? '';
+  assert.match(privacyCookie, /^ma_privacy=v2\./);
+  const forgedChoice = await worker.fetch(
+    request('/v1/privacy', {
+      method: 'POST',
+      headers: { cookie: privacyCookie, 'x-csrf-nonce': 'a'.repeat(43) },
+      body: JSON.stringify({
+        schema_version: '1',
+        choice_id: `choice:${crypto.randomUUID()}`,
+        policy_version: '2026-08-04',
+        action: 'accept',
+        purposes: { analytics: true, advertising: true },
+      }),
+    }),
+    bindings as never,
+    {} as never
+  );
+  assert.equal(forgedChoice.status, 409);
+  const choice = await worker.fetch(
+    request('/v1/privacy', {
+      method: 'POST',
+      headers: { cookie: privacyCookie, 'x-csrf-nonce': csrf },
+      body: JSON.stringify({
+        schema_version: '1',
+        choice_id: `choice:${crypto.randomUUID()}`,
+        policy_version: '2026-08-04',
+        action: 'accept',
+        purposes: { analytics: true, advertising: true },
+      }),
+    }),
+    bindings as never,
+    {} as never
+  );
+  assert.equal(choice.status, 202);
+  const bootstrap = await worker.fetch(
+    request('/v1/bootstrap', { headers: { cookie: privacyCookie } }),
+    bindings as never,
+    {} as never
+  );
   const cookies = bootstrap.headers.getSetCookie?.() ?? [bootstrap.headers.get('set-cookie') ?? ''];
   const visitorCookie =
-    cookies.find((cookie) => cookie.startsWith('ma_vid='))?.split(';', 1)[0] ?? '';
+    cookies
+      .flatMap((cookie) => cookie.split(','))
+      .find((cookie) => cookie.trim().startsWith('ma_vid='))
+      ?.split(';', 1)[0]
+      ?.trim() ?? '';
   assert.match(visitorCookie, /^ma_vid=v2\./);
-  const visitor = ((await bootstrap.json()) as { visitor_id: string }).visitor_id;
+  const visitor = ((await bootstrap.json()) as { visitor_ready: boolean }).visitor_ready;
+  assert.equal(visitor, true);
   const response = await worker.fetch(
     request('/v1/privacy/requests', {
       method: 'POST',
       headers: { cookie: visitorCookie },
-      body: JSON.stringify({ request_type: 'deletion', subject_key: visitor }),
+      body: JSON.stringify({ request_type: 'deletion', subject_key: 'self' }),
     }),
     bindings as never,
     {} as never
