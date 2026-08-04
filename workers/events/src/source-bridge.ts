@@ -184,7 +184,7 @@ export function parseSourceEventEnvelope(value: unknown, source: SourceSystem): 
     typeof input.source_event_id !== 'string' || !ID.test(input.source_event_id) ||
     !AUTHORITATIVE_EVENTS.has(input.event_name) || !validDate(input.occurred_at, 86400) ||
     typeof input.context_hash !== 'string' || !HASH.test(input.context_hash) ||
-    !validDate(input.context_expires_at, 86400) || Date.parse(input.context_expires_at as string) <= Date.now() ||
+    !validDate(input.context_expires_at, 86400 * 7) || Date.parse(input.context_expires_at as string) <= Date.now() ||
     typeof input.funnel_slug !== 'string' || !ID.test(input.funnel_slug)
   ) throw new TypeError('invalid_source_envelope');
   for (const key of ['product_id', 'lead_id', 'checkout_session_id', 'payment_id']) {

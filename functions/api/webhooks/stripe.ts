@@ -1,5 +1,5 @@
 import { getProductDefinition } from '../../_generated/funnels';
-import { recordAdmaxxerPayment } from '../../_lib/admaxxer';
+import { recordAdmaxxerPayment, minorUnitsToMajor } from '../../_lib/admaxxer';
 import { deliverPurchase } from '../../_lib/fulfillment';
 import {
   cleanString,
@@ -141,7 +141,7 @@ async function markStripePaymentSucceeded(
     event_name: 'Purchase', occurred_at: now, context_hash: contextHash,
     context_expires_at: new Date(Date.now() + 10 * 60_000).toISOString(),
     funnel_slug: metadata.offer_slug || funnelId, product_id: productKey, payment_id: paymentId,
-    value: (typeof payment.amount_received === 'number' ? payment.amount_received : payment.amount) / 100,
+    value: minorUnitsToMajor(typeof payment.amount_received === 'number' ? payment.amount_received : payment.amount, cleanString(payment.currency, 3).toUpperCase()),
     currency: cleanString(payment.currency, 3).toUpperCase(), num_items: 1,
     privacy_snapshot: JSON.parse(flow.privacy_snapshot_json || '{}'),
   };

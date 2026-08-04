@@ -866,7 +866,7 @@ async function contextExchange(request: Request, env: CollectorEnv): Promise<Res
     privacy_snapshot: (context.privacy_snapshot ?? {
       schema_version: '1', server_subject_ref: String(context.subject_id ?? context.server_subject_ref ?? ''),
       subject_ref_version: 'v1', snapshot_issued_at: new Date().toISOString(),
-      snapshot_expires_at: new Date(Date.now() + 600_000).toISOString(), snapshot_key_id: 'worker-current',
+      snapshot_expires_at: new Date(Date.now() + CONTEXT_EXCHANGE_MAX_AGE_SECONDS * 1000).toISOString(), snapshot_key_id: 'worker-current',
       snapshot_signature: base64url(crypto.getRandomValues(new Uint8Array(32))),
       purposes: { necessary: 'granted', analytics: 'unknown', advertising: 'unknown', identity_enrichment: 'unknown', sale_share: 'unknown' },
       policy_version: String(context.policy_version ?? privacyPolicy.policy_version), choice_id: 'context-token', decision_source: 'policy',
