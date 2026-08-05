@@ -148,6 +148,8 @@ test('ready route components remain fail closed until the configured runtime ena
   assert.match(runtime, /contractReady/);
   assert.match(runtime, /validConvexUrl/);
   assert.match(runtime, /validAppUrl/);
+  assert.match(runtime, /PUBLIC_BLUEPRINT_TURNSTILE_ENABLED/);
+  assert.match(runtime, /data-turnstile-enabled/);
   assert.match(runtime, /turnstileSiteKey\.length > 0/);
 });
 
@@ -210,6 +212,7 @@ test('the live bridge remains a thin client of canonical Maestro authorities', a
   assert.match(runtime, /PUBLIC_MAESTRO_CONVEX_URL/);
   assert.match(runtime, /PUBLIC_MAESTRO_APP_URL/);
   assert.match(runtime, /PUBLIC_TURNSTILE_SITE_KEY/);
+  assert.match(client, /turnstile-disabled-for-testing/);
 
   for (const path of [
     'capabilities/leadMagnets/publicPersonalizations:start',

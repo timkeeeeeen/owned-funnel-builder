@@ -11,6 +11,7 @@ const { audience = '', mode, thankYouPath = '' } = Astro.props;
 const convexUrl = import.meta.env.PUBLIC_MAESTRO_CONVEX_URL?.trim() ?? '';
 const appUrl = import.meta.env.PUBLIC_MAESTRO_APP_URL?.trim() ?? '';
 const turnstileSiteKey = import.meta.env.PUBLIC_TURNSTILE_SITE_KEY?.trim() ?? '';
+const turnstileEnabled = import.meta.env.PUBLIC_BLUEPRINT_TURNSTILE_ENABLED !== 'false';
 const workspaceSlug =
   import.meta.env.PUBLIC_MAESTRO_BLUEPRINT_WORKSPACE_SLUG?.trim() ?? 'modern-agency-sales';
 const leadMagnetSlug =
@@ -40,7 +41,7 @@ const enabled =
   contractReady &&
   validConvexUrl &&
   validAppUrl &&
-  (!requiresTurnstile || turnstileSiteKey.length > 0);
+  (!requiresTurnstile || !turnstileEnabled || turnstileSiteKey.length > 0);
 ---
 
 <div
@@ -50,6 +51,7 @@ const enabled =
   data-audience={audience}
   data-convex-url={enabled ? convexUrl : ''}
   data-app-url={enabled ? appUrl : ''}
+  data-turnstile-enabled={String(turnstileEnabled)}
   data-turnstile-site-key={enabled ? turnstileSiteKey : ''}
   data-workspace-slug={workspaceSlug}
   data-lead-magnet-slug={leadMagnetSlug}
@@ -57,14 +59,17 @@ const enabled =
 >
   <div
     data-blueprint-turnstile
-    class:list={['mt-4 min-h-[65px]', (!enabled || !requiresTurnstile) && 'hidden']}
+    class:list={[
+      'mt-4 min-h-[65px]',
+      (!enabled || !requiresTurnstile || !turnstileEnabled) && 'hidden',
+    ]}
     aria-label="Security check"
   >
   </div>
 </div>
 
 {
-  enabled && requiresTurnstile && (
+  enabled && requiresTurnstile && turnstileEnabled && (
     <script
       is:inline
       src="https://challenges.cloudflare.com/turnstile/v0/api.js?render=explicit"

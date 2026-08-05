@@ -9,11 +9,14 @@ type RuntimeConfig = {
   audience: string;
   convexUrl: string;
   appUrl: string;
+  turnstileEnabled: boolean;
   turnstileSiteKey: string;
   workspaceSlug: string;
   leadMagnetSlug: string;
   thankYouPath: string;
 };
+
+const DISABLED_TURNSTILE_TOKEN = 'turnstile-disabled-for-testing';
 
 type StoredSession = {
   publicSessionToken: string;
@@ -83,6 +86,7 @@ function readConfig(root: HTMLElement): RuntimeConfig | null {
   const audience = root.dataset.audience ?? '';
   const convexUrl = root.dataset.convexUrl ?? '';
   const appUrl = root.dataset.appUrl ?? '';
+  const turnstileEnabled = root.dataset.turnstileEnabled !== 'false';
   const turnstileSiteKey = root.dataset.turnstileSiteKey ?? '';
   const workspaceSlug = root.dataset.workspaceSlug ?? '';
   const leadMagnetSlug = root.dataset.leadMagnetSlug ?? '';
@@ -91,7 +95,7 @@ function readConfig(root: HTMLElement): RuntimeConfig | null {
     !convexUrl ||
     !appUrl ||
     (requiresAudience(mode) && !audience) ||
-    (requiresTurnstile(mode) && !turnstileSiteKey) ||
+    (requiresTurnstile(mode) && turnstileEnabled && !turnstileSiteKey) ||
     !workspaceSlug ||
     !leadMagnetSlug
   ) {
@@ -103,6 +107,7 @@ function readConfig(root: HTMLElement): RuntimeConfig | null {
     audience,
     convexUrl,
     appUrl,
+    turnstileEnabled,
     turnstileSiteKey,
     workspaceSlug,
     leadMagnetSlug,
@@ -116,14 +121,14 @@ async function initializeRuntime(config: RuntimeConfig) {
     return;
   }
   const assetTokens = config.mode === 'asset' ? captureAssetTokens() : null;
-  const turnstile = await waitForTurnstile();
+  const turnstile = config.turnstileEnabled ? await waitForTurnstile() : createDisabledTurnstile();
   if (!turnstile) {
     setStatus(config, 'The security check could not load. Please reload and try again.');
     return;
   }
 
-  const tokenState = { value: '' };
-  const widgetId = renderTurnstile(config, turnstile, tokenState);
+  const tokenState = { value: config.turnstileEnabled ? '' : DISABLED_TURNSTILE_TOKEN };
+  const widgetId = config.turnstileEnabled ? renderTurnstile(config, turnstile, tokenState) : '';
   if (config.mode === 'asset') {
     void initializeAsset(
       config,
@@ -316,7 +321,7 @@ async function startSnapshot(
     });
     const session = parseStartResult(result, journeyId);
     storeSession(config.audience, session);
-    tokenState.value = '';
+    tokenState.value = config.turnstileEnabled ? '' : DISABLED_TURNSTILE_TOKEN;
     turnstile.reset(widgetId);
 
     if (config.mode === 'snapshot') {
@@ -624,7 +629,7 @@ async function beginCheckoutForSession(
       returnPath: '/blueprint/checkout/return',
       turnstileToken: tokenState.value,
     });
-    tokenState.value = '';
+    tokenState.value = config.turnstileEnabled ? '' : DISABLED_TURNSTILE_TOKEN;
     turnstile.reset(widgetId);
     storeReturnClaimToken(session.publicSessionToken);
     await watchCheckout(config, session);
@@ -916,6 +921,10 @@ function waitForTurnstile(): Promise<TurnstileApi | null> {
     };
     check();
   });
+}
+
+function createDisabledTurnstile(): TurnstileApi {
+  return { render: () => '', reset: () => {} };
 }
 
 initializeBlueprintFunnels();
