@@ -25,10 +25,11 @@ test('video and primary CTA fit inside a 1366x768 viewport', async () => {
     .locator('[data-video-lead="hero"] [role="img"], [data-video-lead="hero"] iframe')
     .first();
   const cta = page.locator('[data-video-lead="hero"] [data-placement="hero"]');
-  const [mediaBox, ctaBox, viewportHeight] = await Promise.all([
+  const [mediaBox, ctaBox, viewportHeight, overflow] = await Promise.all([
     media.boundingBox(),
     cta.boundingBox(),
     page.evaluate(() => window.innerHeight),
+    page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth),
   ]);
 
   assert.ok(mediaBox, 'hero media must render');
@@ -41,6 +42,7 @@ test('video and primary CTA fit inside a 1366x768 viewport', async () => {
   assert.ok(ctaBox.y >= 0, 'hero CTA must not overflow above the viewport');
   assert.ok(ctaBox.x + ctaBox.width <= 1366, 'hero CTA must not overflow right');
   assert.ok(ctaBox.y + ctaBox.height <= viewportHeight, 'hero CTA must fit above the fold');
+  assert.ok(overflow <= 1, `desktop page must not overflow horizontally: ${overflow}px`);
   await page.close();
 });
 
