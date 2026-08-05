@@ -33,7 +33,13 @@ test('video and primary CTA fit inside a 1366x768 viewport', async () => {
 
   assert.ok(mediaBox, 'hero media must render');
   assert.ok(ctaBox, 'hero CTA must render');
+  assert.ok(mediaBox.x >= 0, 'hero media must not overflow left');
+  assert.ok(mediaBox.y >= 0, 'hero media must not overflow above the viewport');
+  assert.ok(mediaBox.x + mediaBox.width <= 1366, 'hero media must not overflow right');
   assert.ok(mediaBox.y + mediaBox.height <= viewportHeight, 'hero media must fit above the fold');
+  assert.ok(ctaBox.x >= 0, 'hero CTA must not overflow left');
+  assert.ok(ctaBox.y >= 0, 'hero CTA must not overflow above the viewport');
+  assert.ok(ctaBox.x + ctaBox.width <= 1366, 'hero CTA must not overflow right');
   assert.ok(ctaBox.y + ctaBox.height <= viewportHeight, 'hero CTA must fit above the fold');
   await page.close();
 });
