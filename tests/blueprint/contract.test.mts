@@ -250,6 +250,40 @@ test('the live bridge remains a thin client of canonical Maestro authorities', a
   assert.doesNotMatch(client, /DODO_PAYMENTS_API_KEY/);
 });
 
+test('the Turnstile test bypass enables the Snapshot start action', async () => {
+  const client = await readRepositoryFile('src/scripts/blueprint-funnel-client.ts');
+
+  assert.match(client, /if \(!config\.turnstileEnabled\) enableReadyAction\(config\);/);
+});
+
+test('disabled Turnstile paths do not ask for a hidden security check', async () => {
+  const client = await readRepositoryFile('src/scripts/blueprint-funnel-client.ts');
+
+  assert.doesNotMatch(
+    client,
+    /setStatus\(\s*config,\s*'[^']*(?:complete[^']*security check|security check[^']*complete)[^']*'/i
+  );
+  assert.match(client, /config\.turnstileEnabled\s*\?\s*'[^']*security check[^']*'\s*:\s*'[^']*'/i);
+});
+
+test('the Snapshot result draft follows the page heading without skipping a level', async () => {
+  const draftPreview = await readRepositoryFile('src/components/blueprint/DraftPreview.astro');
+
+  assert.match(draftPreview, /<h2[^>]*data-blueprint-draft-title/);
+  assert.doesNotMatch(draftPreview, /<h3[^>]*data-blueprint-draft-title/);
+});
+
+test('Blueprint pages use the single main landmark owned by OfferLayout', async () => {
+  for (const path of [
+    'src/components/blueprint/AuthoritySnapshotPage.astro',
+    'src/components/blueprint/GamePlanPage.astro',
+    'src/components/blueprint/SnapshotThankYouPage.astro',
+  ]) {
+    const page = await readRepositoryFile(path);
+    assert.doesNotMatch(page, /<\/?main(?:\s|>)/);
+  }
+});
+
 test('buyer-facing proof leads with real experience and keeps the new-product boundary', async () => {
   const [snapshotPage, gamePlanPage, proofStrip, proofSection] = await Promise.all([
     readRepositoryFile('src/components/blueprint/AuthoritySnapshotPage.astro'),

@@ -30,116 +30,113 @@ const title = `Your Authority Snapshot | ${audience.switchLabel}`;
     <PreviewNotice />
     <BlueprintNav family="authority-snapshot" activeAudience={audience.slug} />
 
-    <main>
-      <section class="px-4 py-10 sm:px-6 sm:py-16" aria-labelledby="snapshot-result-title">
-        <div class="mx-auto max-w-6xl">
-          <div class="max-w-3xl">
-            <p class="text-sm font-bold uppercase tracking-[0.14em] text-brand">
-              Your private result
-            </p>
-            <h1
-              id="snapshot-result-title"
-              class="mt-3 text-balance text-4xl font-bold tracking-tight sm:text-6xl"
-            >
-              Your Authority Snapshot
-            </h1>
-            <p
-              data-blueprint-runtime-status
-              aria-live="polite"
-              class="mt-4 rounded-xl border border-border bg-muted p-4 font-semibold text-muted-foreground"
-            >
-              We’re reading your public profile now. Your result will appear here automatically.
+    <section class="px-4 py-10 sm:px-6 sm:py-16" aria-labelledby="snapshot-result-title">
+      <div class="mx-auto max-w-6xl">
+        <div class="max-w-3xl">
+          <p class="text-sm font-bold uppercase tracking-[0.14em] text-brand">
+            Your private result
+          </p>
+          <h1
+            id="snapshot-result-title"
+            class="mt-3 text-balance text-4xl font-bold tracking-tight sm:text-6xl"
+          >
+            Your Authority Snapshot
+          </h1>
+          <p
+            data-blueprint-runtime-status
+            aria-live="polite"
+            class="mt-4 rounded-xl border border-border bg-muted p-4 font-semibold text-muted-foreground"
+          >
+            We’re reading your public profile now. Your result will appear here automatically.
+          </p>
+        </div>
+        <BlueprintFunnelRuntime audience={audience.slug} mode="thank-you" />
+
+        <div class="mt-8 grid gap-6 lg:grid-cols-[0.9fr_1.1fr] lg:items-start">
+          <div>
+            <BlueprintScorecard audience={audience} kind="snapshot" showEvidence={true} />
+            <article class="mt-5 rounded-2xl border border-border bg-card p-5 shadow-sm sm:p-6">
+              <p class="text-sm font-bold text-brand" data-blueprint-findings-label>
+                The clearest gaps
+              </p>
+              <ol class="mt-4 space-y-3" data-blueprint-findings>
+                {
+                  audience.exampleEvidence
+                    .slice(0, snapshot.maximumFindings)
+                    .map((finding) => (
+                      <li class="rounded-xl bg-muted p-4 text-sm leading-relaxed">{finding}</li>
+                    ))
+                }
+              </ol>
+            </article>
+          </div>
+          <div>
+            <DraftPreview audience={audience} compact={true} />
+            <p class="mt-3 text-sm leading-relaxed text-muted-foreground">
+              This starter uses what is public. Any missing client story or proof stays visible
+              instead of being invented.
             </p>
           </div>
-          <BlueprintFunnelRuntime audience={audience.slug} mode="thank-you" />
+        </div>
+      </div>
+    </section>
 
-          <div class="mt-8 grid gap-6 lg:grid-cols-[0.9fr_1.1fr] lg:items-start">
+    <section
+      class="border-y border-border bg-foreground px-4 py-14 text-background sm:px-6"
+      aria-labelledby="next-step-title"
+    >
+      <div class="mx-auto grid max-w-5xl gap-8 lg:grid-cols-[1fr_0.75fr] lg:items-center">
+        <div>
+          <p class="text-sm font-bold uppercase tracking-[0.14em] text-brand-soft">
+            Your next 30 days · $5
+          </p>
+          <h2 id="next-step-title" class="mt-3 text-balance text-3xl font-bold sm:text-5xl">
+            Your Snapshot found the gap. Now decide what to publish.
+          </h2>
+          <p class="mt-4 max-w-2xl text-lg leading-relaxed text-background/70">
+            Turn this result into three priorities, a four-week content plan, and your first five
+            drafts.
+          </p>
+          <ul class="mt-6 grid gap-2 text-sm font-semibold sm:grid-cols-3">
+            <li>3 priorities</li><li>20 post ideas</li><li>5 starter drafts</li>
+          </ul>
+        </div>
+        <div class="rounded-2xl bg-background p-5 text-foreground sm:p-6">
+          <div class="flex items-end justify-between gap-4">
             <div>
-              <BlueprintScorecard audience={audience} kind="snapshot" showEvidence={true} />
-              <article class="mt-5 rounded-2xl border border-border bg-card p-5 shadow-sm sm:p-6">
-                <p class="text-sm font-bold text-brand" data-blueprint-findings-label>
-                  The clearest gaps
-                </p>
-                <ol class="mt-4 space-y-3" data-blueprint-findings>
-                  {
-                    audience.exampleEvidence
-                      .slice(0, snapshot.maximumFindings)
-                      .map((finding) => (
-                        <li class="rounded-xl bg-muted p-4 text-sm leading-relaxed">{finding}</li>
-                      ))
-                  }
-                </ol>
-              </article>
-            </div>
-            <div>
-              <DraftPreview audience={audience} compact={true} />
-              <p class="mt-3 text-sm leading-relaxed text-muted-foreground">
-                This starter uses what is public. Any missing client story or proof stays visible
-                instead of being invented.
+              <p class="text-sm font-bold">$5 CMO Game Plan</p><p
+                class="mt-1 text-sm text-muted-foreground"
+              >
+                One payment
               </p>
             </div>
+            <p class="text-5xl font-bold">$5</p>
           </div>
-        </div>
-      </section>
-
-      <section
-        class="border-y border-border bg-foreground px-4 py-14 text-background sm:px-6"
-        aria-labelledby="next-step-title"
-      >
-        <div class="mx-auto grid max-w-5xl gap-8 lg:grid-cols-[1fr_0.75fr] lg:items-center">
-          <div>
-            <p class="text-sm font-bold uppercase tracking-[0.14em] text-brand-soft">
-              Your next 30 days · $5
-            </p>
-            <h2 id="next-step-title" class="mt-3 text-balance text-3xl font-bold sm:text-5xl">
-              Your Snapshot found the gap. Now decide what to publish.
-            </h2>
-            <p class="mt-4 max-w-2xl text-lg leading-relaxed text-background/70">
-              Turn this result into three priorities, a four-week content plan, and your first five
-              drafts.
-            </p>
-            <ul class="mt-6 grid gap-2 text-sm font-semibold sm:grid-cols-3">
-              <li>3 priorities</li><li>20 post ideas</li><li>5 starter drafts</li>
-            </ul>
-          </div>
-          <div class="rounded-2xl bg-background p-5 text-foreground sm:p-6">
-            <div class="flex items-end justify-between gap-4">
-              <div>
-                <p class="text-sm font-bold">$5 CMO Game Plan</p><p
-                  class="mt-1 text-sm text-muted-foreground"
-                >
-                  One payment
-                </p>
-              </div>
-              <p class="text-5xl font-bold">$5</p>
-            </div>
-            <button
-              type="button"
-              disabled
-              data-blueprint-thank-you-checkout
-              data-acceptance-cta="thank-you-checkout"
-              class="mt-5 inline-flex min-h-16 w-full cursor-not-allowed items-center justify-center rounded-xl bg-brand px-6 py-4 text-lg font-bold text-brand-foreground opacity-60"
+          <button
+            type="button"
+            disabled
+            data-blueprint-thank-you-checkout
+            data-acceptance-cta="thank-you-checkout"
+            class="mt-5 inline-flex min-h-16 w-full cursor-not-allowed items-center justify-center rounded-xl bg-brand px-6 py-4 text-lg font-bold text-brand-foreground opacity-60"
+          >
+            {plan.ctaLabel}
+          </button>
+          <p class="mt-3 text-center text-xs leading-relaxed text-muted-foreground">
+            {plan.auditExpectation}
+          </p>
+          <details class="mt-4 text-sm text-muted-foreground">
+            <summary class="cursor-pointer py-2 font-semibold text-foreground"
+              >Delivery and refund details</summary
             >
-              {plan.ctaLabel}
-            </button>
-            <p class="mt-3 text-center text-xs leading-relaxed text-muted-foreground">
-              {plan.auditExpectation}
-            </p>
-            <details class="mt-4 text-sm text-muted-foreground">
-              <summary class="cursor-pointer py-2 font-semibold text-foreground"
-                >Delivery and refund details</summary
-              >
-              <div class="mt-2 space-y-3 leading-relaxed">
-                <p>{blueprintProductContract.commercialTerms.delivery}</p><p>
-                  {blueprintProductContract.commercialTerms.refund}
-                </p>
-              </div>
-            </details>
-          </div>
+            <div class="mt-2 space-y-3 leading-relaxed">
+              <p>{blueprintProductContract.commercialTerms.delivery}</p><p>
+                {blueprintProductContract.commercialTerms.refund}
+              </p>
+            </div>
+          </details>
         </div>
-      </section>
-    </main>
-
+      </div>
+    </section>
     <footer class="px-4 py-8 text-sm text-muted-foreground sm:px-6">
       <div class="mx-auto flex max-w-6xl flex-wrap items-center justify-between gap-4">
         <p>

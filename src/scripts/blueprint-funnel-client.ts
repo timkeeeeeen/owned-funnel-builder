@@ -185,7 +185,12 @@ async function initializeAsset(
         checkoutIdempotencyKey: assetCheckoutIdempotencyKey(claimToken),
       });
     });
-    setStatus(config, 'Your saved Snapshot is ready. Complete the security check to continue.');
+    setStatus(
+      config,
+      config.turnstileEnabled
+        ? 'Your saved Snapshot is ready. Complete the security check to continue.'
+        : 'Your saved Snapshot is ready. Continue to secure checkout.'
+    );
   } catch {
     setStatus(config, 'We could not open this saved result. Reload once or contact support.');
   }
@@ -258,6 +263,7 @@ function initializeStartForm(
   });
   action.classList.remove('cursor-not-allowed', 'opacity-60');
   if (config.mode === 'snapshot') initializeMobileSnapshotAction(form);
+  if (!config.turnstileEnabled) enableReadyAction(config);
 
   const existingSession = config.mode === 'direct' ? readSession(config.audience) : null;
   if (existingSession) {
@@ -269,7 +275,12 @@ function initializeStartForm(
       action.dataset.snapshotComplete = 'true';
       action.textContent = 'Continue to secure checkout — $5';
       action.disabled = tokenState.value.length === 0;
-      setStatus(config, 'Your Snapshot is saved. Complete the security check to continue.');
+      setStatus(
+        config,
+        config.turnstileEnabled
+          ? 'Your Snapshot is saved. Complete the security check to continue.'
+          : 'Your Snapshot is saved. Continue to secure checkout.'
+      );
     }).catch(() => {
       setStatus(config, 'We could not restore this Snapshot. Reload once or start again.');
     });
@@ -282,7 +293,12 @@ function initializeStartForm(
       return;
     }
     if (!form.reportValidity() || !tokenState.value) {
-      setStatus(config, 'Complete both fields and the security check to continue.');
+      setStatus(
+        config,
+        config.turnstileEnabled
+          ? 'Complete both fields and the security check to continue.'
+          : 'Complete both fields to continue.'
+      );
       return;
     }
     void startSnapshot(config, form, action, tokenState, turnstile, widgetId);
@@ -339,7 +355,12 @@ async function startSnapshot(
       action.dataset.snapshotComplete = 'true';
       action.textContent = 'Continue to secure checkout — $5';
       action.disabled = tokenState.value.length === 0;
-      setStatus(config, 'Your Snapshot is saved. Complete the fresh security check to continue.');
+      setStatus(
+        config,
+        config.turnstileEnabled
+          ? 'Your Snapshot is saved. Complete the fresh security check to continue.'
+          : 'Your Snapshot is saved. Continue to secure checkout.'
+      );
     });
   } catch {
     setStatus(config, 'We could not start your Snapshot. Check your details and try again.');
@@ -374,7 +395,12 @@ function initializeThankYou(
     }
     action.disabled = tokenState.value.length === 0;
     action.dataset.snapshotComplete = 'true';
-    setStatus(config, 'Your Snapshot is saved. Complete the security check to continue for $5.');
+    setStatus(
+      config,
+      config.turnstileEnabled
+        ? 'Your Snapshot is saved. Complete the security check to continue for $5.'
+        : 'Your Snapshot is saved. Continue to secure checkout for $5.'
+    );
   }).catch(() => {
     setStatus(config, 'We could not refresh this Snapshot. Reload once or start again.');
   });
@@ -606,7 +632,12 @@ async function beginCheckout(
 ) {
   const session = readSession(config.audience);
   if (!session || !tokenState.value || action.dataset.snapshotComplete !== 'true') {
-    setStatus(config, 'Checkout unlocks after the Snapshot and security check are complete.');
+    setStatus(
+      config,
+      config.turnstileEnabled
+        ? 'Checkout unlocks after the Snapshot and security check are complete.'
+        : 'Checkout unlocks after the Snapshot is complete.'
+    );
     return;
   }
   await beginCheckoutForSession(config, tokenState, turnstile, widgetId, action, session);
