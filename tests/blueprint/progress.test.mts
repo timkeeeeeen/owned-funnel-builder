@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import {
+  blueprintProgressStepStates,
   isBlueprintProgressStalled,
   latestProgressEvent,
   mergeBlueprintProgress,
@@ -68,4 +69,30 @@ test('uses the server stall threshold against the last verified activity', () =>
   const progress = parseBlueprintProgress(accepted)!;
   assert.equal(isBlueprintProgressStalled(progress, 120_119), false);
   assert.equal(isBlueprintProgressStalled(progress, 120_120), true);
+});
+
+test('never marks a milestone complete without its own persisted receipt', () => {
+  const progress = parseBlueprintProgress({
+    ...accepted,
+    lastActivityAt: 300,
+    events: [
+      ...accepted.events,
+      {
+        key: 'evidence_organized',
+        occurredAt: 300,
+        summary: 'Public evidence organized for evaluation.',
+        previews: [],
+      },
+    ],
+  })!;
+
+  assert.deepEqual(blueprintProgressStepStates(progress), [
+    { key: 'accepted', state: 'complete' },
+    { key: 'research_started', state: 'pending' },
+    { key: 'sources_discovered', state: 'pending' },
+    { key: 'evidence_organized', state: 'current' },
+    { key: 'dimensions_evaluated', state: 'pending' },
+    { key: 'post_drafting', state: 'pending' },
+    { key: 'result_finalized', state: 'pending' },
+  ]);
 });

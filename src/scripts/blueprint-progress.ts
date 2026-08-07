@@ -107,6 +107,15 @@ export function latestProgressEvent(progress: BlueprintProgress) {
   return progress.events.at(-1) ?? null;
 }
 
+export function blueprintProgressStepStates(progress: BlueprintProgress) {
+  const reached = new Set(progress.events.map((event) => event.key));
+  const latest = [...progress.events].reverse().find((event) => event.key !== 'failed');
+  return BLUEPRINT_PROGRESS_KEYS.map((key) => ({
+    key,
+    state: key === latest?.key ? 'current' : reached.has(key) ? 'complete' : 'pending',
+  }));
+}
+
 export function isBlueprintProgressStalled(progress: BlueprintProgress, now: number) {
   return now - progress.lastActivityAt >= progress.stallAfterMs;
 }

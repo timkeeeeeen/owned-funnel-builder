@@ -1,5 +1,5 @@
 import {
-  BLUEPRINT_PROGRESS_KEYS,
+  blueprintProgressStepStates,
   isBlueprintProgressStalled,
   latestProgressEvent,
   mergeBlueprintProgress,
@@ -470,14 +470,9 @@ function renderSnapshotProgress(
     ...progress,
     events: progress.events.filter((event) => event.key !== 'failed'),
   });
-  const latestIndex = latest
-    ? BLUEPRINT_PROGRESS_KEYS.findIndex((key) => key === latest.key)
-    : 0;
-  panel
-    .querySelectorAll<HTMLElement>('[data-blueprint-progress-step]')
-    .forEach((row, index) => {
-      const state =
-        index < latestIndex ? 'complete' : index === latestIndex ? 'current' : 'pending';
+  for (const { key, state } of blueprintProgressStepStates(progress)) {
+    const row = panel.querySelector<HTMLElement>(`[data-blueprint-progress-step="${key}"]`);
+    if (row) {
       row.dataset.state = state;
       setText(
         row,
@@ -489,7 +484,8 @@ function renderSnapshotProgress(
         '[data-blueprint-progress-state]',
         state === 'complete' ? 'Complete' : state === 'current' ? 'Latest update' : 'Waiting'
       );
-    });
+    }
+  }
   const sources = panel.querySelector<HTMLElement>('[data-blueprint-progress-source]');
   const sourceEvent = progress.events.find((event) => event.key === 'sources_discovered');
   sources?.toggleAttribute('hidden', !sourceEvent);
