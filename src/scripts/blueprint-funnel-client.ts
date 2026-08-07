@@ -1,4 +1,11 @@
-export {};
+import {
+  BLUEPRINT_PROGRESS_KEYS,
+  isBlueprintProgressStalled,
+  latestProgressEvent,
+  mergeBlueprintProgress,
+  parseBlueprintProgress,
+  type BlueprintProgress,
+} from './blueprint-progress';
 
 type FunnelMode = 'snapshot' | 'direct' | 'thank-you' | 'asset' | 'checkout-return';
 type ConvexKind = 'action' | 'query';
@@ -383,26 +390,37 @@ function initializeThankYou(
     document.querySelector<HTMLElement>('[data-blueprint-restart-link]')?.removeAttribute('hidden');
     return;
   }
+  document.querySelector<HTMLElement>('[data-blueprint-progress]')?.removeAttribute('hidden');
+  setStatus(config, 'Snapshot request accepted.');
+  let latestProgress: BlueprintProgress | null = null;
   action.addEventListener('click', () => {
     void beginCheckout(config, tokenState, turnstile, widgetId, action);
   });
-  void watchSnapshot(config, session, (result) => {
-    if (!renderSavedSnapshot(config, result)) {
+  void watchSnapshot(
+    config,
+    session,
+    (result) => {
+      if (!renderSavedSnapshot(config, result)) {
+        setStatus(
+          config,
+          'Your Snapshot is saved, but its result could not be displayed. Reload once.'
+        );
+        return;
+      }
+      document.querySelector<HTMLElement>('[data-blueprint-progress]')?.setAttribute('hidden', '');
+      action.disabled = tokenState.value.length === 0;
+      action.dataset.snapshotComplete = 'true';
       setStatus(
         config,
-        'Your Snapshot is saved, but its result could not be displayed. Reload once.'
+        config.turnstileEnabled
+          ? 'Your Snapshot is saved. Complete the security check to continue for $5.'
+          : 'Your Snapshot is saved. Continue to secure checkout for $5.'
       );
-      return;
+    },
+    (result) => {
+      latestProgress = renderSnapshotProgress(config, result, latestProgress);
     }
-    action.disabled = tokenState.value.length === 0;
-    action.dataset.snapshotComplete = 'true';
-    setStatus(
-      config,
-      config.turnstileEnabled
-        ? 'Your Snapshot is saved. Complete the security check to continue for $5.'
-        : 'Your Snapshot is saved. Continue to secure checkout for $5.'
-    );
-  }).catch(() => {
+  ).catch(() => {
     setStatus(config, 'We could not refresh this Snapshot. Reload once or start again.');
   });
 }
@@ -410,7 +428,8 @@ function initializeThankYou(
 async function watchSnapshot(
   config: RuntimeConfig,
   session: StoredSession,
-  onComplete: (result: Record<string, unknown>) => void
+  onComplete: (result: Record<string, unknown>) => void,
+  onUpdate?: (result: Record<string, unknown>) => void
 ) {
   while (Date.now() < session.publicSessionExpiresAt) {
     const result = await callConvex(config, 'query', WATCH_PATH, {
@@ -418,19 +437,84 @@ async function watchSnapshot(
       workspaceSlug: config.workspaceSlug,
       routeKey: config.leadMagnetSlug,
     });
+    if (isRecord(result)) onUpdate?.(result);
     if (isRecord(result) && result.complete === true) {
       onComplete(result);
       return;
     }
     if (isRecord(result) && result.stage === 'failed') {
       clearSession(config.audience);
+      revealSnapshotRestart(config);
       setStatus(config, 'Your Snapshot needs a restart before checkout can continue.');
       return;
     }
     await delay(5_000);
   }
   clearSession(config.audience);
+  revealSnapshotRestart(config);
   setStatus(config, 'This saved session has expired. Start a new Authority Snapshot.');
+}
+
+function renderSnapshotProgress(
+  config: RuntimeConfig,
+  result: Record<string, unknown>,
+  previous: BlueprintProgress | null
+) {
+  const parsed = parseBlueprintProgress(result.progress);
+  if (!parsed) return previous;
+  const progress = previous ? mergeBlueprintProgress(previous, parsed) : parsed;
+  const panel = document.querySelector<HTMLElement>('[data-blueprint-progress]');
+  if (!panel) return progress;
+  panel.removeAttribute('hidden');
+  const latest = latestProgressEvent({
+    ...progress,
+    events: progress.events.filter((event) => event.key !== 'failed'),
+  });
+  const latestIndex = latest
+    ? BLUEPRINT_PROGRESS_KEYS.findIndex((key) => key === latest.key)
+    : 0;
+  panel
+    .querySelectorAll<HTMLElement>('[data-blueprint-progress-step]')
+    .forEach((row, index) => {
+      const state =
+        index < latestIndex ? 'complete' : index === latestIndex ? 'current' : 'pending';
+      row.dataset.state = state;
+      setText(
+        row,
+        '[data-blueprint-progress-marker]',
+        state === 'complete' ? '✓' : state === 'current' ? '●' : '○'
+      );
+      setText(
+        row,
+        '[data-blueprint-progress-state]',
+        state === 'complete' ? 'Complete' : state === 'current' ? 'Latest update' : 'Waiting'
+      );
+    });
+  const sources = panel.querySelector<HTMLElement>('[data-blueprint-progress-source]');
+  const sourceEvent = progress.events.find((event) => event.key === 'sources_discovered');
+  sources?.toggleAttribute('hidden', !sourceEvent);
+  if (sourceEvent) {
+    setText(panel, '[data-blueprint-progress-source-summary]', sourceEvent.summary);
+  }
+  setText(panel, '[data-blueprint-progress-elapsed]', elapsedLabel(progress.startedAt, Date.now()));
+  setStatus(
+    config,
+    isBlueprintProgressStalled(progress, Date.now())
+      ? 'Still working — profile research can sometimes take longer. Your session is saved, and reloading is safe.'
+      : (latest?.summary ?? 'Snapshot request accepted.')
+  );
+  return progress;
+}
+
+function elapsedLabel(startedAt: number, now: number) {
+  const minutes = Math.floor(Math.max(0, now - startedAt) / 60_000);
+  return minutes < 1 ? 'Elapsed: less than a minute' : `Elapsed: ${String(minutes)} min`;
+}
+
+function revealSnapshotRestart(config: RuntimeConfig) {
+  if (config.mode === 'thank-you') {
+    document.querySelector<HTMLElement>('[data-blueprint-restart-link]')?.removeAttribute('hidden');
+  }
 }
 
 function renderSavedSnapshot(config: RuntimeConfig, result: Record<string, unknown>) {

@@ -296,6 +296,32 @@ test('the Snapshot result never exposes synthetic placeholders as a customer res
   assert.doesNotMatch(client, /\?\?\s*snapshot\.findings\[index\]/);
 });
 
+test('the Snapshot wait screen exposes a truthful seven-step progress surface', async () => {
+  const [page, client] = await Promise.all([
+    readRepositoryFile('src/components/blueprint/SnapshotThankYouPage.astro'),
+    readRepositoryFile('src/scripts/blueprint-funnel-client.ts'),
+  ]);
+
+  for (const key of [
+    'accepted',
+    'research_started',
+    'sources_discovered',
+    'evidence_organized',
+    'dimensions_evaluated',
+    'post_drafting',
+    'result_finalized',
+  ]) {
+    assert.match(page, new RegExp(`data-blueprint-progress-step="${key}"`));
+  }
+  assert.match(page, /data-blueprint-progress\s+hidden|hidden\s+data-blueprint-progress/);
+  assert.match(page, /data-blueprint-progress-source-summary/);
+  assert.match(page, /data-blueprint-progress-elapsed/);
+  assert.match(page, /role="status"/);
+  assert.match(client, /parseBlueprintProgress/);
+  assert.match(client, /isBlueprintProgressStalled/);
+  assert.match(client, /data-blueprint-progress-step/);
+});
+
 test('Blueprint pages use the single main landmark owned by OfferLayout', async () => {
   for (const path of [
     'src/components/blueprint/AuthoritySnapshotPage.astro',
