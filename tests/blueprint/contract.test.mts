@@ -273,6 +273,29 @@ test('the Snapshot result draft follows the page heading without skipping a leve
   assert.doesNotMatch(draftPreview, /<h3[^>]*data-blueprint-draft-title/);
 });
 
+test('the Snapshot result never exposes synthetic placeholders as a customer result', async () => {
+  const [thankYou, scorecard, client] = await Promise.all([
+    readRepositoryFile('src/components/blueprint/SnapshotThankYouPage.astro'),
+    readRepositoryFile('src/components/blueprint/BlueprintScorecard.astro'),
+    readRepositoryFile('src/scripts/blueprint-funnel-client.ts'),
+  ]);
+
+  assert.match(
+    thankYou,
+    /data-blueprint-result-content\s+hidden|hidden\s+data-blueprint-result-content/
+  );
+  assert.match(
+    thankYou,
+    /data-blueprint-restart-link\s+hidden|hidden\s+data-blueprint-restart-link/
+  );
+  assert.match(scorecard, /data-blueprint-scorecard-context/);
+  assert.match(scorecard, /data-blueprint-evidence/);
+  assert.match(client, /\[data-blueprint-result-content\][^;]*removeAttribute\('hidden'\)/s);
+  assert.match(client, /\[data-blueprint-restart-link\][^;]*removeAttribute\('hidden'\)/s);
+  assert.match(client, /evidence\?\.toggleAttribute\('hidden', !finding\)/);
+  assert.doesNotMatch(client, /\?\?\s*snapshot\.findings\[index\]/);
+});
+
 test('Blueprint pages use the single main landmark owned by OfferLayout', async () => {
   for (const path of [
     'src/components/blueprint/AuthoritySnapshotPage.astro',

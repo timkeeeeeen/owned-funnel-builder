@@ -47,12 +47,25 @@ const title = `Your Authority Snapshot | ${audience.switchLabel}`;
             aria-live="polite"
             class="mt-4 rounded-xl border border-border bg-muted p-4 font-semibold text-muted-foreground"
           >
-            We’re reading your public profile now. Your result will appear here automatically.
+            We’re reading your public profile now. This can take several minutes; keep this tab
+            open.
           </p>
+          <a
+            data-blueprint-restart-link
+            hidden
+            href={`/authority-snapshot/${audience.slug}/`}
+            class="mt-4 inline-flex min-h-12 items-center rounded-xl bg-brand px-5 py-3 font-bold text-brand-foreground"
+          >
+            Start a new free Snapshot
+          </a>
         </div>
         <BlueprintFunnelRuntime audience={audience.slug} mode="thank-you" />
 
-        <div class="mt-8 grid gap-6 lg:grid-cols-[0.9fr_1.1fr] lg:items-start">
+        <div
+          data-blueprint-result-content
+          hidden
+          class="mt-8 grid gap-6 lg:grid-cols-[0.9fr_1.1fr] lg:items-start"
+        >
           <div>
             <BlueprintScorecard audience={audience} kind="snapshot" showEvidence={true} />
             <article class="mt-5 rounded-2xl border border-border bg-card p-5 shadow-sm sm:p-6">
@@ -82,6 +95,8 @@ const title = `Your Authority Snapshot | ${audience.switchLabel}`;
     </section>
 
     <section
+      data-blueprint-result-content
+      hidden
       class="border-y border-border bg-foreground px-4 py-14 text-background sm:px-6"
       aria-labelledby="next-step-title"
     >

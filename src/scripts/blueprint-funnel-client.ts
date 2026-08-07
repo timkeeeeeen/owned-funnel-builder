@@ -380,6 +380,7 @@ function initializeThankYou(
   const session = readSession(config.audience);
   if (!session) {
     setStatus(config, 'Start from the Authority Snapshot page to access your saved result.');
+    document.querySelector<HTMLElement>('[data-blueprint-restart-link]')?.removeAttribute('hidden');
     return;
   }
   action.addEventListener('click', () => {
@@ -439,6 +440,9 @@ function renderSavedSnapshot(config: RuntimeConfig, result: Record<string, unkno
   renderSavedScore(page, snapshot);
   renderSavedFindings(page, snapshot);
   renderSavedDraft(page, snapshot);
+  page
+    .querySelectorAll<HTMLElement>('[data-blueprint-result-content]')
+    .forEach((content) => content.removeAttribute('hidden'));
   return true;
 }
 
@@ -535,6 +539,11 @@ function parseOutcome(value: unknown): SavedSnapshot['outcome'] | null {
 
 function renderSavedScore(page: HTMLElement, snapshot: SavedSnapshot) {
   setText(page, '[data-blueprint-scorecard-label]', 'Your saved result');
+  setText(
+    page,
+    '[data-blueprint-scorecard-context]',
+    'Based on the public evidence Maestro could verify for this Snapshot.'
+  );
   setText(page, '[data-blueprint-score]', String(snapshot.score));
   setText(page, '[data-blueprint-score-maximum]', String(snapshot.maximum));
   setText(page, '[data-blueprint-score-copy]', `${snapshot.score}/${snapshot.maximum}`);
@@ -553,9 +562,9 @@ function renderSavedScore(page: HTMLElement, snapshot: SavedSnapshot) {
     progress?.setAttribute('aria-valuemax', String(dimension.maximum));
     if (bar)
       bar.style.width = `${String(Math.round((dimension.score / dimension.maximum) * 100))}%`;
-    const finding =
-      snapshot.findings.find((candidate) => candidate.dimensionKey === dimension.key) ??
-      snapshot.findings[index];
+    const evidence = row.querySelector<HTMLElement>('[data-blueprint-evidence]');
+    const finding = snapshot.findings.find((candidate) => candidate.dimensionKey === dimension.key);
+    evidence?.toggleAttribute('hidden', !finding);
     if (finding) {
       setText(row, '[data-blueprint-evidence-label]', `Source · ${evidenceLabel(finding)}`);
       setText(row, '[data-blueprint-evidence-body]', finding.reason);

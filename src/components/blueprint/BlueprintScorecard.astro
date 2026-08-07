@@ -48,7 +48,10 @@ const evidenceSources = [
       <p class="mt-2 text-lg font-bold">
         {scoreName}
       </p>
-      <p class="mt-1 max-w-lg text-sm leading-relaxed text-muted-foreground">
+      <p
+        class="mt-1 max-w-lg text-sm leading-relaxed text-muted-foreground"
+        data-blueprint-scorecard-context
+      >
         {audience.exampleContext}
       </p>
     </div>
@@ -117,7 +120,10 @@ const evidenceSources = [
                 />
               </div>
               {showEvidence && (
-                <div class="mt-3 rounded-xl border border-border bg-background p-4">
+                <div
+                  class="mt-3 rounded-xl border border-border bg-background p-4"
+                  data-blueprint-evidence
+                >
                   <p
                     class="font-mono text-xs font-bold uppercase tracking-[0.12em] text-muted-foreground"
                     data-blueprint-evidence-label
