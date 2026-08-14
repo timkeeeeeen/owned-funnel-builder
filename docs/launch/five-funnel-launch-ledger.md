@@ -1,6 +1,12 @@
 # Five-Funnel Launch Ledger
 
 Revision: 2026-08-03-r2
+Tracking activation readback: 2026-08-14. The redacted
+[`first-party-tracking-activation-gap-ledger.md`](./first-party-tracking-activation-gap-ledger.md)
+supersedes older tracking-infrastructure assumptions: the Events Worker,
+tracking D1, Queues/DLQs, tracking hostname, Pages source binding, and remote
+source migrations are absent, and production Pages serves a divergent
+pre-PR-#6 SHA. Funnel/canary state below remains fail-closed.
 Canonical artifact: this ledger owns funnel/canary state. The first-party event
 pipeline spec owns tracking, consent, identity, and destination behavior;
 Admaxxer/legacy-sender rows below are historical evidence only and cannot be
@@ -23,7 +29,8 @@ stage proof; never use the real-price catalog for this test.
 | --- | --- | --- | --- |
 | Dodo live account, mode, products, prices, attachments | unverified | Dodo readback; owner/provider | Disable checkout routes; restore prior catalog mapping |
 | Dodo webhook URL, signature secret, retry/idempotency | passed locally / unverified live | `npm run test:functions`; production delivery readback | Revert deployment; keep webhook retryable |
-| D1 migrations 0006/0007, backup/time-travel marker | passed for schema / deployment still unverified | Remote migration receipt: `0006_stripe_provider.sql` and `0007_webhook_retry_and_revocations.sql` applied successfully; readback confirms `offer_products`, `checkout_leads`, `funnel_runs`, `funnel_step_runs`, `webhook_events`, `payment_revocations`, and `fulfillments`; Time Travel bookmark `00000031-00000000-000050bb-d66926ee30685fcaf0f1dfdb1179dd8e` recorded | Restore bookmark; do not run ads |
+| D1 migrations 0006/0007, backup/time-travel marker | passed for earlier schema / tracking blocked | Earlier receipt confirms `0006_stripe_provider.sql` and `0007_webhook_retry_and_revocations.sql`. Fresh readback shows production stops at `0009_email_campaigns.sql`; source-tracking migrations `0010` through both `0012` files and their tables are absent. Tracking D1 does not exist. | Restore the recorded bookmark if needed; do not run ads or apply missing migrations without exact-SHA approval |
+| First-party Events Worker, Queue/DLQ, DNS/TLS | verified absent | 2026-08-14 Cloudflare readback: both configured Worker names return not found; preview/live tracking D1 and Queue/DLQ names are absent; `events.shop.maestrogtm.com` is `ENOTFOUND` | Keep senders and campaigns off; provision preview only after approval |
 | Admaxxer websites, pixel, Lead/Purchase API, Meta CAPI | unverified | owner CAPI connection + redacted event traces | Disable server ingestion/campaigns |
 | Privacy/consent, terms, refund/support owner | unverified | approved copy and production URL check | Pause all campaigns |
 | Meta dataset/domain/billing/permissions | unverified | Events Manager and Ads Manager readback | Keep campaigns paused |

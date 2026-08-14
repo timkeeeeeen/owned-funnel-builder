@@ -1,5 +1,15 @@
 # First-Party Event Pipeline Authority Evidence
 
+## 2026-08-14 activation readback
+
+The source contracts below remain authoritative, but live infrastructure has
+now been read back. The Events Worker, tracking D1, Queues/DLQs, tracking DNS,
+Pages source binding, and source migrations are absent; production Pages serves
+a divergent pre-PR-#6 SHA. Tinybird is reachable but unprovisioned, while Meta
+and Dodo provider capability remain unverified. See the redacted
+[`first-party-tracking-activation-gap-ledger.md`](./first-party-tracking-activation-gap-ledger.md)
+before using any older deployment receipt in this file.
+
 Recorded 2026-08-04 from the clean `codex/first-party-event-pipeline` worktree
 at `ca35d223f333d06ee662e809a526e8283780882e`. This is a source-contract
 inventory, not provider provisioning or a deployment readback. Any field marked
