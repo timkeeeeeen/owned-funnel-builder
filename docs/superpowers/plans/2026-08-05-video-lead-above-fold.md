@@ -18,7 +18,7 @@
 
 ## Delivery Batches
 
-- **Batch 1 — strict fold fit:** Task 1 on branch `codex/video-lead-fold`, based on and targeting `main`. Focused checks: the browser regression and `npm run test:blueprint`. Whole-batch review: compare `origin/main...HEAD` against this plan and design spec. Required verification: `npm run typecheck && npm run build`, followed by the browser regression against that exact build.
+- **Batch 1 — strict fold fit:** Task 1 on branch `codex/video-lead-fold`, based on and targeting `main`. Focused checks: the browser regression and `npm run test:blueprint`. Whole-batch review: compare `origin/main...HEAD` against this plan and design spec. Required verification: record `npm run typecheck` separately and require no errors beyond the 50-error repository baseline, then run `npm run build` and the browser regression against that exact build.
 
 ---
 
@@ -40,8 +40,8 @@ import { after, before, test } from 'node:test';
 import { chromium, type Browser } from 'playwright';
 import { startStaticServer, type RunningStaticServer } from '../../tooling/quality/static-server.mts';
 
-let browser: Browser;
-let server: RunningStaticServer;
+let browser: Browser | undefined;
+let server: RunningStaticServer | undefined;
 
 before(async () => {
   browser = await chromium.launch({ channel: 'chrome', headless: true });
@@ -49,11 +49,13 @@ before(async () => {
 });
 
 after(async () => {
-  await browser.close();
-  await server.close();
+  await browser?.close();
+  await server?.close();
 });
 
 test('video and primary CTA fit inside a 1366x768 viewport', async () => {
+  assert.ok(browser, 'browser must launch');
+  assert.ok(server, 'static server must start');
   const page = await browser.newPage({ viewport: { width: 1366, height: 768 } });
   await page.goto(`${server.origin}/owned-funnel-builder-video-lead/`);
   await page.evaluate(async () => document.fonts.ready);
@@ -62,20 +64,30 @@ test('video and primary CTA fit inside a 1366x768 viewport', async () => {
     .locator('[data-video-lead="hero"] [role="img"], [data-video-lead="hero"] iframe')
     .first();
   const cta = page.locator('[data-video-lead="hero"] [data-placement="hero"]');
-  const [mediaBox, ctaBox, viewportHeight] = await Promise.all([
+  const [mediaBox, ctaBox, viewportHeight, overflow] = await Promise.all([
     media.boundingBox(),
     cta.boundingBox(),
     page.evaluate(() => window.innerHeight),
+    page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth),
   ]);
 
   assert.ok(mediaBox, 'hero media must render');
   assert.ok(ctaBox, 'hero CTA must render');
+  assert.ok(mediaBox.x >= 0, 'hero media must not overflow left');
+  assert.ok(mediaBox.y >= 0, 'hero media must not overflow above the viewport');
+  assert.ok(mediaBox.x + mediaBox.width <= 1366, 'hero media must not overflow right');
   assert.ok(mediaBox.y + mediaBox.height <= viewportHeight, 'hero media must fit above the fold');
+  assert.ok(ctaBox.x >= 0, 'hero CTA must not overflow left');
+  assert.ok(ctaBox.y >= 0, 'hero CTA must not overflow above the viewport');
+  assert.ok(ctaBox.x + ctaBox.width <= 1366, 'hero CTA must not overflow right');
   assert.ok(ctaBox.y + ctaBox.height <= viewportHeight, 'hero CTA must fit above the fold');
+  assert.ok(overflow <= 1, `desktop page must not overflow horizontally: ${overflow}px`);
   await page.close();
 });
 
 test('mobile keeps its normal flow without horizontal overflow', async () => {
+  assert.ok(browser, 'browser must launch');
+  assert.ok(server, 'static server must start');
   const page = await browser.newPage({ viewport: { width: 390, height: 844 } });
   await page.goto(`${server.origin}/owned-funnel-builder-video-lead/`);
   const cta = page.locator('[data-video-lead="hero"] [data-placement="hero"]');
@@ -171,9 +183,9 @@ rtk git commit -m "fix: keep video lead CTA above fold"
 
 - [ ] **Step 7: Run batch verification on the frozen head**
 
-Run: `rtk npm run typecheck && rtk npm run build && rtk node --import tsx --test tests/browser/video-lead-fold.test.mts`
+Run `rtk npm run typecheck` and compare it with the recorded 50-error repository baseline. Then run `rtk npm run build && rtk node --import tsx --test tests/browser/video-lead-fold.test.mts` so the known typecheck baseline does not prevent build verification.
 
-Expected: zero type errors; 30 pages build; both browser tests pass.
+Expected: no typecheck errors beyond the recorded baseline; 30 pages build; both browser tests pass.
 
 - [ ] **Step 8: Refresh the Cloudflare preview and verify its route**
 

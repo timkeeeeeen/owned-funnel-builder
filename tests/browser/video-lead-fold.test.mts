@@ -3,8 +3,8 @@ import { after, before, test } from 'node:test';
 import { chromium, type Browser } from 'playwright';
 import { startStaticServer, type RunningStaticServer } from '../../tooling/quality/static-server.mts';
 
-let browser: Browser;
-let server: RunningStaticServer;
+let browser: Browser | undefined;
+let server: RunningStaticServer | undefined;
 
 before(async () => {
   browser = await chromium.launch({ channel: 'chrome', headless: true });
@@ -12,11 +12,13 @@ before(async () => {
 });
 
 after(async () => {
-  await browser.close();
-  await server.close();
+  await browser?.close();
+  await server?.close();
 });
 
 test('video and primary CTA fit inside a 1366x768 viewport', async () => {
+  assert.ok(browser, 'browser must launch');
+  assert.ok(server, 'static server must start');
   const page = await browser.newPage({ viewport: { width: 1366, height: 768 } });
   await page.goto(`${server.origin}/owned-funnel-builder-video-lead/`);
   await page.evaluate(async () => document.fonts.ready);
@@ -47,6 +49,8 @@ test('video and primary CTA fit inside a 1366x768 viewport', async () => {
 });
 
 test('mobile keeps its normal flow without horizontal overflow', async () => {
+  assert.ok(browser, 'browser must launch');
+  assert.ok(server, 'static server must start');
   const page = await browser.newPage({ viewport: { width: 390, height: 844 } });
   await page.goto(`${server.origin}/owned-funnel-builder-video-lead/`);
   const cta = page.locator('[data-video-lead="hero"] [data-placement="hero"]');
