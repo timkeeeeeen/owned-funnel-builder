@@ -50,7 +50,7 @@ const productSchema = {
   <script is:inline type="application/ld+json" set:html={JSON.stringify(productSchema)} />
 
   <div class="video-lead-theme min-h-screen overflow-x-clip bg-background text-foreground">
-    <header class="px-4 py-4 sm:px-6">
+    <header class="px-4 py-3 sm:px-6 lg:py-2">
       <div class="mx-auto flex max-w-6xl items-center justify-between gap-4">
         <a
           href={`/${offer.slug}/`}
@@ -80,7 +80,7 @@ const productSchema = {
     </header>
 
     <section
-      class="px-4 pb-20 pt-14 text-center sm:px-6 sm:pb-24 sm:pt-20"
+      class="px-4 pb-20 pt-10 text-center sm:px-6 sm:pb-24 sm:pt-14 lg:pb-12 lg:pt-3"
       aria-labelledby="video-lead-title"
       data-video-lead="hero"
     >
@@ -88,20 +88,20 @@ const productSchema = {
         <p class="text-sm font-semibold text-brand">{offer.eyebrow}</p>
         <h1
           id="video-lead-title"
-          class="mx-auto mt-4 max-w-4xl text-balance text-4xl font-bold leading-[1.05] tracking-[-0.035em] sm:text-5xl md:text-6xl lg:text-7xl"
+          class="mx-auto mt-3 max-w-4xl text-balance text-4xl font-bold leading-[1.05] tracking-[-0.035em] sm:text-5xl md:text-[3.25rem] lg:text-[3.5rem]"
         >
           {offer.headline}
           {' '}
           <span class="text-brand">{offer.headlineAccent}</span>
         </h1>
         <p
-          class="mx-auto mt-6 max-w-2xl text-pretty text-base leading-relaxed text-muted-foreground sm:text-lg"
+          class="mx-auto mt-4 max-w-2xl text-pretty text-base leading-relaxed text-muted-foreground sm:text-lg lg:max-w-3xl lg:text-base lg:leading-6"
         >
           {offer.subheadline}
         </p>
 
         <div
-          class="mx-auto mt-10 max-w-4xl overflow-hidden rounded-xl border border-border bg-card shadow-sm"
+          class="mx-auto mt-6 max-w-4xl overflow-hidden rounded-xl border border-border bg-card shadow-sm lg:mt-5 lg:max-w-[35rem]"
         >
           {
             offer.video?.embedUrl ? (
@@ -118,7 +118,7 @@ const productSchema = {
               </div>
             ) : (
               <div
-                class="flex min-h-[22rem] flex-col justify-between bg-foreground p-5 text-left text-background sm:aspect-video sm:min-h-0 sm:p-8"
+                class="flex min-h-[22rem] flex-col justify-between bg-foreground p-5 text-left text-background sm:aspect-video sm:min-h-0 sm:p-8 lg:p-5"
                 role="img"
                 aria-label={offer.heroPreview.ariaLabel}
               >
@@ -131,18 +131,18 @@ const productSchema = {
                   </span>
                 </div>
 
-                <div class="my-8 max-w-2xl">
-                  <p class="text-balance text-2xl font-semibold leading-tight sm:text-4xl">
+                <div class="my-8 max-w-2xl lg:my-4">
+                  <p class="text-balance text-2xl font-semibold leading-tight sm:text-4xl lg:text-2xl">
                     {offer.video?.fallbackTitle ?? offer.heroPreview.prompt}
                   </p>
-                  <p class="mt-4 max-w-xl text-pretty text-sm leading-relaxed text-background/70 sm:text-base">
+                  <p class="mt-4 max-w-xl text-pretty text-sm leading-relaxed text-background/70 sm:text-base lg:mt-3 lg:text-sm lg:leading-5">
                     {offer.video?.fallbackBody ?? offer.heroPreview.description}
                   </p>
                 </div>
 
-                <ol class="grid grid-cols-2 gap-2 sm:grid-cols-4" aria-label="Launch workflow">
+                <ol class="grid grid-cols-2 gap-2 sm:grid-cols-4 lg:gap-1.5" aria-label="Launch workflow">
                   {offer.heroPreview.steps.map((step) => (
-                    <li class="rounded-xl border border-background/20 bg-background/5 p-3">
+                    <li class="rounded-xl border border-background/20 bg-background/5 p-3 lg:p-2">
                       <p class="text-xs font-semibold text-brand-soft">{step.label}</p>
                       <p class="mt-1 text-sm font-medium leading-snug text-background">
                         {step.title}
@@ -155,8 +155,8 @@ const productSchema = {
           }
         </div>
 
-        <div class="mx-auto mt-8 flex max-w-xl flex-col items-center gap-3">
-          <p class="text-2xl font-bold tabular-nums">{offer.currentPrice}</p>
+        <div class="mx-auto mt-5 flex max-w-xl flex-col items-center gap-3 lg:mt-4 lg:gap-2">
+          <p class="text-2xl font-bold tabular-nums lg:hidden">{offer.currentPrice}</p>
           <a
             href={checkoutHref}
             target={checkoutTarget}
