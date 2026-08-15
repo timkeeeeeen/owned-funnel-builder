@@ -5,7 +5,7 @@ import {
   mergeBlueprintProgress,
   parseBlueprintProgress,
   type BlueprintProgress,
-} from './blueprint-progress';
+} from '@/scripts/blueprint-progress';
 
 type FunnelMode = 'snapshot' | 'direct' | 'thank-you' | 'asset' | 'checkout-return';
 type ConvexKind = 'action' | 'query';
