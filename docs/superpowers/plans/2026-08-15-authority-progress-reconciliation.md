@@ -36,7 +36,7 @@
 - Base/PR target: `main` at `2a5f9318a92fe6ac3c798ddfd536af93a9be1032`.
 - Focused checks: progress unit test; Blueprint suite; focused Prettier/ESLint; Blueprint proxy test; built progress UI browser test.
 - Whole-batch review: one independent code review of `2a5f9318...HEAD`, followed by fixes only for verified in-scope findings.
-- Required verification: one serialized `typecheck && build && check:functions` gate on the frozen head, then video-lead fold and market-plan focused tests against that same build.
+- Required verification: serialized typecheck comparison against main's tracked diagnostics baseline, build, and Functions compile on the frozen head, then video-lead fold and market-plan focused tests against that same build.
 - Frozen head: record after all fixes and before push.
 - PR: one normal PR to `main`; merge only after independently green checks and review.
 
@@ -356,15 +356,19 @@ rtk git commit -m "feat: restore live Snapshot progress"
 
 Create one Node/Playwright test following `tests/browser/video-lead-fold.test.mts`. Start `dist/client` with `startStaticServer`, open `/authority-snapshot/solo-experts/thank-you/` at 375x812 and 1366x768, assert the progress panel starts hidden, reveal it with `removeAttribute('hidden')`, and assert every row stays inside the viewport. With reduced motion enabled, assert the first row's computed `transitionProperty` is `none`. Run `AxeBuilder` scoped to the revealed panel and fail on serious or critical violations. Close every page, browser, and server in `after`.
 
-- [ ] **Step 2: Run the single broad build gate**
+- [ ] **Step 2: Run the serialized broad gates**
 
 First run: `rtk proxy pgrep -af 'astro check|npm run typecheck|node .*--test|playwright'`
 
-Expected: no competing gate. Then run one process with a 15-minute budget:
+Expected: no competing gate. Then run each process once with a 15-minute budget:
 
-Run: `rtk host-test-slot --class full rtk zsh -lc 'rtk npm run typecheck && rtk npm run build && rtk npm run check:functions'`
+```bash
+rtk host-test-slot --class full rtk npm run typecheck
+rtk host-test-slot --class full rtk npm run build
+rtk host-test-slot --class full rtk npm run check:functions
+```
 
-Expected: typecheck 0 errors, Astro build and postbuild pass, Functions compile exits 0. Track this exact session if it yields; never relaunch it.
+Expected: typecheck introduces no diagnostics versus main's documented tracking/template baseline; Astro build and postbuild pass; Functions compile exits 0. Track each exact session if it yields and never relaunch it. Do not modify unchanged baseline files as part of this recovery.
 
 - [ ] **Step 3: Run focused built-output checks serially**
 
