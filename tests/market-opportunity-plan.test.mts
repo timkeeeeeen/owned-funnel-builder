@@ -24,6 +24,8 @@ test('builds the complete market opportunity decision page', async () => {
   assert.match(html, /Digital and SaaS candidates/);
   assert.match(html, /https:\/\/go\.vibecodesherpa\.ai\/landers/);
   assert.match(html, /https:\/\/www\.facebook\.com\/ads\/library\/\?id=1755843278920686/);
+  assert.match(html, /Open Wonderment Apps landing page/);
+  assert.match(html, /Open Wonderment Apps Meta ad/);
   assert.ok(html.includes(content360Landing.replaceAll('&', '&amp;')));
 
   const scrollRegions = html.match(/<div[^>]+data-scroll-region[^>]*>/g) ?? [];

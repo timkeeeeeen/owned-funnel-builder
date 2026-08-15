@@ -96,7 +96,8 @@ Expected: 1 test, 1 pass, 0 fail.
 
 Run: `rtk npm run typecheck`
 
-Expected: Astro check exits 0 with no diagnostics.
+Expected: no new diagnostics versus the tracked `origin/main` baseline; existing diagnostics in
+unchanged tracking files remain baseline debt.
 
 Run: `rtk npm run test:quality`
 
