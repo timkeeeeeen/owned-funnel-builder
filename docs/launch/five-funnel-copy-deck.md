@@ -3,6 +3,9 @@
 Revision: 2026-08-02-r1  
 Status: draft — owner approval required before canonical copy is changed
 
+Task 11 readiness note: this deck is unchanged draft copy. No owner approval
+was supplied, so no canonical offer/funnel or source-runtime copy was changed.
+
 This is the single review sheet for the five paid-traffic packages. Claims are
 limited to what the current product records promise; prices and delivery terms
 must be read back from the live catalog before approval. The three standard

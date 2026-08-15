@@ -1,6 +1,12 @@
 # Five-Funnel Launch Ledger
 
 Revision: 2026-08-03-r2
+Tracking preview activation: 2026-08-15. The redacted
+[`first-party-tracking-activation-gap-ledger.md`](./first-party-tracking-activation-gap-ledger.md)
+records the isolated Worker, D1 databases, Queue/DLQ, TLS hostname, Pages source
+binding, migrations, and signed non-payment proof at exact source `161e4b1`.
+Meta/Tinybird delivery remained zero. Production still serves a divergent
+pre-PR-#6 SHA, so funnel/canary state below remains fail-closed.
 Canonical artifact: this ledger owns funnel/canary state. The first-party event
 pipeline spec owns tracking, consent, identity, and destination behavior;
 Admaxxer/legacy-sender rows below are historical evidence only and cannot be
@@ -23,7 +29,8 @@ stage proof; never use the real-price catalog for this test.
 | --- | --- | --- | --- |
 | Dodo live account, mode, products, prices, attachments | unverified | Dodo readback; owner/provider | Disable checkout routes; restore prior catalog mapping |
 | Dodo webhook URL, signature secret, retry/idempotency | passed locally / unverified live | `npm run test:functions`; production delivery readback | Revert deployment; keep webhook retryable |
-| D1 migrations 0006/0007, backup/time-travel marker | passed for schema / deployment still unverified | Remote migration receipt: `0006_stripe_provider.sql` and `0007_webhook_retry_and_revocations.sql` applied successfully; readback confirms `offer_products`, `checkout_leads`, `funnel_runs`, `funnel_step_runs`, `webhook_events`, `payment_revocations`, and `fulfillments`; Time Travel bookmark `00000031-00000000-000050bb-d66926ee30685fcaf0f1dfdb1179dd8e` recorded | Restore bookmark; do not run ads |
+| D1 migrations 0006/0007, backup/time-travel marker | preview passed / production blocked | Preview Pages and tracking D1 migration sets have no pending migrations. Production still stops at `0009_email_campaigns.sql`; source-tracking migrations `0010` through both `0012` files remain absent there. | Keep production unchanged until a new exact-SHA approval |
+| First-party Events Worker, Queue/DLQ, DNS/TLS | preview passed / production blocked | Exact source `161e4b1`: preview Worker/D1/Queue/DLQ and `events-preview.shop.maestrogtm.com` are active; health and TLS pass; signed PageView/Lead/InitiateCheckout persist; Purchase is blocked; destination deliveries are zero. No live resources were activated. | Keep senders and campaigns off; require separate production approval |
 | Admaxxer websites, pixel, Lead/Purchase API, Meta CAPI | unverified | owner CAPI connection + redacted event traces | Disable server ingestion/campaigns |
 | Privacy/consent, terms, refund/support owner | unverified | approved copy and production URL check | Pause all campaigns |
 | Meta dataset/domain/billing/permissions | unverified | Events Manager and Ads Manager readback | Keep campaigns paused |
@@ -57,6 +64,15 @@ live `$1` canary/card entry. A row cannot become green because a script tag,
 checkout return, or environment variable merely exists.
 
 The consolidated owner handoff is [`owner-launch-inputs.md`](./owner-launch-inputs.md).
+
+## Campaign readiness gate
+
+[`meta-campaign-ledger.md`](./meta-campaign-ledger.md) is a paused,
+evidence-only sub-ledger. Campaign gate: not created / paused for every funnel.
+Draft copy remains in [`five-funnel-copy-deck.md`](./five-funnel-copy-deck.md)
+until owner approval. `campaign_enabled` is not recorded: every funnel lacks
+the exact-SHA, canary/refund, privacy/DSAR, threshold, rollback, and fresh
+enablement-approval evidence required to advance.
 
 ## Live `$1` canary matrix
 

@@ -1,0 +1,12 @@
+{
+  "schema": "maestro.tracking.privacy-policy",
+  "version": "1",
+  "owner": "maestro-privacy",
+  "policy_version": "2026-08-04",
+  "fail_closed": true,
+  "unresolved_non_necessary": "deny",
+  "gpc_precedence": "deny_advertising_and_sale_share",
+  "purposes": ["necessary", "analytics", "advertising", "identity_enrichment", "sale_share"],
+  "regions": {"default": "prior_consent", "US": "opt_out"},
+  "minor_sensitive_state": "deny_until_verified"
+}

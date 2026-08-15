@@ -1,0 +1,9 @@
+{
+  "schema": "maestro.tracking.source-runtime-gates",
+  "version": "1",
+  "owner": "maestro-platform",
+  "policy_version": "2026-08-04",
+  "ci_authority": "unknown",
+  "required_status": "ci/woodpecker/pr/verify",
+  "runtimes": { "pages": { "status": "unverified" }, "app_idea": { "status": "unverified" }, "blueprint": { "status": "unverified" } }
+}

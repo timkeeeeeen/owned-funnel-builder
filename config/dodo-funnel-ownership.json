@@ -1,0 +1,8 @@
+{
+  "schema": "maestro.tracking.dodo-funnel-ownership",
+  "version": "1",
+  "owner": "maestro-platform",
+  "policy_version": "2026-08-04",
+  "owners": [],
+  "readback": { "status": "unverified", "reason": "Dodo product IDs and owners have not been read back" }
+}

@@ -1,0 +1,634 @@
+---
+import OfferAnalytics from '@/components/offers/OfferAnalytics.astro';
+import OfferCheckoutDialog from '@/components/offers/OfferCheckoutDialog.astro';
+import type { Offer } from '@/data/offers';
+import { getFunnel } from '@/data/funnels';
+import { siteSettings } from '@/data/site';
+import OfferLayout from '@/layouts/OfferLayout.astro';
+
+interface Props {
+  offer: Offer;
+}
+
+const { offer } = Astro.props;
+const checkoutSlug = offer.checkoutFunnelSlug ?? offer.slug;
+const checkoutOffer = checkoutSlug === offer.slug ? offer : { ...offer, slug: checkoutSlug };
+const checkoutFunnel = getFunnel(checkoutSlug);
+const usesManagedCheckout =
+  ['provider-checkout', 'dodo-inline'].includes(checkoutOffer.checkout?.provider ?? '') &&
+  checkoutOffer.checkout?.enabled;
+const checkoutHref = usesManagedCheckout ? '#checkout' : offer.checkoutUrl;
+const checkoutTarget =
+  !usesManagedCheckout && offer.checkoutUrl.startsWith('http') ? '_blank' : undefined;
+const checkoutRel = checkoutTarget ? 'noopener noreferrer' : undefined;
+const productInitial = offer.productName.trim().charAt(0).toUpperCase() || 'O';
+const includedPrimary = offer.included.slice(0, 4);
+const featureItems = [...offer.outcomes, ...offer.included.slice(4)];
+const gettingStartedSteps = offer.heroPreview.steps.slice(0, 3);
+
+const productSchema = {
+  '@context': 'https://schema.org',
+  '@type': 'Product',
+  name: offer.productName,
+  description: offer.metaDescription,
+  offers: {
+    '@type': 'Offer',
+    price: offer.priceAmount.toString(),
+    priceCurrency: offer.currency,
+    availability: 'https://schema.org/InStock',
+    url: new URL(`/${offer.slug}/`, Astro.site ?? Astro.url).toString(),
+  },
+};
+---
+
+<OfferLayout
+  title={offer.metaTitle}
+  description={offer.metaDescription}
+  image={offer.ogImage}
+  noindex={!offer.published}
+>
+  <script is:inline type="application/ld+json" set:html={JSON.stringify(productSchema)} />
+
+  <div class="video-lead-theme min-h-screen overflow-x-clip bg-background text-foreground">
+    <header class="px-4 py-4 sm:px-6">
+      <div class="mx-auto flex max-w-6xl items-center justify-between gap-4">
+        <a
+          href={`/${offer.slug}/`}
+          aria-label={`${offer.productName} home`}
+          class="flex min-h-11 min-w-0 items-center gap-3 rounded-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
+        >
+          <span
+            class="grid size-9 shrink-0 place-items-center rounded-md bg-foreground text-sm font-bold text-background"
+            aria-hidden="true">{productInitial}</span
+          >
+          <span class="truncate text-sm font-semibold sm:text-base">{offer.productName}</span>
+        </a>
+
+        <a
+          href={checkoutHref}
+          target={checkoutTarget}
+          rel={checkoutRel}
+          data-offer-cta
+          data-offer-checkout
+          data-offer-checkout-trigger={usesManagedCheckout ? '' : undefined}
+          data-placement="header"
+          class="hidden min-h-11 items-center justify-center rounded-md bg-brand px-5 py-2.5 text-center text-sm font-semibold text-brand-foreground transition-[transform,filter] duration-200 hover:brightness-95 active:scale-[0.96] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 sm:inline-flex"
+        >
+          {offer.ctaLabel}
+        </a>
+      </div>
+    </header>
+
+    <section
+      class="px-4 pb-20 pt-14 text-center sm:px-6 sm:pb-24 sm:pt-20"
+      aria-labelledby="video-lead-title"
+      data-video-lead="hero"
+    >
+      <div class="mx-auto max-w-6xl">
+        <p class="text-sm font-semibold text-brand">{offer.eyebrow}</p>
+        <h1
+          id="video-lead-title"
+          class="mx-auto mt-4 max-w-4xl text-balance text-4xl font-bold leading-[1.05] tracking-[-0.035em] sm:text-5xl md:text-6xl lg:text-7xl"
+        >
+          {offer.headline}
+          {' '}
+          <span class="text-brand">{offer.headlineAccent}</span>
+        </h1>
+        <p
+          class="mx-auto mt-6 max-w-2xl text-pretty text-base leading-relaxed text-muted-foreground sm:text-lg"
+        >
+          {offer.subheadline}
+        </p>
+
+        <div
+          class="mx-auto mt-10 max-w-4xl overflow-hidden rounded-xl border border-border bg-card shadow-sm"
+        >
+          {
+            offer.video?.embedUrl ? (
+              <div class="aspect-video bg-foreground">
+                <iframe
+                  class="size-full"
+                  src={offer.video.embedUrl}
+                  title={offer.video.title}
+                  loading="eager"
+                  allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
+                  referrerpolicy="strict-origin-when-cross-origin"
+                  allowfullscreen
+                />
+              </div>
+            ) : (
+              <div
+                class="flex min-h-[22rem] flex-col justify-between bg-foreground p-5 text-left text-background sm:aspect-video sm:min-h-0 sm:p-8"
+                role="img"
+                aria-label={offer.heroPreview.ariaLabel}
+              >
+                <div class="flex items-center justify-between gap-4">
+                  <span class="text-xs font-semibold uppercase tracking-[0.16em] text-brand-soft">
+                    {offer.video?.eyebrow ?? offer.eyebrow}
+                  </span>
+                  <span class="rounded-md border border-background/20 px-3 py-1.5 text-xs text-background/70">
+                    Video preview
+                  </span>
+                </div>
+
+                <div class="my-8 max-w-2xl">
+                  <p class="text-balance text-2xl font-semibold leading-tight sm:text-4xl">
+                    {offer.video?.fallbackTitle ?? offer.heroPreview.prompt}
+                  </p>
+                  <p class="mt-4 max-w-xl text-pretty text-sm leading-relaxed text-background/70 sm:text-base">
+                    {offer.video?.fallbackBody ?? offer.heroPreview.description}
+                  </p>
+                </div>
+
+                <ol class="grid grid-cols-2 gap-2 sm:grid-cols-4" aria-label="Launch workflow">
+                  {offer.heroPreview.steps.map((step) => (
+                    <li class="rounded-xl border border-background/20 bg-background/5 p-3">
+                      <p class="text-xs font-semibold text-brand-soft">{step.label}</p>
+                      <p class="mt-1 text-sm font-medium leading-snug text-background">
+                        {step.title}
+                      </p>
+                    </li>
+                  ))}
+                </ol>
+              </div>
+            )
+          }
+        </div>
+
+        <div class="mx-auto mt-8 flex max-w-xl flex-col items-center gap-3">
+          <p class="text-2xl font-bold tabular-nums">{offer.currentPrice}</p>
+          <a
+            href={checkoutHref}
+            target={checkoutTarget}
+            rel={checkoutRel}
+            data-offer-cta
+            data-offer-checkout
+            data-offer-checkout-trigger={usesManagedCheckout ? '' : undefined}
+            data-placement="hero"
+            class="inline-flex min-h-12 w-full items-center justify-center rounded-md bg-brand px-7 py-3 text-center text-base font-semibold text-brand-foreground transition-[transform,filter] duration-200 hover:brightness-95 active:scale-[0.96] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 sm:w-auto sm:min-w-80"
+          >
+            {offer.ctaLabel}
+          </a>
+          <p class="text-sm leading-relaxed text-muted-foreground">{offer.ctaNote}</p>
+        </div>
+      </div>
+    </section>
+
+    <section class="border-y border-border bg-muted px-4 py-6 sm:px-6" aria-label="Highlights">
+      <div class="mx-auto grid max-w-5xl grid-cols-2 gap-x-6 gap-y-4 text-center sm:grid-cols-4">
+        {
+          offer.sections.highlights.map((highlight) => (
+            <p class="text-sm font-medium leading-snug text-muted-foreground">{highlight}</p>
+          ))
+        }
+      </div>
+    </section>
+
+    <section
+      class="px-4 py-20 sm:px-6 sm:py-24"
+      aria-labelledby="video-lead-included-title"
+      data-video-lead="included"
+    >
+      <div class="mx-auto max-w-6xl">
+        <div class="mx-auto max-w-3xl text-center">
+          <p class="text-sm font-semibold text-brand">{offer.sections.includedEyebrow}</p>
+          <h2
+            id="video-lead-included-title"
+            class="mt-3 text-balance text-3xl font-bold leading-tight tracking-[-0.025em] sm:text-4xl md:text-5xl"
+          >
+            {offer.sections.includedTitle}
+          </h2>
+          {
+            offer.productPreview && (
+              <p class="mx-auto mt-5 max-w-2xl text-pretty text-base leading-relaxed text-muted-foreground sm:text-lg">
+                {offer.productPreview.description}
+              </p>
+            )
+          }
+        </div>
+
+        {
+          offer.productPreview && (
+            <div class="video-lead-media-halo mt-12 rounded-[1rem] p-1 sm:p-1.5">
+              <article
+                class="overflow-hidden rounded-xl border border-border bg-card shadow-sm"
+                aria-label={`${offer.productPreview.productLabel} product preview`}
+              >
+                <header class="flex items-center justify-between gap-4 border-b border-border px-4 py-3 sm:px-6">
+                  <div class="flex gap-2" aria-hidden="true">
+                    <span class="size-2.5 rounded-full bg-border" />
+                    <span class="size-2.5 rounded-full bg-border" />
+                    <span class="size-2.5 rounded-full bg-brand" />
+                  </div>
+                  <p class="text-xs font-semibold uppercase tracking-[0.14em] text-muted-foreground">
+                    {offer.productPreview.workspaceLabel}
+                  </p>
+                </header>
+
+                <div class="grid lg:grid-cols-[13rem_1fr]">
+                  <div class="border-b border-border bg-muted p-5 lg:border-b-0 lg:border-r">
+                    <p class="font-semibold">{offer.productPreview.productLabel}</p>
+                    <p class="mt-1 text-sm leading-relaxed text-muted-foreground">
+                      {offer.productPreview.productDescription}
+                    </p>
+                    <ul class="mt-5 grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-1">
+                      {offer.productPreview.navItems.map((item) => (
+                        <li
+                          class:list={[
+                            'rounded-md px-3 py-2 text-sm font-medium',
+                            item === offer.productPreview?.activeNavItem
+                              ? 'bg-brand text-brand-foreground'
+                              : 'text-muted-foreground',
+                          ]}
+                        >
+                          {item}
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+
+                  <div class="p-5 sm:p-7">
+                    <div class="flex flex-col justify-between gap-4 sm:flex-row sm:items-start">
+                      <div>
+                        <p class="text-xs font-semibold uppercase tracking-[0.14em] text-brand">
+                          {offer.productPreview.activeEyebrow}
+                        </p>
+                        <h3 class="mt-2 text-2xl font-semibold leading-tight sm:text-3xl">
+                          {offer.productPreview.activeTitle}
+                        </h3>
+                        <p class="mt-2 max-w-xl text-pretty leading-relaxed text-muted-foreground">
+                          {offer.productPreview.activeDescription}
+                        </p>
+                      </div>
+                      <span class="inline-flex min-h-11 shrink-0 items-center self-start rounded-md border border-border bg-background px-3 py-2 text-sm font-medium text-brand">
+                        {offer.productPreview.statusLabel}
+                      </span>
+                    </div>
+
+                    <ol
+                      class="mt-7 grid grid-cols-2 gap-3 sm:grid-cols-4"
+                      aria-label="Funnel stages"
+                    >
+                      {offer.productPreview.stages.map((stage, index) => (
+                        <li class="rounded-xl border border-border bg-background p-3">
+                          <p class="text-xs font-semibold text-brand">
+                            {String(index + 1).padStart(2, '0')}
+                          </p>
+                          <p class="mt-1 text-sm font-medium">{stage}</p>
+                        </li>
+                      ))}
+                    </ol>
+
+                    <div class="mt-5 grid gap-3 md:grid-cols-3">
+                      {offer.productPreview.panels.map((panel) => (
+                        <div class="rounded-xl border border-border bg-muted p-4">
+                          <h4 class="font-semibold">{panel.title}</h4>
+                          <p class="mt-2 text-sm leading-relaxed text-muted-foreground">
+                            {panel.description}
+                          </p>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                </div>
+              </article>
+            </div>
+          )
+        }
+
+        <div class="mt-12 grid gap-x-10 gap-y-8 md:grid-cols-2">
+          {
+            includedPrimary.map((item) => (
+              <article class="flex gap-4">
+                <span
+                  class="mt-0.5 grid size-6 shrink-0 place-items-center rounded-full bg-brand text-sm font-bold text-brand-foreground"
+                  aria-hidden="true"
+                >
+                  ✓
+                </span>
+                <div>
+                  <h3 class="text-lg font-semibold leading-snug">{item.title}</h3>
+                  <p class="mt-2 text-pretty leading-relaxed text-muted-foreground">
+                    {item.description}
+                  </p>
+                </div>
+              </article>
+            ))
+          }
+        </div>
+      </div>
+    </section>
+
+    <section
+      class="bg-muted px-4 py-20 sm:px-6 sm:py-24"
+      aria-labelledby="video-lead-features-title"
+      data-video-lead="features"
+    >
+      <div class="mx-auto max-w-5xl">
+        <div class="mx-auto max-w-3xl text-center">
+          <p class="text-sm font-semibold text-brand">{offer.sections.outcomesEyebrow}</p>
+          <h2
+            id="video-lead-features-title"
+            class="mt-3 text-balance text-3xl font-bold leading-tight tracking-[-0.025em] sm:text-4xl md:text-5xl"
+          >
+            {offer.sections.outcomesTitle}
+          </h2>
+          <p
+            class="mx-auto mt-5 max-w-2xl text-pretty text-base leading-relaxed text-muted-foreground sm:text-lg"
+          >
+            {offer.audience}
+          </p>
+        </div>
+
+        <div class="mt-12 grid gap-5 md:grid-cols-2">
+          {
+            featureItems.map((item, index) => (
+              <article class="rounded-xl border border-border bg-card p-6 shadow-sm sm:p-7">
+                <p class="text-xs font-semibold uppercase tracking-[0.14em] text-brand">
+                  Feature {String(index + 1).padStart(2, '0')}
+                </p>
+                <h3 class="mt-3 text-xl font-semibold leading-snug sm:text-2xl">{item.title}</h3>
+                <p class="mt-3 text-pretty leading-relaxed text-muted-foreground">
+                  {item.description}
+                </p>
+              </article>
+            ))
+          }
+        </div>
+      </div>
+    </section>
+
+    <section
+      class="px-4 py-20 sm:px-6 sm:py-24"
+      aria-labelledby="video-lead-proof-title"
+      data-video-lead="proof"
+    >
+      <div class="mx-auto max-w-6xl">
+        <div class="mx-auto max-w-3xl text-center">
+          <p class="text-sm font-semibold text-brand">{offer.sections.proofEyebrow}</p>
+          <h2
+            id="video-lead-proof-title"
+            class="mt-3 text-balance text-3xl font-bold leading-tight tracking-[-0.025em] sm:text-4xl md:text-5xl"
+          >
+            {offer.sections.proofTitle}
+          </h2>
+          <p
+            class="mx-auto mt-5 max-w-2xl text-pretty text-base leading-relaxed text-muted-foreground sm:text-lg"
+          >
+            {offer.sections.proofDescription}
+          </p>
+        </div>
+
+        <div class="mt-12 grid grid-cols-2 gap-4 lg:grid-cols-4">
+          {
+            offer.proof.map((proof) => (
+              <article class="rounded-xl border border-border bg-card p-5 text-center shadow-sm sm:p-6">
+                <p class="text-3xl font-bold tracking-tight text-brand tabular-nums sm:text-4xl">
+                  {proof.value}
+                </p>
+                <h3 class="mt-3 text-base font-semibold leading-snug sm:text-lg">{proof.label}</h3>
+                <p class="mt-2 text-sm leading-relaxed text-muted-foreground">{proof.detail}</p>
+              </article>
+            ))
+          }
+        </div>
+
+        {
+          offer.examples && (
+            <div class="mt-16">
+              <div class="mx-auto max-w-2xl text-center">
+                <p class="text-sm font-semibold text-brand">{offer.examples.eyebrow}</p>
+                <h3 class="mt-3 text-balance text-2xl font-bold leading-tight sm:text-3xl">
+                  {offer.examples.title}
+                </h3>
+                <p class="mt-4 text-pretty leading-relaxed text-muted-foreground">
+                  {offer.examples.description}
+                </p>
+              </div>
+
+              <div class="mt-8 grid gap-4 md:grid-cols-2">
+                {offer.examples.items.map((example) => (
+                  <article class="rounded-xl border border-border bg-muted p-6">
+                    <p class="text-xs font-semibold uppercase tracking-[0.14em] text-brand">
+                      {example.label}
+                    </p>
+                    <h4 class="mt-3 text-xl font-semibold leading-snug">{example.title}</h4>
+                    <p class="mt-2 text-pretty leading-relaxed text-muted-foreground">
+                      {example.description}
+                    </p>
+                  </article>
+                ))}
+              </div>
+            </div>
+          )
+        }
+      </div>
+    </section>
+
+    <section class="px-4 pb-20 text-center sm:px-6 sm:pb-24" aria-label="Purchase the builder">
+      <div class="mx-auto flex max-w-xl flex-col items-center gap-3">
+        <p class="text-2xl font-bold tabular-nums">{offer.currentPrice}</p>
+        <a
+          href={checkoutHref}
+          target={checkoutTarget}
+          rel={checkoutRel}
+          data-offer-cta
+          data-offer-checkout
+          data-offer-checkout-trigger={usesManagedCheckout ? '' : undefined}
+          data-placement="proof-close"
+          class="inline-flex min-h-12 w-full items-center justify-center rounded-md bg-brand px-7 py-3 text-center text-base font-semibold text-brand-foreground transition-[transform,filter] duration-200 hover:brightness-95 active:scale-[0.96] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 sm:w-auto sm:min-w-80"
+        >
+          {offer.ctaLabel}
+        </a>
+        <p class="text-sm leading-relaxed text-muted-foreground">{offer.ctaNote}</p>
+      </div>
+    </section>
+
+    <section
+      class="bg-foreground px-4 py-20 text-background sm:px-6 sm:py-24"
+      aria-labelledby="video-lead-bonus-title"
+      data-video-lead="bonus"
+    >
+      <div class="mx-auto max-w-6xl">
+        <div class="mx-auto max-w-3xl text-center">
+          <p class="text-sm font-semibold text-brand-soft">{offer.sections.bonusesEyebrow}</p>
+          <h2
+            id="video-lead-bonus-title"
+            class="mt-3 text-balance text-3xl font-bold leading-tight tracking-[-0.025em] sm:text-4xl md:text-5xl"
+          >
+            {offer.sections.bonusesTitle}
+          </h2>
+        </div>
+
+        <div class="mt-12 grid gap-4 md:grid-cols-3">
+          {
+            offer.bonuses.map((bonus, index) => (
+              <article class="rounded-xl border border-background/20 bg-background/5 p-6">
+                <p class="text-xs font-semibold uppercase tracking-[0.14em] text-brand-soft">
+                  Bonus {String(index + 1).padStart(2, '0')}
+                </p>
+                <h3 class="mt-3 text-xl font-semibold leading-snug">{bonus.title}</h3>
+                <p class="mt-3 text-pretty leading-relaxed text-background/70">
+                  {bonus.description}
+                </p>
+              </article>
+            ))
+          }
+        </div>
+      </div>
+    </section>
+
+    <section
+      class="px-4 py-20 sm:px-6 sm:py-24"
+      aria-labelledby="video-lead-steps-title"
+      data-video-lead="steps"
+    >
+      <div class="mx-auto max-w-5xl">
+        <div class="text-center">
+          <p class="text-sm font-semibold text-brand">{offer.heroPreview.promptLabel}</p>
+          <h2
+            id="video-lead-steps-title"
+            class="mt-3 text-balance text-3xl font-bold leading-tight tracking-[-0.025em] sm:text-4xl md:text-5xl"
+          >
+            Here’s how to get started
+          </h2>
+        </div>
+
+        <ol class="mt-12 grid gap-5 md:grid-cols-3">
+          {
+            gettingStartedSteps.map((step, index) => (
+              <li class="rounded-xl border border-border bg-card p-6 text-center shadow-sm">
+                <span class="mx-auto grid size-10 place-items-center rounded-md bg-muted text-sm font-bold text-brand">
+                  {String(index + 1).padStart(2, '0')}
+                </span>
+                <p class="mt-5 text-xs font-semibold uppercase tracking-[0.14em] text-muted-foreground">
+                  {step.label}
+                </p>
+                <h3 class="mt-2 text-xl font-semibold leading-snug">{step.title}</h3>
+              </li>
+            ))
+          }
+        </ol>
+      </div>
+    </section>
+
+    <section
+      class="bg-muted px-4 py-20 sm:px-6 sm:py-24"
+      aria-labelledby="video-lead-faq-title"
+      data-video-lead="faq"
+    >
+      <div class="mx-auto max-w-3xl">
+        <div class="text-center">
+          <p class="text-sm font-semibold text-brand">{offer.sections.faqEyebrow}</p>
+          <h2
+            id="video-lead-faq-title"
+            class="mt-3 text-balance text-3xl font-bold leading-tight tracking-[-0.025em] sm:text-4xl md:text-5xl"
+          >
+            {offer.sections.faqTitle}
+          </h2>
+        </div>
+
+        <div class="mt-10 space-y-3">
+          {
+            offer.faqs.map((faq) => (
+              <details class="group rounded-xl border border-border bg-card px-5 py-3 shadow-sm sm:px-6">
+                <summary class="flex min-h-11 cursor-pointer list-none items-center justify-between gap-4 py-1 text-base font-semibold leading-snug focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 sm:text-lg">
+                  {faq.question}
+                  <span
+                    class="shrink-0 text-2xl font-normal text-brand transition-transform duration-200 group-open:rotate-45"
+                    aria-hidden="true"
+                  >
+                    +
+                  </span>
+                </summary>
+                <p class="max-w-2xl pb-3 pt-3 text-pretty leading-relaxed text-muted-foreground">
+                  {faq.answer}
+                </p>
+              </details>
+            ))
+          }
+        </div>
+      </div>
+    </section>
+
+    <section
+      class="px-4 py-20 text-center sm:px-6 sm:py-24"
+      aria-labelledby="video-lead-final-title"
+    >
+      <div class="mx-auto max-w-4xl">
+        <h2
+          id="video-lead-final-title"
+          class="text-balance text-3xl font-bold leading-tight tracking-[-0.025em] sm:text-4xl md:text-5xl"
+        >
+          {offer.finalTitle}
+        </h2>
+        <p
+          class="mx-auto mt-5 max-w-2xl text-pretty text-base leading-relaxed text-muted-foreground sm:text-lg"
+        >
+          {offer.finalBody}
+        </p>
+        <div class="mx-auto mt-8 flex max-w-xl flex-col items-center gap-3">
+          <p class="text-2xl font-bold tabular-nums">{offer.currentPrice}</p>
+          <a
+            id="checkout"
+            href={checkoutHref}
+            target={checkoutTarget}
+            rel={checkoutRel}
+            data-offer-cta
+            data-offer-checkout
+            data-offer-checkout-trigger={usesManagedCheckout ? '' : undefined}
+            data-placement="final"
+            class="inline-flex min-h-12 w-full items-center justify-center rounded-md bg-brand px-7 py-3 text-center text-base font-semibold text-brand-foreground transition-[transform,filter] duration-200 hover:brightness-95 active:scale-[0.96] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 sm:w-auto sm:min-w-80"
+          >
+            {offer.ctaLabel}
+          </a>
+          <p class="text-sm leading-relaxed text-muted-foreground">{offer.ctaNote}</p>
+        </div>
+      </div>
+    </section>
+
+    <footer class="border-t border-border px-4 py-8 sm:px-6">
+      <div
+        class="mx-auto flex max-w-6xl flex-col items-center justify-between gap-4 text-center sm:flex-row sm:text-left"
+      >
+        <p class="text-sm text-muted-foreground">{offer.productName}</p>
+        <a
+          href={`mailto:${checkoutFunnel?.supportEmail ?? siteSettings.supportEmail}`}
+          class="inline-flex min-h-11 items-center rounded-md px-2 text-sm font-medium text-muted-foreground underline decoration-from-font underline-offset-4 hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
+        >
+          Contact support
+        </a>
+      </div>
+    </footer>
+  </div>
+
+  {
+    usesManagedCheckout && checkoutOffer.checkout && (
+      <OfferCheckoutDialog
+        offer={checkoutOffer}
+        checkout={checkoutOffer.checkout}
+        analyticsOfferSlug={offer.slug}
+      />
+    )
+  }
+  <OfferAnalytics offerSlug={offer.slug} />
+</OfferLayout>
+
+<style>
+  .video-lead-theme {
+    --color-background: oklch(100% 0 0);
+    --color-foreground: oklch(19% 0.01 260);
+    --color-card: oklch(98% 0.003 260);
+    --color-muted: oklch(96.8% 0.003 260);
+    --color-muted-foreground: oklch(49% 0.012 260);
+    --color-border: oklch(91.5% 0.006 260);
+    --color-brand: oklch(54% 0.21 255);
+    --color-brand-foreground: oklch(100% 0 0);
+    --color-ring: var(--color-brand);
+    color-scheme: light;
+  }
+
+  .video-lead-media-halo {
+    background: linear-gradient(135deg, oklch(72% 0.18 250), oklch(75% 0.18 335));
+  }
+</style>

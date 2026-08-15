@@ -1,0 +1,9 @@
+---
+import OfferTemplateRenderer from '@/components/offers/OfferTemplateRenderer.astro';
+import { getOffer } from '@/data/offers';
+
+const offer = getOffer('owned-funnel-builder-video-lead');
+if (!offer) throw new Error('Missing video lead comparison offer.');
+---
+
+<OfferTemplateRenderer offer={offer} />

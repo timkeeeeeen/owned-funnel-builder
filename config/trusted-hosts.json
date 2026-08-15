@@ -1,0 +1,20 @@
+{
+  "schema": "maestro.tracking.trusted-hosts",
+  "version": "1",
+  "owner": "maestro-platform",
+  "policy_version": "2026-08-04",
+  "hosts": [
+    {
+      "host": "events-preview.shop.maestrogtm.com",
+      "environment": "preview",
+      "cookie_scope": "shop.maestrogtm.com"
+    },
+    { "host": "shop.maestrogtm.com", "environment": "live", "cookie_scope": "shop.maestrogtm.com" },
+    {
+      "host": "events.shop.maestrogtm.com",
+      "environment": "live",
+      "cookie_scope": "shop.maestrogtm.com"
+    }
+  ],
+  "blocked_fallback_hosts": ["pages.dev", "workers.dev"]
+}

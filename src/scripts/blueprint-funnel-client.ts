@@ -20,6 +20,8 @@ type StoredSession = {
   publicSessionExpiresAt: number;
   journeyId: string;
   checkoutIdempotencyKey: string;
+  trackingContextToken: string;
+  candidateEventId?: string;
 };
 
 type SavedSnapshot = {
@@ -51,8 +53,6 @@ declare global {
 
 const START_PATH = 'capabilities/leadMagnets/publicPersonalizations:start';
 const WATCH_PATH = 'capabilities/leadMagnets/personalizations:watchPersonalization';
-const CHECKOUT_START_PATH = 'capabilities/billing/blueprintCheckoutStarts:start';
-const CHECKOUT_STATUS_PATH = 'capabilities/billing/blueprintPurchases:getCheckoutStatus';
 const READ_ASSET_PATH = 'capabilities/leadMagnets/personalizationDelivery:readAsset';
 const RETURN_CLAIM_TOKEN_KEY = 'blueprint:return:claim-token';
 const ASSET_TOKENS_KEY = 'blueprint:asset:tokens';
@@ -178,6 +178,7 @@ async function initializeAsset(
         publicSessionExpiresAt: Number.MAX_SAFE_INTEGER,
         journeyId: currentJourneyId(),
         checkoutIdempotencyKey: assetCheckoutIdempotencyKey(claimToken),
+        trackingContextToken: '',
       });
     });
     setStatus(config, 'Your saved Snapshot is ready. Complete the security check to continue.');
@@ -618,12 +619,18 @@ async function beginCheckoutForSession(
   action.disabled = true;
   setStatus(config, 'Preparing secure checkout…');
   try {
-    await callConvex(config, 'action', CHECKOUT_START_PATH, {
-      publicSessionToken: session.publicSessionToken,
-      checkoutIdempotencyKey: session.checkoutIdempotencyKey,
-      returnPath: '/blueprint/checkout/return',
-      turnstileToken: tokenState.value,
+    const candidateEventId = session.candidateEventId ?? `initiate_checkout:${crypto.randomUUID()}`;
+    session.candidateEventId = candidateEventId;
+    const startResult = await callCheckoutProxy(config, 'checkout-start', {
+      tracking_context_token: session.trackingContextToken,
+      candidate_event_id: candidateEventId,
+      public_session_token: session.publicSessionToken,
+      checkout_idempotency_key: session.checkoutIdempotencyKey,
+      turnstile_token: tokenState.value,
     });
+    if (isRecord(startResult) && typeof startResult.tracking_context_token === 'string') {
+      session.trackingContextToken = startResult.tracking_context_token;
+    }
     tokenState.value = '';
     turnstile.reset(widgetId);
     storeReturnClaimToken(session.publicSessionToken);
@@ -636,9 +643,12 @@ async function beginCheckoutForSession(
 
 async function watchCheckout(config: RuntimeConfig, session: StoredSession) {
   for (let attempt = 0; attempt < 45; attempt += 1) {
-    const result = await callConvex(config, 'query', CHECKOUT_STATUS_PATH, {
-      publicSessionToken: session.publicSessionToken,
-      checkoutIdempotencyKey: session.checkoutIdempotencyKey,
+    const result = await callCheckoutProxy(config, 'checkout-status', {
+      tracking_context_token: session.trackingContextToken,
+      candidate_event_id:
+        session.candidateEventId ?? `initiate_checkout:${session.checkoutIdempotencyKey}`,
+      public_session_token: session.publicSessionToken,
+      checkout_idempotency_key: session.checkoutIdempotencyKey,
     });
     if (isRecord(result) && result.state === 'ready' && typeof result.checkoutUrl === 'string') {
       const checkoutUrl = new URL(result.checkoutUrl);
@@ -739,6 +749,25 @@ async function callConvex(
   return payload.value;
 }
 
+async function callCheckoutProxy(
+  config: RuntimeConfig,
+  operation: 'checkout-start' | 'checkout-status',
+  args: Record<string, unknown>
+) {
+  const response = await fetch(`/api/blueprint/${operation}`, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    credentials: 'same-origin',
+    body: JSON.stringify(args),
+    signal: AbortSignal.timeout(20_000),
+  });
+  const payload = (await response.json()) as unknown;
+  if (!response.ok || !isRecord(payload) || typeof payload.error === 'string') {
+    throw new Error(`Blueprint ${operation} failed`);
+  }
+  return payload;
+}
+
 function parseStartResult(value: unknown, journeyId: string): StoredSession {
   if (
     !isRecord(value) ||
@@ -753,6 +782,8 @@ function parseStartResult(value: unknown, journeyId: string): StoredSession {
     publicSessionExpiresAt: value.publicSessionExpiresAt,
     journeyId,
     checkoutIdempotencyKey: `checkout_${crypto.randomUUID()}`,
+    trackingContextToken:
+      typeof value.tracking_context_token === 'string' ? value.tracking_context_token : '',
   };
 }
 
@@ -797,7 +828,8 @@ function readSession(audience: string): StoredSession | null {
       typeof parsed.publicSessionToken !== 'string' ||
       typeof parsed.publicSessionExpiresAt !== 'number' ||
       typeof parsed.journeyId !== 'string' ||
-      typeof parsed.checkoutIdempotencyKey !== 'string'
+      typeof parsed.checkoutIdempotencyKey !== 'string' ||
+      typeof parsed.trackingContextToken !== 'string'
     ) {
       return null;
     }
