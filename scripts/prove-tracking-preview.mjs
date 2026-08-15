@@ -1,5 +1,6 @@
 import { execFile } from 'node:child_process';
 import { promisify } from 'node:util';
+import { assertTrackingPreviewRows } from './lib/tracking-preview-proof.mjs';
 import { previewExecution, PREVIEW_RESOURCES } from './tracking-preview-contract.mjs';
 
 const contract = previewExecution();
@@ -10,7 +11,9 @@ if (!contract.execute) {
   process.exit(0);
 }
 const bridgeKey = process.env.TRACKING_PAGES_BRIDGE_KEY_CURRENT;
+const proofToken = process.env.TRACKING_PREVIEW_PROOF_TOKEN;
 if (!bridgeKey || bridgeKey.length < 32) throw new Error('preview bridge key is required');
+if (!proofToken || proofToken.length < 32) throw new Error('preview proof token is required');
 const origin = 'https://tracking-preview.owned-funnel-builder.pages.dev';
 const base = `https://${PREVIEW_RESOURCES.host}`;
 const request = async (path, init = {}) => {
@@ -76,7 +79,7 @@ const pageView = await request('/v1/events', {
 if (pageView.response.status !== 202)
   throw new Error(`PageView failed: ${pageView.response.status}`);
 
-const sign = async (body, audience) => {
+const sign = async (body) => {
   const timestamp = String(Math.floor(Date.now() / 1000));
   const nonce = Buffer.from(crypto.getRandomValues(new Uint8Array(32))).toString('base64url');
   const bodyDigest = Buffer.from(
@@ -100,7 +103,6 @@ const sign = async (body, audience) => {
     'x-maestro-timestamp': timestamp,
     'x-maestro-nonce': nonce,
     'x-maestro-signature': signature,
-    'x-proof-audience': audience,
   };
 };
 const exchangeBody = JSON.stringify({
@@ -109,45 +111,56 @@ const exchangeBody = JSON.stringify({
 });
 const exchange = await request('/internal/context-exchange', {
   method: 'POST',
-  headers: await sign(exchangeBody, 'context-exchange'),
+  headers: await sign(exchangeBody),
   body: exchangeBody,
 });
 if (exchange.response.status !== 201)
   throw new Error(`context exchange failed: ${exchange.response.status}`);
 const context = exchange.json();
-const sourceEvent = async (eventName) => {
-  const body = JSON.stringify({
-    schema_version: '1',
-    source_system: 'pages',
-    source_event_id: `${eventName.toLowerCase()}_${crypto.randomUUID()}`,
-    event_name: eventName,
-    occurred_at: new Date().toISOString(),
+const pagesProof = await fetch(`${origin}/api/internal/tracking-preview-proof`, {
+  method: 'POST',
+  headers: { authorization: `Bearer ${proofToken}`, 'content-type': 'application/json' },
+  body: JSON.stringify({
     context_hash: context.context_hash,
     context_expires_at: context.context_expires_at,
-    funnel_slug: 'owned-funnel-builder',
-    ...(eventName === 'Lead' ? { lead_id: `lead_${crypto.randomUUID()}` } : {}),
-    ...(eventName === 'InitiateCheckout'
-      ? { checkout_session_id: `checkout_${crypto.randomUUID()}` }
-      : {}),
-    ...(eventName === 'Purchase' ? { payment_id: `payment_${crypto.randomUUID()}` } : {}),
     privacy_snapshot: context.privacy_snapshot,
-  });
-  return request('/v1/source-events', {
-    method: 'POST',
-    headers: await sign(body, 'source-events'),
-    body,
-  });
-};
-for (const name of ['Lead', 'InitiateCheckout']) {
-  const result = await sourceEvent(name);
-  if (result.response.status !== 202) throw new Error(`${name} failed: ${result.response.status}`);
-}
-const purchase = await sourceEvent('Purchase');
+  }),
+});
+if (pagesProof.status !== 202) throw new Error(`Pages source proof failed: ${pagesProof.status}`);
+const expected = (await pagesProof.json()).events;
+if (
+  !Array.isArray(expected) ||
+  expected.length !== 2 ||
+  expected.some(
+    (event) =>
+      !['Lead', 'InitiateCheckout'].includes(event?.event_name) ||
+      typeof event?.event_id !== 'string' ||
+      !/^[A-Za-z0-9_-]{1,180}$/.test(event.event_id)
+  )
+)
+  throw new Error('Pages source proof response invalid');
+const purchaseBody = JSON.stringify({
+  schema_version: '1',
+  source_system: 'pages',
+  source_event_id: `purchase_${crypto.randomUUID()}`,
+  event_name: 'Purchase',
+  occurred_at: new Date().toISOString(),
+  context_hash: context.context_hash,
+  context_expires_at: context.context_expires_at,
+  funnel_slug: 'owned-funnel-builder',
+  payment_id: `payment_${crypto.randomUUID()}`,
+  privacy_snapshot: context.privacy_snapshot,
+});
+const purchase = await request('/v1/source-events', {
+  method: 'POST',
+  headers: await sign(purchaseBody),
+  body: purchaseBody,
+});
 if (purchase.response.status !== 403 || purchase.json().error !== 'preview_payment_event_blocked')
   throw new Error(`Purchase was not blocked: ${purchase.response.status}`);
 const wrangler = new URL('../node_modules/.bin/wrangler', import.meta.url).pathname;
-const query =
-  "SELECT event_name, count(*) AS count FROM tracking_events GROUP BY event_name ORDER BY event_name; SELECT count(*) AS count FROM tracking_deliveries WHERE state = 'delivered';";
+const exactIds = [eventId, ...expected.map((event) => event.event_id)];
+const query = `SELECT event_name, event_id FROM tracking_events WHERE event_id IN (${exactIds.map((id) => `'${id}'`).join(',')}); SELECT count(*) AS delivered_count FROM tracking_deliveries WHERE state = 'delivered';`;
 const { stdout } = await promisify(execFile)(wrangler, [
   'd1',
   'execute',
@@ -160,8 +173,7 @@ const { stdout } = await promisify(execFile)(wrangler, [
   query,
 ]);
 const rows = JSON.parse(stdout);
-if (JSON.stringify(rows).includes('Purchase') || !JSON.stringify(rows).includes('PageView'))
-  throw new Error('D1 event proof mismatch');
+assertTrackingPreviewRows(rows, [{ event_name: 'PageView', event_id: eventId }, ...expected]);
 console.log(
   JSON.stringify({
     action: 'tracking_preview_proof',
@@ -169,6 +181,7 @@ console.log(
     mutations: true,
     host: PREVIEW_RESOURCES.host,
     page_view_event_id: eventId,
+    source_event_ids: expected.map((event) => event.event_id),
     purchase_blocked: true,
     destination_deliveries: 0,
   })

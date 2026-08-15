@@ -23,7 +23,7 @@ export function previewExecution(argv = process.argv.slice(2)) {
     execute &&
     (approvalId !== PREVIEW_APPROVAL ||
       !/^[a-f0-9]{40}$/.test(workerSha) ||
-      (sourceSha && !/^[a-f0-9]{40}$/.test(sourceSha)))
+      !/^[a-f0-9]{40}$/.test(sourceSha))
   )
     throw new Error('--execute requires --approval-id and exact preview SHAs');
   return { approvalId, workerSha, sourceSha, execute };
