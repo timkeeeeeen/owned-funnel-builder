@@ -50,7 +50,11 @@ export type CollectorEnv = Record<string, unknown> & {
   EVENTS_QUEUE?: QueueLike;
   TRACKING_CONTEXT_SIGN?: TrackingContextSigner;
   TRACKING_CONTEXT_VERIFY?: TrackingContextVerifier;
-  TRACKING_FLOW_BINDING_VERIFY?: (flowBinding: string, funnelId: string, paymentIds: string[]) => Promise<boolean> | boolean;
+  TRACKING_FLOW_BINDING_VERIFY?: (
+    flowBinding: string,
+    funnelId: string,
+    paymentIds: string[]
+  ) => Promise<boolean> | boolean;
 };
 
 export type ExecutionContextLike = { waitUntil?(promise: Promise<unknown>): void };
@@ -302,7 +306,7 @@ async function verifyEventContext(
     context.subject_deleted ||
     context.tenant_id !== event.tenant_id ||
     context.site_id !== event.site_id ||
-    event.identity.funnel_id !== context.funnel_id ||
+    (event.identity.funnel_id && event.identity.funnel_id !== context.funnel_id) ||
     context.funnel_id !== rolloutContext.funnel ||
     context.funnel_id !== rolloutContext.bound_funnel ||
     !context.subject_id ||
@@ -310,14 +314,25 @@ async function verifyEventContext(
     event.privacy.policy_version !== policyVersion
   )
     return null;
-  if (!externallyVerified && event.event_name === 'Purchase' && /^[a-f0-9]{64}$/i.test(contextHash)) {
+  event.identity.funnel_id = context.funnel_id;
+  if (
+    !externallyVerified &&
+    event.event_name === 'Purchase' &&
+    /^[a-f0-9]{64}$/i.test(contextHash)
+  ) {
     const consumed = await env.TRACKING_DB.prepare(
       `UPDATE tracking_context_exchanges
        SET consumed_at = ?, consumed_event_id = ?, consumed_flow_binding = flow_binding
        WHERE context_hash = ? AND expires_at > ?
          AND (consumed_at IS NULL OR consumed_event_id = ?)`
     )
-      .bind(new Date().toISOString(), event.event_id, contextHash, new Date().toISOString(), event.event_id)
+      .bind(
+        new Date().toISOString(),
+        event.event_id,
+        contextHash,
+        new Date().toISOString(),
+        event.event_id
+      )
       .run();
     if (Number(consumed.meta?.changes ?? 0) !== 1) return null;
   }
@@ -350,6 +365,27 @@ function exactHost(request: Request, env: Record<string, unknown>): boolean {
     new URL(request.url).host === configured &&
     (!request.headers.get('host') || request.headers.get('host') === configured)
   );
+}
+
+const INTERNAL_ROUTES = new Set([
+  '/v1/source-events',
+  '/internal/context-exchange',
+  '/internal/browser-claims',
+]);
+
+function exactInternalHost(request: Request, env: Record<string, unknown>): boolean {
+  const configured = textEnv(env, 'TRACKING_INTERNAL_HOST');
+  const url = new URL(request.url);
+  return Boolean(
+    configured &&
+    (INTERNAL_ROUTES.has(url.pathname) || url.pathname.startsWith('/internal/operator/')) &&
+    url.host === configured &&
+    (!request.headers.get('host') || request.headers.get('host') === configured)
+  );
+}
+
+function exactRouteHost(request: Request, env: Record<string, unknown>): boolean {
+  return exactHost(request, env) || exactInternalHost(request, env);
 }
 
 function exactOrigin(request: Request, env: Record<string, unknown>): boolean {
@@ -436,15 +472,16 @@ function cookieContext(env: Record<string, unknown>): CookieContext {
   };
 }
 
-function cookieKeys(env: Record<string, unknown>): Record<string, CryptoKey> {
-  const keys: Record<string, CryptoKey> = {};
+function cookieKeys(env: Record<string, unknown>): Record<string, CryptoKey | string> {
+  const keys: Record<string, CryptoKey | string> = {};
   for (const [name, idName] of [
     ['TRACKING_COOKIE_SIGNING_KEY_CURRENT', 'TRACKING_COOKIE_SIGNING_KEY_ID_CURRENT'],
     ['TRACKING_COOKIE_SIGNING_KEY_PREVIOUS', 'TRACKING_COOKIE_SIGNING_KEY_ID_PREVIOUS'],
   ] as const) {
     const key = env[name];
     const id = textEnv(env, idName, name.includes('CURRENT') ? 'current' : 'previous');
-    if (key && typeof key === 'object' && 'type' in key) keys[id] = key as CryptoKey;
+    if (typeof key === 'string' || (key && typeof key === 'object' && 'type' in key))
+      keys[id] = key as CryptoKey | string;
   }
   return keys;
 }
@@ -460,7 +497,7 @@ async function signedCookie(
   maxAge: number
 ): Promise<string> {
   const key = env.TRACKING_COOKIE_SIGNING_KEY_CURRENT;
-  if (!key || typeof key !== 'object' || !('type' in key))
+  if (typeof key !== 'string' && (!key || typeof key !== 'object' || !('type' in key)))
     throw new Error('cookie_signing_key_unavailable');
   const result = await issueSignedCookie(
     {
@@ -470,7 +507,7 @@ async function signedCookie(
       keyId: textEnv(env, 'TRACKING_COOKIE_SIGNING_KEY_ID_CURRENT', 'current'),
       maxAge,
     },
-    key as CryptoKey
+    key as CryptoKey | string
   );
   return result.replace('Domain=shop.maestrogtm.com', `Domain=${cookieDomain(env)}`);
 }
@@ -576,17 +613,16 @@ async function bootstrap(request: Request, env: CollectorEnv): Promise<Response>
           )
           .first<{ context_hash: string }>()
       : null;
-  const contextToken =
-    state.resolved
-      ? await signTrackingContext(env, {
-          tenant_id: textEnv(env, 'TRACKING_TENANT_ID', 'default'),
-          site_id: textEnv(env, 'TRACKING_SITE_ID', 'default'),
-          funnel_id: rolloutState.context.bound_funnel,
-          subject_id: nextPrivacySubject,
-          subject_deleted: false,
-          policy_version: state.policyVersion,
-        })
-      : null;
+  const contextToken = state.resolved
+    ? await signTrackingContext(env, {
+        tenant_id: textEnv(env, 'TRACKING_TENANT_ID', 'default'),
+        site_id: textEnv(env, 'TRACKING_SITE_ID', 'default'),
+        funnel_id: rolloutState.context.bound_funnel,
+        subject_id: nextPrivacySubject,
+        subject_deleted: false,
+        policy_version: state.policyVersion,
+      })
+    : null;
   const response = jsonResponse(
     {
       schema_version: '1',
@@ -716,7 +752,13 @@ export function sourceEnvelopeToCanonical(
         ...(envelope.content_ids ? { content_ids: envelope.content_ids } : {}),
         ...(envelope.contents ? { contents: envelope.contents } : {}),
       }
-    : envelope.payment_id ? { payment_id: envelope.payment_id, ...(envelope.value !== undefined ? { value: envelope.value } : {}), ...(envelope.currency ? { currency: envelope.currency } : {}) } : {};
+    : envelope.payment_id
+      ? {
+          payment_id: envelope.payment_id,
+          ...(envelope.value !== undefined ? { value: envelope.value } : {}),
+          ...(envelope.currency ? { currency: envelope.currency } : {}),
+        }
+      : {};
   const snapshot = envelope.privacy_snapshot;
   return validateCanonicalEvent({
     schema_version: '1',
@@ -744,17 +786,30 @@ export function sourceEnvelopeToCanonical(
 }
 
 async function sourceEvents(request: Request, env: CollectorEnv): Promise<Response> {
-  if (!exactHost(request, env)) return jsonError('not_allowed', 403, request, env);
+  if (!exactRouteHost(request, env)) return jsonError('not_allowed', 403, request, env);
   const source = request.headers.get('x-maestro-issuer') as SourceSystem | null;
   if (!source && request.headers.get('x-tracking-source'))
     return jsonError('source_runtime_not_ready', 403, request, env);
   if (!source || !SOURCE_SYSTEMS.has(source)) return jsonError('invalid_source', 401, request, env);
-  if (!sourceRuntimeReady(source)) return jsonError('source_runtime_not_ready', 403, request, env);
   const bodyText = await request.text();
   if (new TextEncoder().encode(bodyText).byteLength > EVENT_MAX_BYTES)
     return jsonError('body_too_large', 413, request, env);
   if (!(await verifySignedBridge(request, bodyText, env, source, 'source-events')))
     return jsonError('invalid_signature', 401, request, env);
+  const body = JSON.parse(bodyText) as unknown;
+  if (!safeJson(body)) return jsonError('body_limits_exceeded', 400, request, env);
+  const envelope = parseSourceEventEnvelope(body, source);
+  const previewProof =
+    textEnv(env, 'TRACKING_ENVIRONMENT') === 'preview' &&
+    textEnv(env, 'TRACKING_PREVIEW_NON_PAYMENT_PROOF') === 'true' &&
+    source === 'pages' &&
+    /^[a-f0-9]{40}$/i.test(textEnv(env, 'TRACKING_PAGES_SOURCE_SHA'));
+  const previewProofEvent =
+    previewProof && (envelope.event_name === 'Lead' || envelope.event_name === 'InitiateCheckout');
+  if (previewProof && envelope.event_name === 'Purchase')
+    return jsonError('preview_payment_event_blocked', 403, request, env);
+  if (!sourceRuntimeReady(source) && !previewProofEvent)
+    return jsonError('source_runtime_not_ready', 403, request, env);
   const nonce = request.headers.get('x-maestro-nonce') ?? '';
   const nonceResult = await env.TRACKING_DB.prepare(
     `INSERT INTO tracking_nonces (nonce, source_system, expires_at, created_at) VALUES (?, ?, ?, ?) ON CONFLICT(source_system, nonce) DO NOTHING`
@@ -763,9 +818,6 @@ async function sourceEvents(request: Request, env: CollectorEnv): Promise<Respon
     .run();
   if ((nonceResult.meta?.changes ?? 0) !== 1)
     return jsonError('replayed_request', 409, request, env);
-  const body = JSON.parse(bodyText) as unknown;
-  if (!safeJson(body)) return jsonError('body_limits_exceeded', 400, request, env);
-  const envelope = parseSourceEventEnvelope(body, source);
   const event = sourceEnvelopeToCanonical(envelope, source, env);
   if (
     event.tenant_id !== textEnv(env, 'TRACKING_TENANT_ID', 'default') ||
@@ -814,7 +866,7 @@ type ContextExchange = {
 };
 
 async function contextExchange(request: Request, env: CollectorEnv): Promise<Response> {
-  if (!exactHost(request, env)) return jsonError('not_allowed', 403, request, env);
+  if (!exactRouteHost(request, env)) return jsonError('not_allowed', 403, request, env);
   const source = request.headers.get('x-maestro-issuer') as SourceSystem | null;
   if (!source || !SOURCE_SYSTEMS.has(source)) return jsonError('invalid_source', 401, request, env);
   const bodyText = await request.text();
@@ -827,9 +879,15 @@ async function contextExchange(request: Request, env: CollectorEnv): Promise<Res
     `INSERT INTO tracking_nonces (nonce, source_system, expires_at, created_at)
      VALUES (?, ?, ?, ?) ON CONFLICT(source_system, nonce) DO NOTHING`
   )
-    .bind(nonce, `${source}:context-exchange`, new Date(Date.now() + 600_000).toISOString(), new Date().toISOString())
+    .bind(
+      nonce,
+      `${source}:context-exchange`,
+      new Date(Date.now() + 600_000).toISOString(),
+      new Date().toISOString()
+    )
     .run();
-  if ((nonceResult.meta?.changes ?? 0) !== 1) return jsonError('replayed_request', 409, request, env);
+  if ((nonceResult.meta?.changes ?? 0) !== 1)
+    return jsonError('replayed_request', 409, request, env);
   let input: Record<string, unknown>;
   try {
     const parsed = JSON.parse(bodyText) as unknown;
@@ -839,42 +897,79 @@ async function contextExchange(request: Request, env: CollectorEnv): Promise<Res
     return jsonError('invalid_request', 400, request, env);
   }
   const token = input.tracking_context_token;
-  if (typeof token !== 'string' || !/^v1\.[A-Za-z0-9_-]{1,64}\.[A-Za-z0-9_-]{16,512}\.[A-Za-z0-9_-]{43}$/.test(token))
+  if (
+    typeof token !== 'string' ||
+    !/^v1\.[A-Za-z0-9_-]{1,64}\.[A-Za-z0-9_-]{16,512}\.[A-Za-z0-9_-]{43}$/.test(token)
+  )
     return jsonError('invalid_context', 403, request, env);
   if (new URL(request.url).search) return jsonError('invalid_context', 403, request, env);
   const verifier = env.TRACKING_CONTEXT_TOKEN_VERIFY;
   let verified: unknown;
   try {
-    verified = typeof verifier === 'function'
-      ? await (verifier as (value: string, audience: string) => Promise<unknown>)(token, 'source-outbox')
-      : await verifyTrackingContextToken(env, token);
+    verified =
+      typeof verifier === 'function'
+        ? await (verifier as (value: string, audience: string) => Promise<unknown>)(
+            token,
+            'source-outbox'
+          )
+        : await verifyTrackingContextToken(env, token);
   } catch {
     return jsonError('invalid_context', 403, request, env);
   }
   if (!verified || typeof verified !== 'object' || Array.isArray(verified))
     return jsonError('invalid_context', 403, request, env);
   const context = verified as Record<string, unknown>;
-  const requestedFlowBinding = typeof input.flow_binding === 'string' && /^[a-f0-9]{64}$/i.test(input.flow_binding)
-    ? input.flow_binding
-    : '';
+  const requestedFlowBinding =
+    typeof input.flow_binding === 'string' && /^[a-f0-9]{64}$/i.test(input.flow_binding)
+      ? input.flow_binding
+      : '';
   const tenantId = textEnv(env, 'TRACKING_TENANT_ID', 'default');
   const siteId = textEnv(env, 'TRACKING_SITE_ID', 'default');
   const exchange: ContextExchange = {
     tenant_id: tenantId,
     site_id: siteId,
-    funnel_slug: typeof context.funnel_slug === 'string' ? context.funnel_slug : String(context.funnel_id ?? ''),
-    flow_binding: requestedFlowBinding || (typeof context.flow_binding === 'string' ? context.flow_binding : String(context.funnel_id ?? '')),
-    server_subject_ref: typeof context.server_subject_ref === 'string' ? context.server_subject_ref : String(context.subject_id ?? ''),
+    funnel_slug:
+      typeof context.funnel_slug === 'string'
+        ? context.funnel_slug
+        : String(context.funnel_id ?? ''),
+    flow_binding:
+      requestedFlowBinding ||
+      (typeof context.flow_binding === 'string'
+        ? context.flow_binding
+        : String(context.funnel_id ?? '')),
+    server_subject_ref:
+      typeof context.server_subject_ref === 'string'
+        ? context.server_subject_ref
+        : String(context.subject_id ?? ''),
     privacy_snapshot: (context.privacy_snapshot ?? {
-      schema_version: '1', server_subject_ref: String(context.subject_id ?? context.server_subject_ref ?? ''),
-      subject_ref_version: 'v1', snapshot_issued_at: new Date().toISOString(),
-      snapshot_expires_at: new Date(Date.now() + CONTEXT_EXCHANGE_MAX_AGE_SECONDS * 1000).toISOString(), snapshot_key_id: 'worker-current',
+      schema_version: '1',
+      server_subject_ref: String(context.subject_id ?? context.server_subject_ref ?? ''),
+      subject_ref_version: 'v1',
+      snapshot_issued_at: new Date().toISOString(),
+      snapshot_expires_at: new Date(
+        Date.now() + CONTEXT_EXCHANGE_MAX_AGE_SECONDS * 1000
+      ).toISOString(),
+      snapshot_key_id: 'worker-current',
       snapshot_signature: base64url(crypto.getRandomValues(new Uint8Array(32))),
-      purposes: { necessary: 'granted', analytics: 'unknown', advertising: 'unknown', identity_enrichment: 'unknown', sale_share: 'unknown' },
-      policy_version: String(context.policy_version ?? privacyPolicy.policy_version), choice_id: 'context-token', decision_source: 'policy',
-      notice_locale: 'en-US', region: 'unknown', region_source: 'unknown', gpc: false, observed_at: new Date().toISOString(),
+      purposes: {
+        necessary: 'granted',
+        analytics: 'unknown',
+        advertising: 'unknown',
+        identity_enrichment: 'unknown',
+        sale_share: 'unknown',
+      },
+      policy_version: String(context.policy_version ?? privacyPolicy.policy_version),
+      choice_id: 'context-token',
+      decision_source: 'policy',
+      notice_locale: 'en-US',
+      region: 'unknown',
+      region_source: 'unknown',
+      gpc: false,
+      observed_at: new Date().toISOString(),
     }) as PrivacySnapshot,
-    ...(context.buyer_context && typeof context.buyer_context === 'object' && !Array.isArray(context.buyer_context)
+    ...(context.buyer_context &&
+    typeof context.buyer_context === 'object' &&
+    !Array.isArray(context.buyer_context)
       ? { buyer_context: context.buyer_context as Record<string, unknown> }
       : {}),
   };
@@ -887,7 +982,9 @@ async function contextExchange(request: Request, env: CollectorEnv): Promise<Res
     return jsonError('invalid_context', 403, request, env);
   const expiresAt = new Date(Date.now() + CONTEXT_EXCHANGE_MAX_AGE_SECONDS * 1000).toISOString();
   const digest = await crypto.subtle.digest('SHA-256', crypto.getRandomValues(new Uint8Array(32)));
-  const contextHash = Array.from(new Uint8Array(digest), (byte) => byte.toString(16).padStart(2, '0')).join('');
+  const contextHash = Array.from(new Uint8Array(digest), (byte) =>
+    byte.toString(16).padStart(2, '0')
+  ).join('');
   const now = new Date().toISOString();
   try {
     await env.TRACKING_DB.prepare(
@@ -1059,9 +1156,15 @@ async function browserClaims(request: Request, env: CollectorEnv): Promise<Respo
     `INSERT INTO tracking_nonces (nonce, source_system, expires_at, created_at)
      VALUES (?, ?, ?, ?) ON CONFLICT(source_system, nonce) DO NOTHING`
   )
-    .bind(nonce, 'pages:browser-claims', new Date(Date.now() + 600_000).toISOString(), new Date().toISOString())
+    .bind(
+      nonce,
+      'pages:browser-claims',
+      new Date(Date.now() + 600_000).toISOString(),
+      new Date().toISOString()
+    )
     .run();
-  if ((nonceResult.meta?.changes ?? 0) !== 1) return jsonError('replayed_request', 409, request, env);
+  if ((nonceResult.meta?.changes ?? 0) !== 1)
+    return jsonError('replayed_request', 409, request, env);
   let body: Record<string, unknown>;
   try {
     const parsed = JSON.parse(bodyText) as unknown;
@@ -1081,33 +1184,39 @@ async function browserClaims(request: Request, env: CollectorEnv): Promise<Respo
         )
         .slice(0, 50)
     : [];
-  if (typeof funnelSlug !== 'string' || !/^[A-Za-z0-9:_-]{1,180}$/.test(funnelSlug) ||
-      typeof flowBinding !== 'string' || !/^[A-Za-z0-9:_-]{1,180}$/.test(flowBinding))
+  if (
+    typeof funnelSlug !== 'string' ||
+    !/^[A-Za-z0-9:_-]{1,180}$/.test(funnelSlug) ||
+    typeof flowBinding !== 'string' ||
+    !/^[A-Za-z0-9:_-]{1,180}$/.test(flowBinding)
+  )
     return jsonError('invalid_request', 400, request, env);
   try {
-    const validFlow = typeof env.TRACKING_FLOW_BINDING_VERIFY === 'function'
-      ? await env.TRACKING_FLOW_BINDING_VERIFY(flowBinding, funnelSlug, paymentIds)
-      : (() => {
-          return env.TRACKING_DB.prepare(
-            `SELECT context_hash FROM tracking_context_exchanges
+    const validFlow =
+      typeof env.TRACKING_FLOW_BINDING_VERIFY === 'function'
+        ? await env.TRACKING_FLOW_BINDING_VERIFY(flowBinding, funnelSlug, paymentIds)
+        : (() => {
+            return env.TRACKING_DB.prepare(
+              `SELECT context_hash FROM tracking_context_exchanges
              WHERE tenant_id = ? AND site_id = ? AND funnel_slug = ? AND flow_binding = ?
                AND expires_at > ? LIMIT 1`
-          )
-            .bind(
-              textEnv(env, 'TRACKING_TENANT_ID', 'default'),
-              textEnv(env, 'TRACKING_SITE_ID', 'default'),
-              funnelSlug,
-              flowBinding,
-              new Date().toISOString()
             )
-            .all<{ context_hash: string }>()
-            .then((result) => {
-              flowContextHashes = (result.results ?? []).map((row) => row.context_hash).filter(Boolean);
-              return flowContextHashes.length > 0;
-            });
-        })();
-    if (!validFlow)
-      return jsonError('invalid_flow', 403, request, env);
+              .bind(
+                textEnv(env, 'TRACKING_TENANT_ID', 'default'),
+                textEnv(env, 'TRACKING_SITE_ID', 'default'),
+                funnelSlug,
+                flowBinding,
+                new Date().toISOString()
+              )
+              .all<{ context_hash: string }>()
+              .then((result) => {
+                flowContextHashes = (result.results ?? [])
+                  .map((row) => row.context_hash)
+                  .filter(Boolean);
+                return flowContextHashes.length > 0;
+              });
+          })();
+    if (!validFlow) return jsonError('invalid_flow', 403, request, env);
   } catch {
     return jsonError('tracking_unavailable', 503, request, env);
   }
@@ -1123,7 +1232,13 @@ async function browserClaims(request: Request, env: CollectorEnv): Promise<Respo
         AND event_name = 'Purchase' AND json_extract(envelope_json, '$.commerce.payment_id') IN (${placeholders})
         AND json_extract(envelope_json, '$.identity.funnel_id') = ?${contextClause}`
   )
-    .bind(textEnv(env, 'TRACKING_TENANT_ID', 'default'), textEnv(env, 'TRACKING_SITE_ID', 'default'), ...paymentIds, funnelSlug, ...flowContextHashes)
+    .bind(
+      textEnv(env, 'TRACKING_TENANT_ID', 'default'),
+      textEnv(env, 'TRACKING_SITE_ID', 'default'),
+      ...paymentIds,
+      funnelSlug,
+      ...flowContextHashes
+    )
     .all<{ event_key: string; event_id: string; envelope_json: string }>();
   const claims: Array<Record<string, unknown>> = [];
   for (const row of events.results ?? []) {
@@ -1141,12 +1256,26 @@ async function browserClaims(request: Request, env: CollectorEnv): Promise<Respo
       `INSERT OR IGNORE INTO tracking_purchase_browser_claims
        (tenant_id, site_id, payment_id, funnel_token_hash, claimed_at) VALUES (?, ?, ?, ?, ?)`
     )
-      .bind(textEnv(env, 'TRACKING_TENANT_ID', 'default'), textEnv(env, 'TRACKING_SITE_ID', 'default'), paymentId, flowBinding, new Date().toISOString())
+      .bind(
+        textEnv(env, 'TRACKING_TENANT_ID', 'default'),
+        textEnv(env, 'TRACKING_SITE_ID', 'default'),
+        paymentId,
+        flowBinding,
+        new Date().toISOString()
+      )
       .run();
     if ((claimed.meta?.changes ?? 0) !== 1) continue;
     const customData: Record<string, unknown> = {};
-    for (const key of ['content_ids', 'content_type', 'contents', 'currency', 'num_items', 'value']) {
-      if ((commerce as Record<string, unknown>)[key] !== undefined) customData[key] = (commerce as Record<string, unknown>)[key];
+    for (const key of [
+      'content_ids',
+      'content_type',
+      'contents',
+      'currency',
+      'num_items',
+      'value',
+    ]) {
+      if ((commerce as Record<string, unknown>)[key] !== undefined)
+        customData[key] = (commerce as Record<string, unknown>)[key];
     }
     claims.push({ event_name: 'Purchase', event_id: row.event_id, custom_data: customData });
   }
@@ -1438,7 +1567,7 @@ export async function handleCollectorFetch(
   const path = new URL(request.url).pathname;
   if (path === '/healthz' && request.method === 'GET')
     return exactHost(request, env) ? healthResponse() : jsonError('not_allowed', 403, request, env);
-  if (!exactHost(request, env)) return jsonError('not_allowed', 403, request, env);
+  if (!exactRouteHost(request, env)) return jsonError('not_allowed', 403, request, env);
   if (request.method === 'OPTIONS') {
     return exactOrigin(request, env)
       ? new Response(null, { status: 204, headers: cors(request, env) })

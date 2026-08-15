@@ -1,17 +1,64 @@
+import { execFile } from 'node:child_process';
 import { readdir } from 'node:fs/promises';
+import { promisify } from 'node:util';
+import { previewExecution, PREVIEW_RESOURCES } from './tracking-preview-contract.mjs';
 
-const args = new Set(process.argv.slice(2));
-const environment = args.has('--environment') ? process.argv[process.argv.indexOf('--environment') + 1] : '';
-const approvalId = args.has('--approval-id') ? process.argv[process.argv.indexOf('--approval-id') + 1] : '';
-const sha = args.has('--sha') ? process.argv[process.argv.indexOf('--sha') + 1] : '';
-const execute = args.has('--execute');
-if (!['preview', 'live'].includes(environment)) throw new Error('invalid environment');
-if (execute && (!approvalId || !/^[a-f0-9]{40,64}$/i.test(sha))) throw new Error('--execute requires --approval-id and exact --sha');
+const contract = previewExecution();
 const migrations = await Promise.all(
   ['migrations', 'workers/events/migrations'].map(async (directory) =>
-    (await readdir(directory)).filter((name) => name.endsWith('.sql')).sort().map((name) => `${directory}/${name}`)
+    (await readdir(directory)).filter((name) => name.endsWith('.sql')).sort()
   )
 );
 if (migrations.some((names) => names.length === 0)) throw new Error('migration discovery failed');
-if (execute) throw new Error('migration blocked: resource, CI, and migration-lock readbacks are unverified');
-console.log(JSON.stringify({ action: 'tracking_migrations', environment, mode: 'dry-run', mutations: false, migrations }));
+let migrationEvidence = [];
+if (contract.execute) {
+  const wrangler = new URL('../node_modules/.bin/wrangler', import.meta.url).pathname;
+  const run = promisify(execFile);
+  const maxBuffer = 4 * 1024 * 1024;
+  const pagesMigration = await run(
+    wrangler,
+    [
+      'd1',
+      'migrations',
+      'apply',
+      PREVIEW_RESOURCES.pagesDatabase,
+      '--remote',
+      '--config',
+      'wrangler.jsonc',
+      '--env',
+      'preview',
+    ],
+    { maxBuffer }
+  );
+  const trackingMigration = await run(
+    wrangler,
+    [
+      'd1',
+      'migrations',
+      'apply',
+      PREVIEW_RESOURCES.trackingDatabase,
+      '--remote',
+      '--config',
+      'workers/events/wrangler.jsonc',
+    ],
+    { maxBuffer }
+  );
+  migrationEvidence = [
+    ['pages', pagesMigration],
+    ['tracking', trackingMigration],
+  ].map(([target, { stdout, stderr }]) => ({
+    target,
+    stdout: stdout.trim(),
+    stderr: stderr.trim(),
+  }));
+}
+console.log(
+  JSON.stringify({
+    action: 'tracking_migrations',
+    environment: 'preview',
+    mode: contract.execute ? 'execute' : 'dry-run',
+    mutations: contract.execute,
+    migrations,
+    migration_evidence: migrationEvidence,
+  })
+);

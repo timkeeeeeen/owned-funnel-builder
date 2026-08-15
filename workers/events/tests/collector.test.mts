@@ -3,8 +3,13 @@ import { DatabaseSync } from 'node:sqlite';
 import { test } from 'node:test';
 
 import { default as worker } from '../src/index.ts';
-import { sourceEnvelopeToCanonical, sourceRuntimeReady } from '../src/collector.ts';
+import {
+  resetCollectorBudgets,
+  sourceEnvelopeToCanonical,
+  sourceRuntimeReady,
+} from '../src/collector.ts';
 import { issueSignedCookie } from '../../../functions/_lib/tracking-cookie.ts';
+import { sourceSignatureInput } from '../src/source-bridge.ts';
 import { REQUIRED_TRACKING_MIGRATIONS } from '../src/safety.ts';
 
 const TEST_MIGRATION_SET_SHA = '5'.repeat(64);
@@ -157,6 +162,79 @@ const pageView = (overrides: Record<string, unknown> = {}) => ({
   ...overrides,
 });
 
+const sourceSnapshot = () => ({
+  schema_version: '1',
+  server_subject_ref: 'worker-subject',
+  subject_ref_version: 'v1',
+  snapshot_issued_at: new Date().toISOString(),
+  snapshot_expires_at: new Date(Date.now() + 60_000).toISOString(),
+  snapshot_key_id: 'preview-current',
+  snapshot_signature: 's'.repeat(43),
+  purposes: {
+    necessary: 'granted',
+    analytics: 'granted',
+    advertising: 'denied',
+    identity_enrichment: 'denied',
+    sale_share: 'denied',
+  },
+  policy_version: '2026-08-04',
+  choice_id: 'choice:preview-proof',
+  decision_source: 'banner',
+  notice_locale: 'en-US',
+  region: 'US',
+  region_source: 'banner',
+  gpc: false,
+  observed_at: new Date().toISOString(),
+});
+
+async function signedSourceRequest(
+  eventName: 'PageView' | 'Lead' | 'InitiateCheckout' | 'Purchase'
+) {
+  const body = JSON.stringify({
+    schema_version: '1',
+    source_system: 'pages',
+    source_event_id: `${eventName.toLowerCase()}_preview-proof`,
+    event_name: eventName,
+    occurred_at: new Date().toISOString(),
+    context_hash: 'a'.repeat(64),
+    context_expires_at: new Date(Date.now() + 60_000).toISOString(),
+    funnel_slug: 'owned-funnel-builder',
+    ...(eventName === 'Lead' ? { lead_id: 'lead_preview' } : {}),
+    ...(eventName === 'InitiateCheckout' ? { checkout_session_id: 'checkout_preview' } : {}),
+    ...(eventName === 'Purchase' ? { payment_id: 'payment_preview' } : {}),
+    privacy_snapshot: sourceSnapshot(),
+  });
+  const timestamp = String(Math.floor(Date.now() / 1000));
+  const nonce = testBase64url(crypto.getRandomValues(new Uint8Array(32)));
+  const key = 'preview-pages-source-bridge-key';
+  const signature = await crypto.subtle.sign(
+    'HMAC',
+    await crypto.subtle.importKey(
+      'raw',
+      new TextEncoder().encode(key),
+      { name: 'HMAC', hash: 'SHA-256' },
+      false,
+      ['sign']
+    ),
+    new TextEncoder().encode(await sourceSignatureInput(timestamp, nonce, body))
+  );
+  return {
+    request: new Request('https://tracking.internal/v1/source-events', {
+      method: 'POST',
+      headers: {
+        'content-type': 'application/json',
+        'x-maestro-issuer': 'pages',
+        'x-maestro-key-id': 'pages-current',
+        'x-maestro-timestamp': timestamp,
+        'x-maestro-nonce': nonce,
+        'x-maestro-signature': testBase64url(new Uint8Array(signature)),
+      },
+      body,
+    }),
+    key,
+  };
+}
+
 const contextSecret = 'production-shaped-context-secret-key-2026';
 
 function testBase64url(value: Uint8Array): string {
@@ -246,6 +324,52 @@ test('bootstrap requires exact host/origin and returns non-cacheable signed cook
     {} as never
   );
   assert.equal(wrongHost.status, 403);
+});
+
+test('bootstrap imports Cloudflare string cookie secrets', async () => {
+  const bindings = await env();
+  const response = await worker.fetch(
+    request('/v1/bootstrap'),
+    {
+      ...bindings,
+      TRACKING_COOKIE_SIGNING_KEY_CURRENT: 'preview-cookie-secret-at-least-32-bytes',
+    } as never,
+    {} as never
+  );
+  assert.equal(response.status, 200);
+  assert.match(response.headers.get('set-cookie') ?? '', /ma_privacy=v2\./);
+});
+
+test('internal host is accepted only on source and internal routes', async () => {
+  const bindings = { ...(await env()), TRACKING_INTERNAL_HOST: 'tracking.internal' };
+  const source = await worker.fetch(
+    new Request('https://tracking.internal/v1/source-events', { method: 'POST' }),
+    bindings as never,
+    {} as never
+  );
+  assert.equal(source.status, 401);
+  const publicRoute = await worker.fetch(
+    new Request('https://tracking.internal/v1/bootstrap', {
+      headers: { origin: 'https://shop.example.test' },
+    }),
+    bindings as never,
+    {} as never
+  );
+  assert.equal(publicRoute.status, 403);
+});
+
+test('collector counter capability enforces the reviewed per-IP limit', async () => {
+  resetCollectorBudgets();
+  const bindings = { ...(await env()), TRACKING_IP_RATE_LIMIT: 1 };
+  assert.equal(
+    (await worker.fetch(request('/healthz'), bindings as never, {} as never)).status,
+    200
+  );
+  assert.equal(
+    (await worker.fetch(request('/healthz'), bindings as never, {} as never)).status,
+    429
+  );
+  resetCollectorBudgets();
 });
 
 test('fetch fails closed while the migration lock or release SHA readback is not green', async () => {
@@ -514,7 +638,7 @@ test('browser collector accepts PageView, is idempotent, and blocks authoritativ
     bindings as never,
     {} as never
   );
-  assert.equal(first.status, 202);
+  assert.equal(first.status, 202, await first.clone().text());
   const duplicate = await worker.fetch(
     request('/v1/events', { method: 'POST', body: JSON.stringify(pageView()) }),
     bindings as never,
@@ -642,6 +766,46 @@ test('source runtime readiness requires the launch dependencies', () => {
       },
     ]),
     true
+  );
+});
+
+test('preview proof accepts signed non-payment source events and always rejects Purchase', async () => {
+  const bindings = {
+    ...(await env()),
+    TRACKING_INTERNAL_HOST: 'tracking.internal',
+    TRACKING_PREVIEW_NON_PAYMENT_PROOF: 'true',
+    TRACKING_PAGES_SOURCE_SHA: '1'.repeat(40),
+  };
+  for (const eventName of ['Lead', 'InitiateCheckout'] as const) {
+    const signed = await signedSourceRequest(eventName);
+    const response = await worker.fetch(
+      signed.request,
+      { ...bindings, TRACKING_PAGES_BRIDGE_KEY_CURRENT: signed.key } as never,
+      {} as never
+    );
+    assert.equal(response.status, 202, await response.clone().text());
+  }
+  const purchase = await signedSourceRequest('Purchase');
+  const rejected = await worker.fetch(
+    purchase.request,
+    { ...bindings, TRACKING_PAGES_BRIDGE_KEY_CURRENT: purchase.key } as never,
+    {} as never
+  );
+  assert.equal(rejected.status, 403);
+  const outsideScope = await signedSourceRequest('PageView');
+  const outsideScopeResponse = await worker.fetch(
+    outsideScope.request,
+    { ...bindings, TRACKING_PAGES_BRIDGE_KEY_CURRENT: outsideScope.key } as never,
+    {} as never
+  );
+  assert.equal(outsideScopeResponse.status, 400);
+  assert.equal(
+    (
+      bindings.__database
+        .prepare("SELECT count(*) AS count FROM tracking_events WHERE event_name = 'Purchase'")
+        .get() as { count: number }
+    ).count,
+    0
   );
 });
 
@@ -773,7 +937,8 @@ test('privacy request returns only a request id and state', async () => {
       .find((cookie) => cookie.trim().startsWith('ma_vid='))
       ?.split(';', 1)[0]
       ?.trim() ?? '';
-  const effectiveVisitorCookie = visitorCookie || bootstrap.headers.get('set-cookie')?.match(/ma_vid=[^;]+/)?.[0] || '';
+  const effectiveVisitorCookie =
+    visitorCookie || bootstrap.headers.get('set-cookie')?.match(/ma_vid=[^;]+/)?.[0] || '';
   assert.match(effectiveVisitorCookie, /^ma_vid=v2\./);
   const visitor = ((await bootstrap.json()) as { visitor_ready: boolean }).visitor_ready;
   assert.equal(visitor, true);

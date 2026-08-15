@@ -1,5 +1,18 @@
 # First-Party Event Pipeline Authority Evidence
 
+## 2026-08-15 preview activation
+
+Preview infrastructure is active and verified at exact source
+`161e4b1ee6c5e2c7f71b6de35c8a80dc098928eb`: isolated Worker, D1 databases,
+Queue/DLQ, TLS hostname, Pages service binding, and both migration sets are in
+place. Signed PageView, Lead, and InitiateCheckout evidence is durable, Purchase
+is blocked by the preview payment gate, and destination delivery remains zero.
+Production Pages still serves a divergent pre-PR-#6 SHA; production tracking,
+Tinybird, Meta, Dodo, campaigns, and paid canaries remain blocked. See the
+redacted
+[`first-party-tracking-activation-gap-ledger.md`](./first-party-tracking-activation-gap-ledger.md)
+for exact resources and the next approval gate.
+
 Recorded 2026-08-04 from the clean `codex/first-party-event-pipeline` worktree
 at `ca35d223f333d06ee662e809a526e8283780882e`. This is a source-contract
 inventory, not provider provisioning or a deployment readback. Any field marked
