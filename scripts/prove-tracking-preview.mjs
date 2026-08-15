@@ -139,6 +139,13 @@ if (
   )
 )
   throw new Error('Pages source proof response invalid');
+if (
+  expected
+    .map((event) => event.event_name)
+    .sort()
+    .join(',') !== 'InitiateCheckout,Lead'
+)
+  throw new Error('Pages source proof event set invalid');
 const purchaseBody = JSON.stringify({
   schema_version: '1',
   source_system: 'pages',

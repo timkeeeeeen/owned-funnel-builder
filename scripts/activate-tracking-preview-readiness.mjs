@@ -1,5 +1,6 @@
 import { createHash } from 'node:crypto';
 import { execFile } from 'node:child_process';
+import { readFile } from 'node:fs/promises';
 import { promisify } from 'node:util';
 import { previewExecution, PREVIEW_RESOURCES } from './tracking-preview-contract.mjs';
 
@@ -23,9 +24,18 @@ const names = [
   '0007_privacy_destinations.sql',
   '0008_security_fix_wave.sql',
 ];
+const run = promisify(execFile);
+const { stdout: head } = await run('git', ['rev-parse', 'HEAD']);
+if (head.trim() !== contract.workerSha)
+  throw new Error('readiness requires the exact checked-out SHA');
+const workerConfig = await readFile('workers/events/wrangler.jsonc', 'utf8');
+const counters = { ip: '60', visitor: '120', tenant: '10000' };
+for (const [name, value] of Object.entries(counters))
+  if (!workerConfig.includes(`"TRACKING_${name.toUpperCase()}_RATE_LIMIT": "${value}"`))
+    throw new Error(`reviewed ${name} counter configuration missing`);
 const now = new Date();
 const capabilityHash = createHash('sha256')
-  .update(`preview-worker-counter:${contract.workerSha}`)
+  .update(JSON.stringify({ release_sha: contract.workerSha, counters }))
   .digest('hex');
 const quote = (value) => `'${value.replaceAll("'", "''")}'`;
 const sql = `
@@ -42,7 +52,6 @@ VALUES ('cloudflare_collector_abuse_protection', 'verified', ${quote(capabilityH
 ON CONFLICT(capability_key) DO UPDATE SET status=excluded.status, config_hash=excluded.config_hash,
   release_sha=excluded.release_sha, observed_at=excluded.observed_at, expires_at=excluded.expires_at;`;
 const wrangler = new URL('../node_modules/.bin/wrangler', import.meta.url).pathname;
-const run = promisify(execFile);
 await run(wrangler, [
   'd1',
   'execute',

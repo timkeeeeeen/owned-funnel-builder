@@ -28,6 +28,13 @@
           "service": "maestro-first-party-events",
         },
       ],
+      "vars": {
+        "TRACKING_ENVIRONMENT": "preview",
+        "TRACKING_PREVIEW_NON_PAYMENT_PROOF": "true",
+        "TRACKING_TENANT_ID": "tenant_demo",
+        "TRACKING_SITE_ID": "site_demo",
+        "TRACKING_PAGES_BRIDGE_KEY_ID_CURRENT": "pages-current",
+      },
     },
   },
 }

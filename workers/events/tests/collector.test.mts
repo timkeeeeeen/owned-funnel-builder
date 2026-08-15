@@ -3,7 +3,11 @@ import { DatabaseSync } from 'node:sqlite';
 import { test } from 'node:test';
 
 import { default as worker } from '../src/index.ts';
-import { sourceEnvelopeToCanonical, sourceRuntimeReady } from '../src/collector.ts';
+import {
+  resetCollectorBudgets,
+  sourceEnvelopeToCanonical,
+  sourceRuntimeReady,
+} from '../src/collector.ts';
 import { issueSignedCookie } from '../../../functions/_lib/tracking-cookie.ts';
 import { sourceSignatureInput } from '../src/source-bridge.ts';
 import { REQUIRED_TRACKING_MIGRATIONS } from '../src/safety.ts';
@@ -350,6 +354,20 @@ test('internal host is accepted only on source and internal routes', async () =>
     {} as never
   );
   assert.equal(publicRoute.status, 403);
+});
+
+test('collector counter capability enforces the reviewed per-IP limit', async () => {
+  resetCollectorBudgets();
+  const bindings = { ...(await env()), TRACKING_IP_RATE_LIMIT: 1 };
+  assert.equal(
+    (await worker.fetch(request('/healthz'), bindings as never, {} as never)).status,
+    200
+  );
+  assert.equal(
+    (await worker.fetch(request('/healthz'), bindings as never, {} as never)).status,
+    429
+  );
+  resetCollectorBudgets();
 });
 
 test('fetch fails closed while the migration lock or release SHA readback is not green', async () => {

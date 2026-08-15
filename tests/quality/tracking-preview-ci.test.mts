@@ -43,6 +43,7 @@ test('readiness activation binds exact release and ingress evidence before deplo
   const source = await readFile('scripts/activate-tracking-preview-readiness.mjs', 'utf8');
   assert.match(source, /tracking_runtime_release_state/);
   assert.match(source, /tracking_ingress_capabilities/);
-  assert.match(source, /preview-worker-counter/);
+  assert.match(source, /readFile\('workers\/events\/wrangler\.jsonc'/);
+  assert.match(source, /git', \['rev-parse', 'HEAD'\]/);
   assert.match(source, /readback failed/);
 });
