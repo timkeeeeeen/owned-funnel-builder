@@ -985,7 +985,7 @@ function attributedDestination(path: string, journeyId: string) {
 function setStatus(config: RuntimeConfig, message: string) {
   const scope = config.root.closest('form') ?? config.root.closest('[data-blueprint-page]');
   const status = scope?.querySelector<HTMLElement>('[data-blueprint-runtime-status]');
-  if (status) status.textContent = message;
+  if (status && status.textContent !== message) status.textContent = message;
 }
 
 function isMode(value: string | undefined): value is FunnelMode {
