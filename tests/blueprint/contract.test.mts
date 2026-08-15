@@ -251,6 +251,40 @@ test('the live bridge remains a thin client of canonical Maestro authorities', a
   assert.doesNotMatch(client, /DODO_PAYMENTS_API_KEY/);
 });
 
+test('the Snapshot wait screen exposes a truthful receipt-driven progress surface', async () => {
+  const [page, client] = await Promise.all([
+    readRepositoryFile('src/components/blueprint/SnapshotThankYouPage.astro'),
+    readRepositoryFile('src/scripts/blueprint-funnel-client.ts'),
+  ]);
+
+  for (const key of [
+    'accepted',
+    'research_started',
+    'sources_discovered',
+    'evidence_organized',
+    'dimensions_evaluated',
+    'post_drafting',
+    'result_finalized',
+  ]) {
+    assert.match(page, new RegExp(`data-blueprint-progress-step="${key}"`));
+  }
+  assert.match(page, /data-blueprint-progress\s+hidden|hidden\s+data-blueprint-progress/);
+  assert.match(
+    page,
+    /data-blueprint-result-content\s+hidden|hidden\s+data-blueprint-result-content/
+  );
+  assert.match(page, /data-blueprint-restart-link\s+hidden|hidden\s+data-blueprint-restart-link/);
+  assert.match(page, /data-blueprint-progress-source-summary/);
+  assert.match(page, /data-blueprint-progress-elapsed/);
+  assert.match(page, /role="status"/);
+  assert.match(client, /parseBlueprintProgress/);
+  assert.match(client, /blueprintProgressStepStates/);
+  assert.match(client, /\[data-blueprint-result-content\][^;]*removeAttribute\('hidden'\)/s);
+  assert.doesNotMatch(client, /turnstile-disabled-for-testing/);
+  assert.match(client, /callCheckoutProxy\(config, 'checkout-start'/);
+  assert.match(client, /tracking_context_token: session\.trackingContextToken/);
+});
+
 test('buyer-facing proof leads with real experience and keeps the new-product boundary', async () => {
   const [snapshotPage, gamePlanPage, proofStrip, proofSection] = await Promise.all([
     readRepositoryFile('src/components/blueprint/AuthoritySnapshotPage.astro'),

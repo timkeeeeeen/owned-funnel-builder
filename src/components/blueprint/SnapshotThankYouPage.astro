@@ -45,7 +45,9 @@ const title = `Your Authority Snapshot | ${audience.switchLabel}`;
             </h1>
             <p
               data-blueprint-runtime-status
+              role="status"
               aria-live="polite"
+              aria-atomic="true"
               class="mt-4 rounded-xl border border-border bg-muted p-4 font-semibold text-muted-foreground"
             >
               We’re reading your public profile now. Your result will appear here automatically.
@@ -53,7 +55,141 @@ const title = `Your Authority Snapshot | ${audience.switchLabel}`;
           </div>
           <BlueprintFunnelRuntime audience={audience.slug} mode="thank-you" />
 
-          <div class="mt-8 grid gap-6 lg:grid-cols-[0.9fr_1.1fr] lg:items-start">
+          <section
+            data-blueprint-progress
+            hidden
+            aria-labelledby="snapshot-progress-title"
+            class="mt-8 max-w-3xl rounded-xl border border-border bg-card p-5 shadow-sm sm:p-6"
+          >
+            <h2 id="snapshot-progress-title" class="text-xl font-bold sm:text-2xl">
+              Building your Authority Snapshot
+            </h2>
+            <ol class="mt-6 grid gap-3">
+              <li
+                data-blueprint-progress-step="accepted"
+                data-state="current"
+                class="grid grid-cols-[auto_minmax(0,1fr)] items-center gap-x-3 gap-y-1 rounded-xl bg-muted px-4 py-3 text-sm transition-opacity duration-200 motion-reduce:transition-none sm:grid-cols-[auto_minmax(0,1fr)_auto]"
+              >
+                <span data-blueprint-progress-marker aria-hidden="true" class="font-bold text-brand"
+                  >●</span
+                >
+                <span>Request accepted</span>
+                <span
+                  data-blueprint-progress-state
+                  class="col-start-2 text-xs font-semibold sm:col-start-auto">Latest update</span
+                >
+              </li>
+              <li
+                data-blueprint-progress-step="research_started"
+                data-state="pending"
+                class="grid grid-cols-[auto_minmax(0,1fr)] items-center gap-x-3 gap-y-1 rounded-xl bg-muted px-4 py-3 text-sm transition-opacity duration-200 motion-reduce:transition-none sm:grid-cols-[auto_minmax(0,1fr)_auto]"
+              >
+                <span data-blueprint-progress-marker aria-hidden="true" class="font-bold text-brand"
+                  >○</span
+                >
+                <span>Researching your public profile</span>
+                <span
+                  data-blueprint-progress-state
+                  class="col-start-2 text-xs font-semibold sm:col-start-auto">Waiting</span
+                >
+              </li>
+              <li
+                data-blueprint-progress-step="sources_discovered"
+                data-state="pending"
+                class="grid grid-cols-[auto_minmax(0,1fr)] items-center gap-x-3 gap-y-1 rounded-xl bg-muted px-4 py-3 text-sm transition-opacity duration-200 motion-reduce:transition-none sm:grid-cols-[auto_minmax(0,1fr)_auto]"
+              >
+                <span data-blueprint-progress-marker aria-hidden="true" class="font-bold text-brand"
+                  >○</span
+                >
+                <span>Finding public sources</span>
+                <span
+                  data-blueprint-progress-state
+                  class="col-start-2 text-xs font-semibold sm:col-start-auto">Waiting</span
+                >
+              </li>
+              <li
+                data-blueprint-progress-step="evidence_organized"
+                data-state="pending"
+                class="grid grid-cols-[auto_minmax(0,1fr)] items-center gap-x-3 gap-y-1 rounded-xl bg-muted px-4 py-3 text-sm transition-opacity duration-200 motion-reduce:transition-none sm:grid-cols-[auto_minmax(0,1fr)_auto]"
+              >
+                <span data-blueprint-progress-marker aria-hidden="true" class="font-bold text-brand"
+                  >○</span
+                >
+                <span>Organizing evidence</span>
+                <span
+                  data-blueprint-progress-state
+                  class="col-start-2 text-xs font-semibold sm:col-start-auto">Waiting</span
+                >
+              </li>
+              <li
+                data-blueprint-progress-step="dimensions_evaluated"
+                data-state="pending"
+                class="grid grid-cols-[auto_minmax(0,1fr)] items-center gap-x-3 gap-y-1 rounded-xl bg-muted px-4 py-3 text-sm transition-opacity duration-200 motion-reduce:transition-none sm:grid-cols-[auto_minmax(0,1fr)_auto]"
+              >
+                <span data-blueprint-progress-marker aria-hidden="true" class="font-bold text-brand"
+                  >○</span
+                >
+                <span>Evaluating authority dimensions</span>
+                <span
+                  data-blueprint-progress-state
+                  class="col-start-2 text-xs font-semibold sm:col-start-auto">Waiting</span
+                >
+              </li>
+              <li
+                data-blueprint-progress-step="post_drafting"
+                data-state="pending"
+                class="grid grid-cols-[auto_minmax(0,1fr)] items-center gap-x-3 gap-y-1 rounded-xl bg-muted px-4 py-3 text-sm transition-opacity duration-200 motion-reduce:transition-none sm:grid-cols-[auto_minmax(0,1fr)_auto]"
+              >
+                <span data-blueprint-progress-marker aria-hidden="true" class="font-bold text-brand"
+                  >○</span
+                >
+                <span>Drafting your starter post</span>
+                <span
+                  data-blueprint-progress-state
+                  class="col-start-2 text-xs font-semibold sm:col-start-auto">Waiting</span
+                >
+              </li>
+              <li
+                data-blueprint-progress-step="result_finalized"
+                data-state="pending"
+                class="grid grid-cols-[auto_minmax(0,1fr)] items-center gap-x-3 gap-y-1 rounded-xl bg-muted px-4 py-3 text-sm transition-opacity duration-200 motion-reduce:transition-none sm:grid-cols-[auto_minmax(0,1fr)_auto]"
+              >
+                <span data-blueprint-progress-marker aria-hidden="true" class="font-bold text-brand"
+                  >○</span
+                >
+                <span>Finalizing your Snapshot</span>
+                <span
+                  data-blueprint-progress-state
+                  class="col-start-2 text-xs font-semibold sm:col-start-auto">Waiting</span
+                >
+              </li>
+            </ol>
+            <p
+              data-blueprint-progress-source
+              hidden
+              class="mt-4 rounded-xl border border-border px-4 py-3 text-sm font-semibold"
+            >
+              <span data-blueprint-progress-source-summary></span>
+            </p>
+            <div class="mt-4 grid gap-1 text-sm text-muted-foreground sm:grid-cols-2 sm:gap-4">
+              <p data-blueprint-progress-elapsed>Elapsed: less than a minute</p>
+              <p class="sm:text-end">Your session is saved. You can safely reload this page.</p>
+            </div>
+          </section>
+          <a
+            data-blueprint-restart-link
+            hidden
+            href={`/authority-snapshot/${audience.slug}`}
+            class="mt-6 inline-flex min-h-11 items-center font-bold text-brand underline decoration-2 underline-offset-4 focus-visible:outline-2 focus-visible:outline-offset-4"
+          >
+            Start a new Authority Snapshot
+          </a>
+
+          <div
+            data-blueprint-result-content
+            hidden
+            class="mt-8 grid gap-6 lg:grid-cols-[0.9fr_1.1fr] lg:items-start"
+          >
             <div>
               <BlueprintScorecard audience={audience} kind="snapshot" showEvidence={true} />
               <article class="mt-5 rounded-2xl border border-border bg-card p-5 shadow-sm sm:p-6">
@@ -83,6 +219,8 @@ const title = `Your Authority Snapshot | ${audience.switchLabel}`;
       </section>
 
       <section
+        data-blueprint-result-content
+        hidden
         class="border-y border-border bg-foreground px-4 py-14 text-background sm:px-6"
         aria-labelledby="next-step-title"
       >
