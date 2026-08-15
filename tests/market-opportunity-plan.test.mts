@@ -3,6 +3,7 @@ import { readFile } from 'node:fs/promises';
 import test from 'node:test';
 
 const pageUrl = new URL('../dist/client/market-opportunity-plan/index.html', import.meta.url);
+const sitemapUrl = new URL('../dist/client/sitemap-0.xml', import.meta.url);
 
 test('builds the complete market opportunity decision page', async () => {
   const html = await readFile(pageUrl, 'utf8');
@@ -26,4 +27,10 @@ test('builds the complete market opportunity decision page', async () => {
     assert.match(region, /tabindex="0"/);
     assert.match(region, /aria-label=/);
   }
+});
+
+test('keeps the private planning page out of the sitemap', async () => {
+  const sitemap = await readFile(sitemapUrl, 'utf8');
+
+  assert.doesNotMatch(sitemap, /\/market-opportunity-plan\//);
 });
