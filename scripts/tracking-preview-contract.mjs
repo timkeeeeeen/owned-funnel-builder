@@ -17,7 +17,9 @@ export function previewExecution(argv = process.argv.slice(2)) {
   const workerSha = value('--worker-sha') || value('--sha');
   const sourceSha = value('--source-sha');
   const execute = argv.includes('--execute');
-  const environment = value('--environment') || (execute ? '' : 'preview');
+  const requestedEnvironment = value('--environment');
+  if (execute && !requestedEnvironment) throw new Error('--environment preview is required');
+  const environment = requestedEnvironment || 'preview';
   if (environment !== 'preview') throw new Error('preview only');
   if (
     execute &&

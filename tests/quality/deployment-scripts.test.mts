@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
 import test from 'node:test';
+import { previewExecution, PREVIEW_APPROVAL } from '../../scripts/tracking-preview-contract.mjs';
 
 test('deployment scripts are dry-run first and execution is approval-gated', async () => {
   for (const file of [
@@ -17,14 +18,62 @@ test('deployment scripts are dry-run first and execution is approval-gated', asy
   const migrations = await readFile('scripts/apply-tracking-migrations.mjs', 'utf8');
   assert.match(migrations, /readdir/);
   assert.match(migrations, /\.sort\(\)/);
+  assert.match(migrations, /maxBuffer/);
+  assert.match(migrations, /pagesMigration/);
+  assert.match(migrations, /trackingMigration/);
 });
 
-test('tracking execution contract rejects live scope and requires exact preview approval and SHAs', async () => {
-  const source = await readFile('scripts/tracking-preview-contract.mjs', 'utf8');
-  assert.match(source, /owner-preview-tracking-2026-08-15/);
-  assert.match(source, /preview only/);
-  assert.match(source, /\{40\}/);
-  assert.doesNotMatch(source, /production|maestro-tracking-live|maestro-events-live/);
+test('tracking execution contract rejects live scope and requires exact preview approval and SHAs', () => {
+  const sha = 'a'.repeat(40);
+  assert.throws(
+    () => previewExecution(['--execute', '--worker-sha', sha, '--source-sha', sha]),
+    /--environment preview is required/
+  );
+  assert.throws(
+    () =>
+      previewExecution([
+        '--execute',
+        '--environment',
+        'live',
+        '--approval-id',
+        PREVIEW_APPROVAL,
+        '--worker-sha',
+        sha,
+        '--source-sha',
+        sha,
+      ]),
+    /preview only/
+  );
+  assert.throws(
+    () =>
+      previewExecution([
+        '--execute',
+        '--environment',
+        'preview',
+        '--approval-id',
+        PREVIEW_APPROVAL,
+        '--worker-sha',
+        sha,
+        '--source-sha',
+        'short',
+      ]),
+    /--execute requires --approval-id and exact preview SHAs/
+  );
+  assert.equal(
+    previewExecution([
+      '--execute',
+      '--environment',
+      'preview',
+      '--approval-id',
+      PREVIEW_APPROVAL,
+      '--worker-sha',
+      sha,
+      '--source-sha',
+      sha,
+    ]).execute,
+    true
+  );
+  assert.equal(previewExecution([]).execute, false);
 });
 
 test('Pages dry-run probes the installed Wrangler CLI without the removed dry-run flag', async () => {

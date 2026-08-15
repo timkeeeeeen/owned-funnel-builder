@@ -16,6 +16,10 @@ on:
 permissions:
   contents: read
 
+concurrency:
+  group: tracking-preview
+  cancel-in-progress: false
+
 jobs:
   verify:
     if: github.ref == 'refs/heads/main'
@@ -26,8 +30,11 @@ jobs:
       - uses: actions/checkout@v4
         with:
           ref: ${{ inputs.worker_sha }}
+          persist-credentials: false
       - id: scope
+        shell: bash
         run: |
+          set -euo pipefail
           test "$WORKER_SHA" = "$GITHUB_SHA"
           test "$SOURCE_SHA" = "$GITHUB_SHA"
           test "$APPROVAL_ID" = "owner-preview-tracking-2026-08-15"
@@ -52,6 +59,7 @@ jobs:
       - uses: actions/checkout@v4
         with:
           ref: ${{ needs.verify.outputs.sha }}
+          persist-credentials: false
       - uses: actions/setup-node@v4
         with:
           node-version: 22

@@ -10,29 +10,47 @@ const migrations = await Promise.all(
   )
 );
 if (migrations.some((names) => names.length === 0)) throw new Error('migration discovery failed');
+let migrationEvidence = [];
 if (contract.execute) {
   const wrangler = new URL('../node_modules/.bin/wrangler', import.meta.url).pathname;
   const run = promisify(execFile);
-  await run(wrangler, [
-    'd1',
-    'migrations',
-    'apply',
-    PREVIEW_RESOURCES.pagesDatabase,
-    '--remote',
-    '--config',
-    'wrangler.jsonc',
-    '--env',
-    'preview',
-  ]);
-  await run(wrangler, [
-    'd1',
-    'migrations',
-    'apply',
-    PREVIEW_RESOURCES.trackingDatabase,
-    '--remote',
-    '--config',
-    'workers/events/wrangler.jsonc',
-  ]);
+  const maxBuffer = 4 * 1024 * 1024;
+  const pagesMigration = await run(
+    wrangler,
+    [
+      'd1',
+      'migrations',
+      'apply',
+      PREVIEW_RESOURCES.pagesDatabase,
+      '--remote',
+      '--config',
+      'wrangler.jsonc',
+      '--env',
+      'preview',
+    ],
+    { maxBuffer }
+  );
+  const trackingMigration = await run(
+    wrangler,
+    [
+      'd1',
+      'migrations',
+      'apply',
+      PREVIEW_RESOURCES.trackingDatabase,
+      '--remote',
+      '--config',
+      'workers/events/wrangler.jsonc',
+    ],
+    { maxBuffer }
+  );
+  migrationEvidence = [
+    ['pages', pagesMigration],
+    ['tracking', trackingMigration],
+  ].map(([target, { stdout, stderr }]) => ({
+    target,
+    stdout: stdout.trim(),
+    stderr: stderr.trim(),
+  }));
 }
 console.log(
   JSON.stringify({
@@ -41,5 +59,6 @@ console.log(
     mode: contract.execute ? 'execute' : 'dry-run',
     mutations: contract.execute,
     migrations,
+    migration_evidence: migrationEvidence,
   })
 );

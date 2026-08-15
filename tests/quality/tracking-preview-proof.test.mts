@@ -17,7 +17,10 @@ test('preview proof covers non-payment events and proves destinations remain dar
     '/api/internal/tracking-preview-proof',
   ])
     assert.match(source, new RegExp(value.replaceAll('/', '\\/')));
-  assert.match(source, /destination_deliveries: 0/);
+  assert.match(source, /getSetCookie/);
+  assert.match(source, /cookieHeader/);
+  assert.match(source, /AbortSignal\.timeout/);
+  assert.match(source, /destination_deliveries: deliveredCount/);
   assert.doesNotMatch(source, /META_ACCESS_TOKEN|TINYBIRD_APPEND_TOKEN|DODO/i);
 });
 
@@ -28,7 +31,7 @@ test('proof readback requires exact events, no Purchase, and zero delivered dest
     { event_name: 'InitiateCheckout', event_id: 'checkout_1' },
   ];
   const valid = [{ results: expected }, { results: [{ delivered_count: 0 }] }];
-  assert.doesNotThrow(() => assertTrackingPreviewRows(valid, expected));
+  assert.equal(assertTrackingPreviewRows(valid, expected), 0);
   assert.throws(() =>
     assertTrackingPreviewRows(
       [

@@ -804,9 +804,11 @@ async function sourceEvents(request: Request, env: CollectorEnv): Promise<Respon
     textEnv(env, 'TRACKING_PREVIEW_NON_PAYMENT_PROOF') === 'true' &&
     source === 'pages' &&
     /^[a-f0-9]{40}$/i.test(textEnv(env, 'TRACKING_PAGES_SOURCE_SHA'));
+  const previewProofEvent =
+    previewProof && (envelope.event_name === 'Lead' || envelope.event_name === 'InitiateCheckout');
   if (previewProof && envelope.event_name === 'Purchase')
     return jsonError('preview_payment_event_blocked', 403, request, env);
-  if (!sourceRuntimeReady(source) && !(previewProof && envelope.event_name !== 'Purchase'))
+  if (!sourceRuntimeReady(source) && !previewProofEvent)
     return jsonError('source_runtime_not_ready', 403, request, env);
   const nonce = request.headers.get('x-maestro-nonce') ?? '';
   const nonceResult = await env.TRACKING_DB.prepare(

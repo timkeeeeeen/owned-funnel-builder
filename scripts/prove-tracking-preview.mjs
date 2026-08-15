@@ -19,7 +19,10 @@ if (!contextKey || contextKey.length < 32) throw new Error('preview context key 
 const origin = 'https://tracking-preview.owned-funnel-builder.pages.dev';
 const base = `https://${PREVIEW_RESOURCES.host}`;
 const request = async (path, init = {}) => {
-  const response = await fetch(`${base}${path}`, init);
+  const response = await fetch(`${base}${path}`, {
+    ...init,
+    signal: init.signal ?? AbortSignal.timeout(15_000),
+  });
   const body = await response.text();
   return { response, body, json: () => JSON.parse(body) };
 };
@@ -28,8 +31,13 @@ if (health.response.status !== 200) throw new Error(`health failed: ${health.res
 const bootstrap = await request('/v1/bootstrap', { headers: { origin } });
 if (bootstrap.response.status !== 200)
   throw new Error(`bootstrap failed: ${bootstrap.response.status}`);
-const privacyCookie = (bootstrap.response.headers.get('set-cookie') ?? '').split(';', 1)[0];
+const cookiePairs = bootstrap.response.headers
+  .getSetCookie()
+  .map((value) => value.split(';', 1)[0])
+  .filter(Boolean);
+const privacyCookie = cookiePairs.find((value) => /^ma_privacy=v2\./.test(value)) ?? '';
 if (!/^ma_privacy=v2\./.test(privacyCookie)) throw new Error('signed bootstrap cookie missing');
+const cookieHeader = cookiePairs.join('; ');
 const encodedContext = Buffer.from(
   JSON.stringify([
     'tenant_demo',
@@ -58,7 +66,7 @@ const pageView = await request('/v1/events', {
   method: 'POST',
   headers: {
     origin,
-    cookie: privacyCookie,
+    cookie: cookieHeader,
     'content-type': 'application/json',
     'x-tracking-context-hash': contextToken,
   },
@@ -124,6 +132,7 @@ const context = exchange.json();
 const pagesProof = await fetch(`${origin}/api/internal/tracking-preview-proof`, {
   method: 'POST',
   headers: { authorization: `Bearer ${proofToken}`, 'content-type': 'application/json' },
+  signal: AbortSignal.timeout(15_000),
   body: JSON.stringify({
     context_hash: context.context_hash,
     context_expires_at: context.context_expires_at,
@@ -184,7 +193,10 @@ const { stdout } = await promisify(execFile)(wrangler, [
   query,
 ]);
 const rows = JSON.parse(stdout);
-assertTrackingPreviewRows(rows, [{ event_name: 'PageView', event_id: eventId }, ...expected]);
+const deliveredCount = assertTrackingPreviewRows(rows, [
+  { event_name: 'PageView', event_id: eventId },
+  ...expected,
+]);
 console.log(
   JSON.stringify({
     action: 'tracking_preview_proof',
@@ -194,6 +206,6 @@ console.log(
     page_view_event_id: eventId,
     source_event_ids: expected.map((event) => event.event_id),
     purchase_blocked: true,
-    destination_deliveries: 0,
+    destination_deliveries: deliveredCount,
   })
 );

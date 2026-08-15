@@ -187,7 +187,9 @@ const sourceSnapshot = () => ({
   observed_at: new Date().toISOString(),
 });
 
-async function signedSourceRequest(eventName: 'Lead' | 'InitiateCheckout' | 'Purchase') {
+async function signedSourceRequest(
+  eventName: 'PageView' | 'Lead' | 'InitiateCheckout' | 'Purchase'
+) {
   const body = JSON.stringify({
     schema_version: '1',
     source_system: 'pages',
@@ -790,6 +792,13 @@ test('preview proof accepts signed non-payment source events and always rejects 
     {} as never
   );
   assert.equal(rejected.status, 403);
+  const outsideScope = await signedSourceRequest('PageView');
+  const outsideScopeResponse = await worker.fetch(
+    outsideScope.request,
+    { ...bindings, TRACKING_PAGES_BRIDGE_KEY_CURRENT: outsideScope.key } as never,
+    {} as never
+  );
+  assert.equal(outsideScopeResponse.status, 400);
   assert.equal(
     (
       bindings.__database

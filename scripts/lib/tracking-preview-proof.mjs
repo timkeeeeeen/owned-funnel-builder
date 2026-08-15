@@ -6,5 +6,7 @@ export function assertTrackingPreviewRows(results, expected) {
       throw new Error(`missing ${item.event_name} proof`);
   if (events.some((row) => row.event_name === 'Purchase')) throw new Error('Purchase persisted');
   const delivery = rows.find((row) => 'delivered_count' in row);
-  if (Number(delivery?.delivered_count) !== 0) throw new Error('destination delivery was not zero');
+  const deliveredCount = Number(delivery?.delivered_count);
+  if (deliveredCount !== 0) throw new Error('destination delivery was not zero');
+  return deliveredCount;
 }
