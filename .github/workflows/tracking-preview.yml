@@ -1,0 +1,45 @@
+name: Tracking preview
+
+on:
+  workflow_dispatch:
+    inputs:
+      approval_id:
+        required: true
+        type: string
+      worker_sha:
+        required: true
+        type: string
+      source_sha:
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+jobs:
+  preview:
+    environment: tracking-preview
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.worker_sha }}
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - run: node --import tsx --test workers/events/tests/collector.test.mts tests/quality/environment-resource-isolation.test.mts tests/quality/deployment-scripts.test.mts tests/quality/tracking-preview-ci.test.mts
+      - run: node scripts/apply-tracking-migrations.mjs --environment preview --approval-id "$APPROVAL_ID" --worker-sha "$WORKER_SHA" --source-sha "$SOURCE_SHA" --execute
+      - run: node scripts/publish-events-worker.mjs --environment preview --approval-id "$APPROVAL_ID" --worker-sha "$WORKER_SHA" --source-sha "$SOURCE_SHA" --execute
+      - run: npm run build
+      - run: npx wrangler pages deploy dist/client --project-name owned-funnel-builder --branch tracking-preview --commit-hash "$WORKER_SHA"
+      - run: node scripts/prove-tracking-preview.mjs --environment preview --approval-id "$APPROVAL_ID" --worker-sha "$WORKER_SHA" --source-sha "$SOURCE_SHA" --execute
+    env:
+      APPROVAL_ID: ${{ inputs.approval_id }}
+      WORKER_SHA: ${{ inputs.worker_sha }}
+      SOURCE_SHA: ${{ inputs.source_sha }}
+      CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+      CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+      TRACKING_MIGRATION_SET_SHA: ${{ vars.TRACKING_MIGRATION_SET_SHA }}
+      TRACKING_PAGES_BRIDGE_KEY_CURRENT: ${{ secrets.TRACKING_PAGES_BRIDGE_KEY_CURRENT }}

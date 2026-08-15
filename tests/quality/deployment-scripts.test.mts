@@ -3,14 +3,28 @@ import { readFile } from 'node:fs/promises';
 import test from 'node:test';
 
 test('deployment scripts are dry-run first and execution is approval-gated', async () => {
-  for (const file of ['scripts/publish-cloudflare.mjs', 'scripts/publish-events-worker.mjs', 'scripts/provision-preview-events.mjs', 'scripts/apply-tracking-migrations.mjs']) {
+  for (const file of [
+    'scripts/publish-cloudflare.mjs',
+    'scripts/publish-events-worker.mjs',
+    'scripts/provision-preview-events.mjs',
+    'scripts/apply-tracking-migrations.mjs',
+  ]) {
     const source = await readFile(file, 'utf8');
-    assert.match(source, /--execute requires --approval-id/);
-    if (file !== 'scripts/publish-cloudflare.mjs') assert.match(source, /unverified/);
+    if (file === 'scripts/publish-cloudflare.mjs')
+      assert.match(source, /--execute requires --approval-id/);
+    else assert.match(source, /tracking-preview-contract/);
   }
   const migrations = await readFile('scripts/apply-tracking-migrations.mjs', 'utf8');
   assert.match(migrations, /readdir/);
   assert.match(migrations, /\.sort\(\)/);
+});
+
+test('tracking execution contract rejects live scope and requires exact preview approval and SHAs', async () => {
+  const source = await readFile('scripts/tracking-preview-contract.mjs', 'utf8');
+  assert.match(source, /owner-preview-tracking-2026-08-15/);
+  assert.match(source, /preview only/);
+  assert.match(source, /\{40\}/);
+  assert.doesNotMatch(source, /production|maestro-tracking-live|maestro-events-live/);
 });
 
 test('Pages dry-run probes the installed Wrangler CLI without the removed dry-run flag', async () => {

@@ -14,6 +14,19 @@ export type SignedCookieInput = CookieContext & {
   keyId: string;
   maxAge: number;
 };
+type CookieKey = CryptoKey | string;
+
+async function importCookieKey(value: CookieKey, usages: KeyUsage[]): Promise<CryptoKey> {
+  if (typeof value !== 'string') return value;
+  if (value.length < 32 || value.length > 4096) throw new TypeError('Invalid tracking cookie key');
+  return crypto.subtle.importKey(
+    'raw',
+    new TextEncoder().encode(value),
+    { name: 'HMAC', hash: 'SHA-256' },
+    false,
+    usages
+  );
+}
 
 function base64url(bytes: Uint8Array): string {
   const binary = Array.from(bytes, (byte) => String.fromCharCode(byte)).join('');
@@ -43,7 +56,7 @@ function cookieAttributes(maxAge: number): string {
 /** Signs with the already-imported Worker secret; the verifier never handles raw key material. */
 export async function issueSignedCookie(
   input: SignedCookieInput,
-  signingKey: CryptoKey
+  signingKey: CookieKey
 ): Promise<string> {
   if (
     !/^[A-Za-z0-9_-]{1,64}$/.test(input.keyId) ||
@@ -69,7 +82,7 @@ export async function issueSignedCookie(
   const unsigned = `v2.${input.keyId}.${payload}`;
   const signature = await crypto.subtle.sign(
     'HMAC',
-    signingKey,
+    await importCookieKey(signingKey, ['sign']),
     new TextEncoder().encode(`${input.name}.${contextMessage(input)}.${unsigned}`)
   );
   return `${input.name}=${unsigned}.${base64url(new Uint8Array(signature))}; ${cookieAttributes(input.maxAge)}`;
@@ -88,7 +101,7 @@ function cookieValues(header: string, name: string): string[] {
 export async function verifySignedCookie(
   header: string | null,
   name: TrackingCookieName,
-  verifyKeys: Record<string, CryptoKey>,
+  verifyKeys: Record<string, CookieKey>,
   expected: CookieContext
 ): Promise<string | null> {
   if (!header || !['ma_vid', 'ma_sid', 'ma_privacy'].includes(name)) return null;
@@ -127,7 +140,7 @@ export async function verifySignedCookie(
     return null;
   const valid = await crypto.subtle.verify(
     'HMAC',
-    verifyKey,
+    await importCookieKey(verifyKey, ['verify']),
     signatureBytes,
     new TextEncoder().encode(`${name}.${contextMessage(expected)}.v2.${keyId}.${payload}`)
   );

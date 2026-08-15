@@ -12,4 +12,22 @@
       "migrations_dir": "migrations",
     },
   ],
+  "env": {
+    "preview": {
+      "d1_databases": [
+        {
+          "binding": "LEADS",
+          "database_name": "owned-funnel-builder-preview",
+          "database_id": "fd9f29b7-3b15-4655-a72c-f2fe73e54c24",
+          "migrations_dir": "migrations",
+        },
+      ],
+      "services": [
+        {
+          "binding": "TRACKING_SOURCE_BRIDGE",
+          "service": "maestro-first-party-events",
+        },
+      ],
+    },
+  },
 }
