@@ -14,3 +14,13 @@ gates, and the exact next approval boundary are recorded in
 [`first-party-tracking-activation-gap-ledger.md`](./first-party-tracking-activation-gap-ledger.md).
 `config/provider-capabilities.json` correctly remains fail-closed: both
 destinations are disabled and no readback is marked verified.
+
+## 2026-08-15 preview activation update
+
+Cloudflare preview infrastructure is active at exact source
+`161e4b1ee6c5e2c7f71b6de35c8a80dc098928eb`. The Worker sender manifest still
+sets Meta and Tinybird to `false`; neither provider credential is bound, and
+the signed PageView/Lead/InitiateCheckout proof produced zero destination
+delivery rows. Preview activation therefore changes no Meta or Tinybird
+capability result above. Production provider activation still requires a
+separate scoped-token readback and owner approval.

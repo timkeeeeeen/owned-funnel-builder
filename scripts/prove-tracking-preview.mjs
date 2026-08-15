@@ -12,8 +12,10 @@ if (!contract.execute) {
 }
 const bridgeKey = process.env.TRACKING_PAGES_BRIDGE_KEY_CURRENT;
 const proofToken = process.env.TRACKING_PREVIEW_PROOF_TOKEN;
+const contextKey = process.env.TRACKING_CONTEXT_SIGNING_KEY_CURRENT;
 if (!bridgeKey || bridgeKey.length < 32) throw new Error('preview bridge key is required');
 if (!proofToken || proofToken.length < 32) throw new Error('preview proof token is required');
+if (!contextKey || contextKey.length < 32) throw new Error('preview context key is required');
 const origin = 'https://tracking-preview.owned-funnel-builder.pages.dev';
 const base = `https://${PREVIEW_RESOURCES.host}`;
 const request = async (path, init = {}) => {
@@ -27,28 +29,30 @@ const bootstrap = await request('/v1/bootstrap', { headers: { origin } });
 if (bootstrap.response.status !== 200)
   throw new Error(`bootstrap failed: ${bootstrap.response.status}`);
 const privacyCookie = (bootstrap.response.headers.get('set-cookie') ?? '').split(';', 1)[0];
-const csrf = bootstrap.response.headers.get('x-csrf-nonce') ?? '';
-const choice = await request('/v1/privacy', {
-  method: 'POST',
-  headers: {
-    origin,
-    cookie: privacyCookie,
-    'content-type': 'application/json',
-    'x-csrf-nonce': csrf,
-  },
-  body: JSON.stringify({
-    schema_version: '1',
-    choice_id: `choice_${crypto.randomUUID()}`,
-    policy_version: '2026-08-04',
-    action: 'customize',
-    purposes: { analytics: true, advertising: false },
-  }),
-});
-if (choice.response.status !== 202)
-  throw new Error(`privacy choice failed: ${choice.response.status}`);
-const resolved = await request('/v1/bootstrap', { headers: { origin, cookie: privacyCookie } });
-const contextToken = resolved.json().tracking_context_token;
-if (typeof contextToken !== 'string') throw new Error('tracking context token missing');
+if (!/^ma_privacy=v2\./.test(privacyCookie)) throw new Error('signed bootstrap cookie missing');
+const encodedContext = Buffer.from(
+  JSON.stringify([
+    'tenant_demo',
+    'site_demo',
+    'owned-funnel-builder',
+    `preview_subject_${crypto.randomUUID()}`,
+    0,
+    '2026-08-04',
+    Math.floor(Date.now() / 1000) + 300,
+  ])
+).toString('base64url');
+const unsignedContext = `v1.preview-current.${encodedContext}`;
+const importedContextKey = await crypto.subtle.importKey(
+  'raw',
+  new TextEncoder().encode(contextKey),
+  { name: 'HMAC', hash: 'SHA-256' },
+  false,
+  ['sign']
+);
+const contextSignature = Buffer.from(
+  await crypto.subtle.sign('HMAC', importedContextKey, new TextEncoder().encode(unsignedContext))
+).toString('base64url');
+const contextToken = `${unsignedContext}.${contextSignature}`;
 const eventId = `pageview_${crypto.randomUUID()}`;
 const pageView = await request('/v1/events', {
   method: 'POST',

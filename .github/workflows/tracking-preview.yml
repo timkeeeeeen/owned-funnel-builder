@@ -80,6 +80,7 @@ jobs:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           TRACKING_PAGES_BRIDGE_KEY_CURRENT: ${{ secrets.TRACKING_PAGES_BRIDGE_KEY_CURRENT }}
           TRACKING_PREVIEW_PROOF_TOKEN: ${{ secrets.TRACKING_PREVIEW_PROOF_TOKEN }}
+          TRACKING_CONTEXT_SIGNING_KEY_CURRENT: ${{ secrets.TRACKING_CONTEXT_SIGNING_KEY_CURRENT }}
     env:
       APPROVAL_ID: ${{ inputs.approval_id }}
       WORKER_SHA: ${{ needs.verify.outputs.sha }}

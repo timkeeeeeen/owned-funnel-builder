@@ -1,16 +1,32 @@
 # First-Party Tracking Activation Gap Ledger
 
-Read-only evidence captured at `2026-08-14T17:53:00Z` from current
-`origin/main` `17d0b3d266ab0366be30d1612d2e41d03e35e5ee`. PR #6 merged as
-`ad2f72684af8056cf21c26d5d9e791c6fdd537a8`. This ledger records provider
-readbacks without secret values and does not authorize provisioning,
-migrations, deployment, provider writes, payments, or canaries.
+The read-only baseline was captured at `2026-08-14T17:53:00Z` from
+`origin/main` `17d0b3d266ab0366be30d1612d2e41d03e35e5ee`; PR #6 merged as
+`ad2f72684af8056cf21c26d5d9e791c6fdd537a8`. The owner subsequently approved
+preview-only activation. Evidence below names resources and secret bindings,
+never secret values. Production, destinations, Dodo, campaigns, canaries,
+cards, charges, and live traffic remain outside that approval.
 
 Status rule: `verified blocked` means the readback conclusively found a missing
 or unsafe prerequisite. `unverified` means the available credential or API did
 not permit a safe readback. Neither status permits activation.
 
-## Activation gaps
+## Preview activation evidence
+
+Runtime/source SHA: `161e4b1ee6c5e2c7f71b6de35c8a80dc098928eb`.
+Migration-set SHA:
+`78b81e1bb4519c3277dbd318b7ccd102b220b29c23e6c4b02babe3270c81c9e5`.
+
+| Scope | Verified evidence |
+| --- | --- |
+| Scoped CI authority | GitHub environment `tracking-preview` accepts only branch `main`. It contains secret bindings `CLOUDFLARE_ACCOUNT_ID`, `CLOUDFLARE_API_TOKEN`, `TRACKING_CONTEXT_SIGNING_KEY_CURRENT`, `TRACKING_PAGES_BRIDGE_KEY_CURRENT`, and `TRACKING_PREVIEW_PROOF_TOKEN`, plus `TRACKING_MIGRATION_SET_SHA`. Cloudflare token `owned-funnel-tracking-preview-ci` (`914b52a9f5afbaada9a57e237c1c13b9`) has only the required account-level Workers Scripts, D1, Queues, and Pages permissions plus Worker Routes for the `maestrogtm.com` zone. The reviewed workflow and preview execution contract—not provider resource-level token scoping—restrict mutations to the named preview resources. |
+| Events Worker | `maestro-first-party-events` is deployed at version `2ca9cae8-6fee-455c-b765-acdf5d390689`. It has only the three expected secret names, preview D1/Queue/DLQ bindings, preview variables, and a sender manifest with Meta and Tinybird `false`. `https://events-preview.shop.maestrogtm.com/healthz` returns HTTP 200 with valid TLS. |
+| Tracking D1 | `maestro-tracking-preview` (`6a1e98a6-7d32-4b16-bdce-f7078ecc481d`) has no pending migrations. Release state is `ready` for the exact runtime and migration-set SHAs. Ingress capability hash `3908741f5b332d5f68e51322d287e58456deb723155f87517e7b2d8451f0f2b0` is verified until `2026-08-16T17:27:54.511Z`. |
+| Queue and DLQ | `maestro-events-preview` (`32c379a9b0bf4ffab3ecfa2ee3f6fab0`) and `maestro-events-preview-dlq` (`3f21c599adfa4bf3863e3d4393deaba4`) each have one expected producer and consumer. |
+| Pages preview | `owned-funnel-builder-preview` D1 (`fd9f29b7-3b15-4655-a72c-f2fe73e54c24`) has no pending migrations. Preview deployment `27d5eea3-c69b-4b3d-a505-5eff232c8ad0` serves exact source `161e4b1` at `https://tracking-preview.owned-funnel-builder.pages.dev`. Preview bindings are only `LEADS`, `TRACKING_SOURCE_BRIDGE`, the expected preview variables, and two secret names. The alias returns HTTP 200 with valid TLS; its proof endpoint rejects an unauthenticated POST with HTTP 401. |
+| Signed event proof | Worker D1 contains exact `PageView` `pageview_f89c0727-036f-477e-bfdc-ba9dfe1c98b9`, `Lead` `lead_preview_bc06af45-9b4a-4e12-a6c8-b74d1c8fcf31`, and `InitiateCheckout` `checkout_preview_859f24ec-ebce-4088-a587-bd4d06b69cc3`. Pages D1 shows the two source events delivered through the bridge in one attempt, accepted, and payload-redacted. The preview payment gate rejected Purchase, and `tracking_deliveries` contains zero rows. |
+
+## Pre-activation gap baseline (historical)
 
 | Scope | Status | Verified evidence | Required next action |
 | --- | --- | --- | --- |
@@ -46,18 +62,13 @@ Meta and Dodo provider capability readbacks remain unverified because their
 secret values are not readable from Cloudflare and the local Bitwarden vault is
 locked. No secret from chat history was copied into a command, file, or log.
 
-## Next approval gate
+## Remaining production approval gate
 
-No provider mutation is safe yet. The next bounded owner gate is approval for a
-**preview-only infrastructure activation window** after CI authority and
-least-privilege credentials are prepared. That window would authorize only:
-
-1. creating the preview tracking D1, Queue, and DLQ;
-2. applying the reviewed preview migrations with a backup marker;
-3. deploying the preview Events Worker with destination senders still off;
-4. attaching and verifying an approved preview tracking hostname; and
-5. binding the Pages preview source bridge and running non-payment signed event
-   proofs.
-
-It would not authorize live resources, Meta/Tinybird delivery, Dodo changes,
-campaigns, paid canaries, card charges, or production deployment.
+Preview activation is bounded and proven; it does not authorize production.
+Any next activation needs a new exact-SHA owner approval covering the specific
+production D1, Queue/DLQ, Worker, hostname, Pages migrations/binding, and source
+deployment. Meta and Tinybird also require safe provider capability readback,
+destination-specific credentials, an explicit sender-enablement approval, and
+fresh zero-delivery/rollback evidence. Dodo, campaigns, live `$1` canaries,
+cards, charges, and live traffic remain separate gates. The 24-hour ingress
+capability evidence must be refreshed before relying on it for a later release.
