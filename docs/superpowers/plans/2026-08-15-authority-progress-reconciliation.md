@@ -321,7 +321,7 @@ Run in order, waiting for each exact process to exit:
 ```bash
 rtk host-test-slot --class focused rtk npm run test:blueprint
 rtk prettier --check src/components/blueprint/SnapshotThankYouPage.astro src/scripts/blueprint-funnel-client.ts src/scripts/blueprint-progress.ts tests/blueprint/contract.test.mts tests/blueprint/progress.test.mts
-rtk eslint src/scripts/blueprint-funnel-client.ts src/scripts/blueprint-progress.ts tests/blueprint/contract.test.mts tests/blueprint/progress.test.mts
+rtk npm exec -- eslint src/scripts/blueprint-funnel-client.ts src/scripts/blueprint-progress.ts tests/blueprint/contract.test.mts tests/blueprint/progress.test.mts
 rtk host-test-slot --class focused rtk node --import tsx --test tests/functions/blueprint-proxy.test.mts
 ```
 
