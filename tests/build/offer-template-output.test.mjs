@@ -10,7 +10,7 @@ test('the unpublished comparison build emits noindex metadata', async () => {
   assert.match(html, /<meta name="robots" content="noindex, nofollow">/);
 });
 
-test('the generated sitemap excludes only the unpublished comparison offer', async () => {
+test('the generated sitemap excludes the unpublished comparison offer', async () => {
   const sitemap = await readFile('dist/client/sitemap-0.xml', 'utf8');
 
   assert.doesNotMatch(sitemap, /\/owned-funnel-builder-video-lead\//);
