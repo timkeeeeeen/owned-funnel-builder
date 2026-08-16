@@ -8,5 +8,8 @@ export default defineConfig({
   output: 'server',
   adapter: node({ mode: 'standalone' }),
   integrations: [react(), keystatic()],
-  vite: { plugins: [tailwindcss()] },
+  vite: {
+    plugins: [tailwindcss()],
+    server: { allowedHosts: ['headless.tailccc742.ts.net'] },
+  },
 });
